@@ -9,8 +9,8 @@ pyinstaller App.spec
 
 
 def configure_application(app: QtWidgets.QApplication) -> None:
-    app.setApplicationName("SilverBot")
-    app.setApplicationDisplayName("SilverBot")
+    app.setApplicationName("SiverBot")
+    app.setApplicationDisplayName("SiverBot")
     app.setApplicationVersion("1.0.0")
     app.setHighDpiScaleFactorRoundingPolicy(
         QtCore.Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
@@ -19,7 +19,7 @@ def configure_application(app: QtWidgets.QApplication) -> None:
 
 def setup_main_window() -> MainWindow:
     window = MainWindow()
-    window.setWindowTitle("SilverBot - 智能助手")
+    window.setWindowTitle("SiverBot - 智能助手")
     window.setMinimumSize(1024, 768)
     screen_geometry = QtWidgets.QApplication.primaryScreen().availableGeometry()
     window.move(
