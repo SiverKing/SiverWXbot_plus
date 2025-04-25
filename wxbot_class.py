@@ -262,8 +262,8 @@ class WXBot(QtCore.QThread):
         super(WXBot, self).__init__(parent)
         self.parent = parent
 
-        self.ver = "V1.0.0"
-        self.ver_log = "日志：V1.0"
+        self.ver = "V1.0.1"
+        self.ver_log = "日志：切换wxautox内核b50版本"
         self.run_flag = True
         self.config = WXBotConfig()
         self.api = DeepSeekAPI(self.config)
