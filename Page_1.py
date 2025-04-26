@@ -16,6 +16,9 @@ class Page_1(QtWidgets.QWidget):
         self.set_checkbox_states()
         for checkbox in ["checkBox_Global_listen", "checkBox_listen_room", "checkBox_only_at", "checkBox_send_welcome", "checkBox_consent_Apply"]:
             getattr(self.parent, checkbox).stateChanged.connect(self.update_checkbox_state)
+        if self.data.get("AllListen_switch"):
+            self.parent.checkBox_listen_room.setChecked(True)
+            self.parent.label_listen_friends_list.setText("排除监听的用户")
 
     def setup_signals(self):
         controls = [
