@@ -2,6 +2,7 @@ import os
 import sys
 from datetime import datetime
 import json
+# from web_server import log_server
 
 main_window = None
 
@@ -58,11 +59,15 @@ def log(level="INFO", message=''):
         "ERROR": "#FF0000",
         "DEBUG": "#00CC33"
     }
-    color = colors.get(level, "#00CC33")
+    # qt6日志输出
+    """color = colors.get(level, "#00CC33")
     formatted_message = f'<span style="color:{color}">[{timestamp}]: {message}</span>'
     main_window.textEdit_log.append(formatted_message)
     scrollbar = main_window.textEdit_log.verticalScrollBar()
-    scrollbar.setValue(scrollbar.maximum())
+    scrollbar.setValue(scrollbar.maximum())"""
+    # server端日志输出
+    # log_server(level, message)
+    # 终端日志输出
     print(f'[{timestamp}]: {message}')
     # 写入log到本地
     try:
