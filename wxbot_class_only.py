@@ -824,7 +824,7 @@ class WXBot:
                 time.sleep(60)
 
     def main(self):
-        self.key_pass(2025, 4, 30, 0, 0, 0) # 打包保护锁
+        # self.key_pass(2025, 4, 30, 0, 0, 0) # 打包保护锁
         """主运行函数"""
         log(message=f"wxbot\n版本: wxbot_{self.ver}\n作者: https://siver.top\n")
         

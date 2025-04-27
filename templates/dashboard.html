@@ -198,7 +198,15 @@
                                     <textarea class="form-control summernote" id="prompt" name="prompt" rows="5">{{ config.prompt }}</textarea>
                                 </div>
                             </div>
-
+                            <!-- 管理员配置 -->
+                            <div class="config-section">
+                                <h5>管理员配置</h5>
+                                <!-- 在适当位置添加（建议放在基础配置区域） -->
+                                <div class="mb-3">
+                                    <label for="admin" class="form-label">管理员名称</label>
+                                    <input type="text" class="form-control" id="admin" name="admin" value="{{ config.admin }}">
+                                </div>
+                            </div>
                             <!-- 监听配置 -->
                             <div class="config-section">
                                 <h5>监听配置</h5>
