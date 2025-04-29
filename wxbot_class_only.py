@@ -195,6 +195,18 @@ class WXBotConfig:
         """分割长文本"""
         return [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
 
+    @staticmethod
+    def get_run_time(start_time):
+        # 我要获取运行时间 格式为 日时分秒
+        end_time = datetime.now()
+        delta = end_time - start_time
+
+        # 计算天数、小时、分钟和秒
+        days = delta.days
+        hours, remainder = divmod(delta.seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        return f"{days}天{hours}时{minutes}分{seconds}秒"
+
 
 class DeepSeekAPI:
     """DeepSeek API 交互类"""
@@ -266,6 +278,7 @@ class WXBot:
         self.api = DeepSeekAPI(self.config)
         self.wx = None
         self.all_Mode_listen_list = [] # 全局模式的动态·监听列表
+        self.start_time = datetime.now()
         # self.init_wx_listeners()
 
     def is_err(self, id, err="无"):
@@ -459,6 +472,24 @@ class WXBot:
             chat.SendMsg(message.content + 'wxbot_' + self.ver + '\n' + self.ver_log + '\n作者:https://siver.top')
         elif message.content == "/指令" or message.content == "指令":
             self.send_command_list(chat)
+        elif message.content == "/状态":
+            send_msg = "运行时间：" + self.config.get_run_time(self.start_time) + "\n"
+            if self.config.AllListen_switch:
+                send_msg += "当前模式：黑名单模式\n"
+                send_msg += "当前黑名单：" + ", ".join(self.config.listen_list) + "\n"
+            else:
+                send_msg += "当前模式：白名单模式\n"
+                send_msg += "当前白名单：" + ", ".join(self.config.listen_list) + "\n"
+            if self.config.group_switch:
+                send_msg += "当前群机器人状态：开启\n"
+                send_msg += "当前群：" + ", ".join(self.config.group) + "\n"
+                if self.config.group_welcome:
+                    send_msg += "当前群机器人欢迎语状态：开启\n"
+                else:
+                    send_msg += "当前群机器人欢迎语状态：关闭\n"
+            else:
+                send_msg += "当前群机器人状态：关闭\n"
+            chat.SendMsg(send_msg)
         else:
             self.wx_send_ai(chat, message)
 
@@ -824,7 +855,7 @@ class WXBot:
                 time.sleep(60)
 
     def main(self):
-        # self.key_pass(2025, 4, 30, 0, 0, 0) # 打包保护锁
+        self.key_pass(2025, 5, 30, 0, 0, 0) # 打包保护锁
         """主运行函数"""
         log(message=f"wxbot\n版本: wxbot_{self.ver}\n作者: https://siver.top\n")
         
@@ -863,9 +894,15 @@ class WXBot:
                         if not self.check_wechat_window():
                             # is_online(False)
                             self.is_err(self.wx.nickname+" wxbot监听出错！！微信可能已被弹出登录！！在线检查失败！！")
+                            while self.run_flag:
+                                log(level="ERROR", message=f"微信{self.wx.nickname}已被弹出登录！！请检查微信是否登录！！")
+                                time.sleep(100)
                     except Exception as e:
                         # is_online(False)
                         self.is_err(self.wx.nickname+" wxbot监听出错！！微信可能已被弹出登录！！在线检查失败！！", e)
+                        while self.run_flag:
+                            log(level="ERROR", message=f"微信{self.wx.nickname}已被弹出登录！！请检查微信是否登录！！")
+                            time.sleep(100)
                     check_counter = 0
                 
                 # 新好友通过模块 30s - 180s随机
