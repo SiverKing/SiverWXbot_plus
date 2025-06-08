@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Siver微信机器人 siver_wxbot - 面向对象版本
+# Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox V2版本
 # 作者：https://siver.top
 # 版本：1.9.2
 
@@ -16,14 +16,23 @@ from logger import log
 # from Common import is_online
 # from Common import UI_nickname_change
 import os
-try:
-    from wxautox import WeChat  # plus版需要找wxauto作者购买 https://github.com/cluic/wxauto
-    is_wxautox = True  # 是否为wxautox 即plus版本
-    # log(message="当前调用wxautox plus版")
-except:
-    from wxauto import WeChat
-    is_wxautox = False  # 是否为wxautox 即plus版本
-    # log(message="当前调用wxauto 普通版")
+
+from wxautox import WeChat  # plus版需要找wxauto作者购买 https://github.com/cluic/wxauto
+is_wxautox = True  # 是否为wxautox 即plus版本
+from wxautox.msgs import FriendMessage
+from wxautox.msgs import SystemMessage
+from wxautox import WxParam
+WxParam.MESSAGE_HASH = True # 是否启用消息哈希值用于辅助判断消息，开启后会稍微影响性能，默认False
+'''
+ENABLE_FILE_LOGGER ( bool ) ：是否启用日志文件，默认True
+DEFAULT_SAVE_PATH ( str ) ：下载文件/图片默认保存路径，默认为当前工作目录下的wxautox文件下载文件夹
+MESSAGE_HASH ( bool ) ：是否启用消息哈希值用于辅助判断消息，开启后会稍微影响性能，默认False
+DEFAULT_MESSAGE_XBIAS ( int ) ：头像到消息X偏移量，用于消息定位，点击消息等操作，默认51
+FORCE_MESSAGE_XBIAS ( bool ) ：是否强制重新自动获取X偏移量，如果设置为True，则每次启动都会重新获取，默认False
+LISTEN_INTERVAL ( int ) ：监听消息时间间隔，单位秒，默认1
+LISTENER_EXCUTOR_WORKERS ( int ) ：监听执行器线程池大小，根据自身需求和设备性能设置，默认4
+SEARCH_CHAT_TIMEOUT ( int ) ：搜索聊天对象超时时间，单位秒，默认5
+'''
 
 
 class WXBotConfig:
@@ -106,7 +115,7 @@ class WXBotConfig:
         self.listen_list = self.config.get('listen_list', [])
         self.AllListen_switch = self.config.get('AllListen_switch')
         # 群聊
-        self.group = self.config.get('group', "")
+        self.group = self.config.get('group', [])
         self.group_switch = self.config.get('group_switch')
         self.group_reply_at = self.config.get('group_reply_at')
         self.group_welcome = self.config.get('group_welcome')
@@ -270,15 +279,16 @@ class WXBot:
     """微信机器人主类"""
     def __init__(self):
 
-        self.ver = "V1.0.1"
-        self.ver_log = "日志：切换wxautox内核b50版本"
+        self.ver = "V2.0.0"
+        self.ver_log = "日志：切换wxautox内核为V2版本"
         self.run_flag = True
         self.config = WXBotConfig()
         self.api = DeepSeekAPI(self.config)
         self.wx = None
         self.all_Mode_listen_list = [] # 全局模式的动态·监听列表
         self.start_time = datetime.now()
-        # self.init_wx_listeners()
+        self.callback_is_die = False
+        self.msgs_path = './wx_msgs/'
 
     def is_err(self, id, err="无"):
         """错误中断并发送邮件"""
@@ -289,9 +299,6 @@ class WXBot:
             subject=id, 
             content='错误信息：\n'+traceback.format_exc()+"\nerr信息：\n"+str(err)
         )
-        # while True:
-        
-            # time.sleep(100)
 
 
     def check_wechat_window(self):
@@ -300,38 +307,81 @@ class WXBot:
 
     def init_wx_listeners(self):
         """初始化微信监听器"""
-        self.wx = None # 先清空
-        self.wx = WeChat()
+        result = None
+        # self.wx = None # 先清空
+        if not self.wx:
+            print("本次未获取客户端，正在初始化微信客户端...")
+            self.wx = WeChat()
+        
         self.config.AtMe = "@" + self.wx.nickname  # 绑定AtMe
         log(message='绑定@：' + self.config.AtMe)
         
+        log(message='启动wxautox监听器...')
+        self.wx.StartListening() # 启动监听器
         # 添加管理员监听
-        try:
-            self.wx.AddListenChat(who=self.config.cmd)
+        
+        result = self.wx.AddListenChat(nickname=self.config.cmd, callback=self.message_handle_callback)
+        if result:
             log(message=f"添加管理员 {self.config.cmd} 监听完成")
-        except Exception as e:
-            log(level="ERROR", message=f"添加管理员 {self.config.cmd} 监听失败")
+        else:
+            log(level="ERROR", message=f"添加管理员 {self.config.cmd} 监听失败, {result['message']}")
         
         # 添加个人用户监听 # 白名单模式
         if not self.config.AllListen_switch:
             log(message="白名单模式开启")
             for user in self.config.listen_list:
-                try:
-                    self.wx.AddListenChat(who=user)
+                result = self.wx.AddListenChat(nickname=user, callback=self.message_handle_callback)
+                if result:
                     log(message=f"添加用户 {user} 监听完成")
-                except Exception as e:
-                    log(level="ERROR", message=f"添加用户 {user} 监听失败")
+                else:
+                    log(level="ERROR", message=f"添加用户 {user} 监听失败, {result['message']}")
             
         # 如果群机器人开关开启，则添加群聊监听
         if self.config.group_switch:
             for user in self.config.group:
-                try:
-                    self.wx.AddListenChat(who=user)
+                result = self.wx.AddListenChat(nickname=user, callback=self.message_handle_callback)
+                if result:
                     log(message=f"添加群组 {user} 监听完成")
-                except Exception as e:
-                    log(level="ERROR", message=f"添加群组 {user} 监听失败")
+                else:
+                    log(level="ERROR", message=f"添加群组 {user} 监听失败, {result['message']}")
             
         log(message="监听器初始化完成")
+
+    def message_handle_callback(self, msg, chat):
+        """监听模式回调"""
+        try:
+            # chat_name = chat.ChatInfo().get('chat_name')
+            text = datetime.now().strftime("%Y/%m/%d %H:%M:%S ") + f'类型：{msg.type} 属性：{msg.attr} 窗口：{chat.who} 发送人：{msg.sender_remark} - 消息：{msg.content}'
+            log(message=text)
+            try:
+                with open(self.msgs_path+'/wx_msgs.txt', 'a', encoding='utf-8') as f:
+                    f.write(text + '\n') # 写入新消息到本地
+            except:
+                os.makedirs(self.msgs_path)
+                log(message=f"文件夹 '{self.msgs_path}' 创建成功！")
+
+            if isinstance(msg, FriendMessage): # 好友群友的消息
+                if self.config.AllListen_switch:
+                    # 更新监听列表中该会话的最新消息时间
+                    for listen_chat in self.all_Mode_listen_list:
+                        if listen_chat[0] == chat.who:
+                            log(message=chat.who + " 对话最新消息时间已更新")
+                            listen_chat[1] = time.time()
+                            break
+                result = self.process_message(chat, msg)
+                if not result:
+                    self.callback_is_die = True # 反馈主线程回调函数出错
+                    self.is_err(self.wx.nickname+f" wxbot处理监听新消息失败！", text+'\n'+result['message'])
+            
+            elif isinstance(msg, SystemMessage): # 系统的消息
+                if self.config.group_welcome: # 群新人欢迎语开关
+                    result = self.send_group_welcome_msg(chat, msg) # 获取子窗口对象与消息对象送入处理
+                    if not result:
+                        self.callback_is_die = True # 反馈主线程回调函数出错
+                        self.is_err(self.wx.nickname+f" wxbot发送群新人欢迎语失败！", text+'\n'+result['message'])
+        except Exception as e:
+            self.callback_is_die = True # 反馈主线程回调函数出错
+            self.is_err(self.wx.nickname+" wxbot回调函数处理出错！处理监听失败！！", e)
 
     def wx_send_ai(self, chat, message):
         """发送AI生成的消息"""
@@ -346,10 +396,11 @@ class WXBot:
         if len(reply) >= 2000:
             segments = self.config.split_long_text(reply)
             for segment in segments:
-                chat.SendMsg(segment)
+                result = chat.SendMsg(segment)
         else:
             time.sleep(random.randint(1, 10))
-            chat.SendMsg(reply)
+            result = chat.SendMsg(reply)
+        return result
 
     def find_new_group_friend(self, msg, flag):
         """寻找新的群好友"""
@@ -362,32 +413,24 @@ class WXBot:
 
     def send_group_welcome_msg(self, chat, message):
         """监听群组欢迎新人"""
-        if message.type != 'SYS' and message.type != 'sys':
-            return
-        
+        result = True
         log(message=f"{chat.who} 系统消息:" + message.content)
         if "加入群聊" in message.content and random.random()<1.3: # 130%概率
             new_friend = self.find_new_group_friend(message.content, 1)  # 扫码加入
             log(message=f"{chat.who} 新群友:" + new_friend)
             time.sleep(5)
-            chat.SendMsg(msg=self.config.group_welcome_msg, at=new_friend)
+            result = chat.SendMsg(msg=self.config.group_welcome_msg, at=new_friend)
         elif "加入了群聊" in message.content and random.random()<1.3: # 130%概率
             new_friend = self.find_new_group_friend(message.content, 3)  # 个人邀请
             log(message=f"{chat.who} 新群友:" + new_friend)
             time.sleep(5)
-            chat.SendMsg(msg=self.config.group_welcome_msg, at=new_friend)
+            result = chat.SendMsg(msg=self.config.group_welcome_msg, at=new_friend)
+        return result
 
     def process_message(self, chat, message):
         """处理收到的单条消息"""
-        if self.config.group_welcome:
-            self.send_group_welcome_msg(chat, message)
-            
-        # 只处理好友消息
-        if message.type != 'friend':
-            return
-
-        log(message=f"\n{chat.who} 窗口 {message.sender} 说：{message.content}")
-
+        log(message=f"处理 {chat.who} 窗口 {message.sender} 消息：{message.content}")
+        result = True # WxResponse 返回类接受对象
         # 检查是否为需要监听的对象 黑白名单处理
         is_monitored = not (self.config.AllListen_switch and chat.who in self.config.listen_list)\
                         or ((not self.config.AllListen_switch) and chat.who in self.config.listen_list)\
@@ -411,66 +454,68 @@ class WXBot:
                     log(level="ERROR", message=str(e)+"\n群组中调用AI回复错误！！")
                     reply = "请稍后再试"
                 time.sleep(random.randint(1, 10))
-                chat.SendMsg(msg=reply, at=message.sender)
-                return
-            return
+                result = chat.SendMsg(msg=reply, at=message.sender)
+                return result
+            return result
 
         # 命令处理
         if chat.who == self.config.cmd:
-            self.process_command(chat, message)
-            return
+            result = self.process_command(chat, message)
+            return result
 
         # 普通好友消息
-        self.wx_send_ai(chat, message)
+        result = self.wx_send_ai(chat, message)
+        return result
 
     def process_command(self, chat, message):
         """处理管理员命令"""
+        result = True # WxResponse 返回类接受对象
         if "/添加用户" in message.content:
-            self.handle_add_user(chat, message)
+            result = self.handle_add_user(chat, message)
         elif "/删除用户" in message.content:
-            self.handle_remove_user(chat, message)
+            result = self.handle_remove_user(chat, message)
         elif "/当前用户" == message.content:
-            chat.SendMsg(message.content + '\n' + ", ".join(self.config.listen_list))
+            result = chat.SendMsg(message.content + '\n' + ", ".join(self.config.listen_list))
         elif "/当前群" == message.content:
-            chat.SendMsg(message.content + '\n'+ ", ".join(self.config.group))
+            result = chat.SendMsg(message.content + '\n'+ ", ".join(self.config.group))
         elif "/群机器人状态" == message.content:
-            self.handle_group_switch_status(chat, message)
+            result = self.handle_group_switch_status(chat, message)
         elif "/添加群" in message.content:
-            self.handle_add_group(chat, message)
+            result = self.handle_add_group(chat, message)
         elif "/删除群" in message.content:
-            self.handle_remove_group(chat, message)
+            result = self.handle_remove_group(chat, message)
         elif message.content == "/开启群机器人":
-            self.handle_enable_group_bot(chat, message)
+            result = self.handle_enable_group_bot(chat, message)
         elif message.content == "/关闭群机器人":
-            self.handle_disable_group_bot(chat, message)
+            result = self.handle_disable_group_bot(chat, message)
         elif message.content == "/开启群机器人欢迎语":
-            self.handle_enable_welcome_msg(chat, message)
+            result = self.handle_enable_welcome_msg(chat, message)
         elif message.content == "/关闭群机器人欢迎语":
-            self.handle_disable_welcome_msg(chat, message)
+            result = self.handle_disable_welcome_msg(chat, message)
         elif message.content == "/群机器人欢迎语状态":
-            self.handle_welcome_msg_status(chat, message)
+            result = self.handle_welcome_msg_status(chat, message)
         elif message.content == "/当前群机器人欢迎语":
-            chat.SendMsg(message.content + '\n' + self.config.group_welcome_msg)
+            result = chat.SendMsg(message.content + '\n' + self.config.group_welcome_msg)
         elif "/更改群机器人欢迎语为" in message.content:
-            self.handle_change_welcome_msg(chat, message)
+            result = self.handle_change_welcome_msg(chat, message)
         elif message.content == "/当前模型":
-            chat.SendMsg(message.content + " " + self.api.DS_NOW_MOD)
+            result = chat.SendMsg(message.content + " " + self.api.DS_NOW_MOD)
         elif message.content == "/切换模型1":
-            self.handle_switch_model(chat, message, self.config.model1)
+            result = self.handle_switch_model(chat, message, self.config.model1)
         elif message.content == "/切换模型2":
-            self.handle_switch_model(chat, message, self.config.model2)
+            result = self.handle_switch_model(chat, message, self.config.model2)
         elif message.content == "/当前AI设定":
-            chat.SendMsg('当前AI设定：\n' + self.config.prompt)
+            result = chat.SendMsg('当前AI设定：\n' + self.config.prompt)
         elif "/更改AI设定为" in message.content or "/更改ai设定为" in message.content:
-            self.handle_change_prompt(chat, message)
+            result = self.handle_change_prompt(chat, message)
         elif message.content == "/更新配置":
             self.config.refresh_config()
             self.init_wx_listeners()
-            chat.SendMsg(message.content + ' 完成\n')
+            result = chat.SendMsg(message.content + ' 完成\n')
         elif message.content == "/当前版本":
-            chat.SendMsg(message.content + 'wxbot_' + self.ver + '\n' + self.ver_log + '\n作者:https://siver.top')
+            result = chat.SendMsg(message.content + 'wxbot_' + self.ver + '\n' + self.ver_log + '\n作者:https://siver.top')
         elif message.content == "/指令" or message.content == "指令":
-            self.send_command_list(chat)
+            result = self.send_command_list(chat)
         elif message.content == "/状态":
             send_msg = "运行时间：" + self.config.get_run_time(self.start_time) + "\n"
             if self.config.AllListen_switch:
@@ -488,64 +533,82 @@ class WXBot:
                     send_msg += "当前群机器人欢迎语状态：关闭\n"
             else:
                 send_msg += "当前群机器人状态：关闭\n"
-            chat.SendMsg(send_msg)
+            result = chat.SendMsg(send_msg)
         else:
-            self.wx_send_ai(chat, message)
+            result = self.wx_send_ai(chat, message)
+        return result
 
     def handle_add_user(self, chat, message):
         """处理添加用户命令"""
-        try:
-            user_to_add = re.sub("/添加用户", "", message.content).strip()
-            self.config.add_user(user_to_add)
-            self.init_wx_listeners()
-            chat.SendMsg(message.content + ' 完成\n' + ", ".join(self.config.listen_list))
-        except:
-            user_to_add = re.sub("/添加用户", "", message.content).strip()
-            self.config.remove_user(user_to_add)
-            self.init_wx_listeners()
-            chat.SendMsg(message.content + ' 失败\n请检查添加的用户是否为好友或者备注是否正确或者备注名 昵称中是否含有非法中文字符\n当前用户：\n'+", ".join(self.config.listen_list))
+        user_to_add = re.sub("/添加用户", "", message.content).strip()
+        self.config.add_user(user_to_add)
+        if not self.config.AllListen_switch:
+            result = self.wx.AddListenChat(nickname=user_to_add, callback=self.message_handle_callback)
+            if result:
+                log(message=f"添加用户 {user_to_add} 监听完成")
+                result = chat.SendMsg(message.content + ' 完成\n' + ", ".join(self.config.listen_list))
+                return result
+            else:
+                self.config.remove_user(user_to_add)
+                log(level="ERROR", message=f"添加用户 {user_to_add} 监听失败, {result['message']}")
+                result = chat.SendMsg(message.content + f" 失败\n{result['message']}\n" + ", ".join(self.config.listen_list))
+                return result
+        else:
+            result = chat.SendMsg(message.content + ' 完成(黑名单)\n' + ", ".join(self.config.listen_list))
+            return result
 
     def handle_remove_user(self, chat, message):
         """处理删除用户命令"""
         user_to_remove = re.sub("/删除用户", "", message.content).strip()
         self.wx.RemoveListenChat(user_to_remove)
         self.config.remove_user(user_to_remove)
-        chat.SendMsg(message.content + ' 完成\n' + ", ".join(self.config.listen_list))
+        result = chat.SendMsg(message.content + ' 完成\n' + ", ".join(self.config.listen_list))
+        return result
 
     def handle_group_switch_status(self, chat, message):
         """处理群机器人状态查询"""
-        if self.config.group_switc:
-            chat.SendMsg(message.content + '为关闭')
+        if self.config.group_switch:
+            result = chat.SendMsg(message.content + '为关闭')
         else:
-            chat.SendMsg(message.content + '为开启')
+            result = chat.SendMsg(message.content + '为开启')
+        return result
 
     def handle_add_group(self, chat, message):
         """处理添加群组命令"""
-        try:
-            new_group = re.sub("/添加群", "", message.content).strip()
-            self.config.add_group(new_group)
-            self.init_wx_listeners()
-            chat.SendMsg(message.content + ' 完成\n' + ", ".join(self.config.group))
-        except Exception:
-            # log(message=traceback.format_exc())
-            self.config.remove_group(new_group)
-            self.config.set_config('group_switch', False)
-            self.init_wx_listeners()
-            chat.SendMsg(message.content + ' 失败\n请重新配置群名称或者检查机器人号是否在群内\n当前群:\n' + ", ".join(self.config.group) + '\n当前群机器人状态:'+self.config.group_switch)
+        new_group = re.sub("/添加群", "", message.content).strip()
+        self.config.add_group(new_group)
+        if self.config.group_switch:
+            result = self.wx.AddListenChat(nickname=new_group, callback=self.message_handle_callback)
+            if result:
+                log(message=f"添加群组 {new_group} 监听完成")
+                result = chat.SendMsg(message.content + ' 完成\n' + ", ".join(self.config.group))
+                return result
+            else:
+                self.config.remove_group(new_group)
+                log(level="ERROR", message=f"添加群组 {new_group} 监听失败, {result['message']}")
+                result = chat.SendMsg(message.content + f" 失败\n{result['message']}\n" + ", ".join(self.config.group))
+                return result
+        else:
+            result = chat.SendMsg(message.content + ' 完成(群机器人未开启)\n' + ", ".join(self.config.group))
+            return result
+
+            
 
     def handle_remove_group(self, chat, message):
         """处理删除群组命令"""
         group_to_remove = re.sub("/删除群", "", message.content).strip()
         self.wx.RemoveListenChat(group_to_remove)
         self.config.remove_group(group_to_remove)
-        chat.SendMsg(message.content + ' 完成\n' + ", ".join(self.config.group))
+        result = chat.SendMsg(message.content + ' 完成\n' + ", ".join(self.config.group))
+        return result
 
     def handle_enable_group_bot(self, chat, message):
         """处理开启群机器人命令"""
         try:
             self.config.set_config(id='group_switch', new_content=True)
             self.init_wx_listeners()
-            chat.SendMsg(message.content + ' 完成\n' +'当前群：\n'+", ".join(self.config.group))
+            result = chat.SendMsg(message.content + ' 完成\n' +'当前群：\n'+", ".join(self.config.group))
+            return result
         except Exception as e:
             # log(message=traceback.format_exc())
             self.config.set_config('group_switch', False)
@@ -557,37 +620,43 @@ class WXBot:
         self.config.set_config(id='group_switch', new_content=False)
         for user in self.config.group:
             self.wx.RemoveListenChat(user)
-        chat.SendMsg(message.content + ' 完成\n' +'当前群：\n' + ", ".join(self.config.group))
+        result = chat.SendMsg(message.content + ' 完成\n' +'当前群：\n' + ", ".join(self.config.group))
+        return result
 
     def handle_enable_welcome_msg(self, chat, message):
         """处理开启群欢迎语命令"""
         self.config.group_welcome = True
         self.config.set_config('group_welcome', True)
-        chat.SendMsg(message.content + ' 完成\n' +'当前群：\n' + ", ".join(self.config.group))
+        result = chat.SendMsg(message.content + ' 完成\n' +'当前群：\n' + ", ".join(self.config.group))
+        return result
 
     def handle_disable_welcome_msg(self, chat, message):
         """处理关闭群欢迎语命令"""
         self.config.group_welcome = False
         self.config.set_config('group_welcome', False)
-        chat.SendMsg(message.content + ' 完成\n' +'当前群：\n' + ", ".join(self.config.group))
+        result = chat.SendMsg(message.content + ' 完成\n' +'当前群：\n' + ", ".join(self.config.group))
+        return result
 
     def handle_welcome_msg_status(self, chat, message):
         """处理群欢迎语状态查询"""
         if self.config.group_welcome:
-            chat.SendMsg("/群机器人欢迎语状态 为开启\n" +'当前群：\n' + ", ".join(self.config.group))
+            result = chat.SendMsg("/群机器人欢迎语状态 为开启\n" +'当前群：\n' + ", ".join(self.config.group))
         else:
-            chat.SendMsg("/群机器人欢迎语状态 为关闭\n" +'当前群：\n' + ", ".join(self.config.group))
+            result = chat.SendMsg("/群机器人欢迎语状态 为关闭\n" +'当前群：\n' + ", ".join(self.config.group))
+        return result
 
     def handle_change_welcome_msg(self, chat, message):
         """处理更改群欢迎语命令"""
         new_welcome = re.sub("/更改群机器人欢迎语为", "", message.content).strip()
         self.config.set_config('group_welcome_msg', new_welcome)
-        chat.SendMsg('群机器人欢迎语已更新\n' + self.config.group_welcome_msg)
+        result = chat.SendMsg('群机器人欢迎语已更新\n' + self.config.group_welcome_msg)
+        return result
 
     def handle_switch_model(self, chat, message, model):
         """处理切换模型命令"""
         self.api.DS_NOW_MOD = model
-        chat.SendMsg(message.content + ' 完成\n当前模型:' + self.api.DS_NOW_MOD)
+        result = chat.SendMsg(message.content + ' 完成\n当前模型:' + self.api.DS_NOW_MOD)
+        return result
 
     def handle_change_prompt(self, chat, message):
         """处理更改AI设定命令"""
@@ -598,12 +667,14 @@ class WXBot:
         self.config.config['prompt'] = new_prompt
         self.config.save_config()
         self.config.refresh_config()
-        chat.SendMsg('AI设定已更新\n' + self.config.prompt)
+        result = chat.SendMsg('AI设定已更新\n' + self.config.prompt)
+        return result
 
     def send_command_list(self, chat):
         """发送指令列表"""
         commands = (
             '指令列表[发送中括号里内容]：\n'
+            '[/状态]'
             '[/当前用户] (返回当前监听用户列表)\n'
             '[/添加用户***] （将用户***添加进监听列表）\n'
             '[/删除用户***]\n'
@@ -627,7 +698,8 @@ class WXBot:
             '[/当前版本] (返回当前版本)\n'
             '作者:https://siver.top  若有非法传播请告知'
         )
-        chat.SendMsg(commands)
+        result = chat.SendMsg(commands)
+        return result
     def is_image_path(self, s: str) -> bool:
         """检查字符串是否是图片路径（以图片格式结尾，并且是完整路径）"""
         # 检查是否是图片格式
@@ -653,28 +725,27 @@ class WXBot:
         '''
         监听好友请求并一并通过
         '''
-        NewFriends = self.wx.GetNewFriends()
+        NewFriends = self.wx.GetNewFriends(acceptable=True)
         time.sleep(1)
         if len(NewFriends) != 0:
             log(message="以下是新朋友：\n" + str(NewFriends))
             for new in NewFriends:
                 new_name = new.name + '_机器人备注'
-                new.Accept(remark = new_name)
+                new.Accept(remark = new_name) # 接受好友请求，并设置备注和标签
                 log(message="已通过" + new.name + "的好友请求")
                 self.wx.SwitchToChat() # 通过请求完后手动切换回聊天页面
                 time.sleep(5)
-                for msg in self.config.new_frien_msg:
+                for msg in self.config.new_frien_msg: # 发送新好友招呼语
                     if self.is_image_path(msg):
                         self.wx.SendFiles(who=new_name, filepath=msg)
                     else:
                         self.wx.SendMsg(who=new_name, msg=msg)
                     time.sleep(random.randint(1, 3)) # 随机延时1-3秒发送消息
-                # self.wx.SendMsg(who=new.name + "_机器人备注", msg=NewFriend_hello)
-                # time.sleep(1)
 
-                self.wx.SwitchToContact()
+                self.wx.ChatWith(who='文件传输助手')
                 time.sleep(1)
-            self.wx.ChatWith(who='文件传输助手')
+                self.wx.SwitchToContact() # 切回通讯录同意下一个好友
+            time.sleep(1)
 
         self.wx.SwitchToChat() # 通过请求完后手动切换回聊天页面
         time.sleep(1)
@@ -760,7 +831,7 @@ class WXBot:
         log(message=chat + '不在监听列表，正在添加进列表')
         self.all_Mode_listen_list.append([chat, time.time()])
         log(message='当前监听列表：' + str(self.all_Mode_listen_list))
-        self.wx.AddListenChat(chat)
+        self.wx.AddListenChat(nickname=chat, callback=self.message_handle_callback)
 
     def is_chat_listened(self, chat):
         """判断当前会话是否已经在监听列表中"""
@@ -778,16 +849,16 @@ class WXBot:
                     continue
                 for message in messages:
                     # 仅处理包含 chat_type 且为 friend 类型的消息（排除群聊）
-                    if message.details.get('chat_type') == 'friend':
+                    if message.attr == 'friend':
                         new_msg = self.next_message_handle() # 处理next获取到的新消息
                         if not self.is_chat_listened(chat):
                             self.add_chat_to_listen(chat)
                         else:
                             log(message=chat + '在监听列表')
                         for msg in new_msg:
-                            ALL_listen = self.wx.GetAllListenChat() # 所有监听窗口子对象
+                            # ALL_listen = self.wx.GetAllListenChat() # 所有监听窗口子对象
                             # print(ALL_listen)
-                            self.process_message(ALL_listen.get(chat), msg)
+                            self.process_message(self.wx.GetSubWindow(nickname=chat), msg)
 
         def process_listen_messages():
             """处理监听中的会话消息，同时更新对应会话的最新消息时间"""
@@ -807,16 +878,37 @@ class WXBot:
             for listen_chat in self.all_Mode_listen_list[:]:
                 if time.time() - listen_chat[1] >= chat_time_out:
                     log(message=str(listen_chat[0]) + '对话超时，正在删除监听')
-                    self.wx.RemoveListenChat(who=listen_chat[0])
+                    self.wx.RemoveListenChat(listen_chat[0])
                     self.all_Mode_listen_list.remove(listen_chat)
-    
+
+        def get_next_new_message():
+            messages_new = self.wx.GetNextNewMessage(filter_mute=True)
+            chat = messages_new.get('chat_name')
+            chat_type = messages_new.get('chat_type')
+            msgs = messages_new.get('msg')
+            if chat in self.config.listen_list:
+                log(message=f'{chat} 为黑名单用户，跳过处理')
+                return
+            if msgs:
+                for msg in msgs:
+                    if msg.attr == 'friend':
+                        # new_msg = self.next_message_handle() # 处理next获取到的新消息
+                        if not self.is_chat_listened(chat):
+                            self.add_chat_to_listen(chat)
+                        else:
+                            log(message=chat + '在监听列表')
+                        # for msg in new_msg:
+                        self.process_message(self.wx.GetSubWindow(nickname=chat), msg)
+
         """全局监听模式"""
         # 消息检查模块  1s  混合模式 
         # 主逻辑依次调用处理新消息、更新监听消息、删除超时监听
-        process_new_messages()
-        process_listen_messages()
+        # process_new_messages()
+        # process_listen_messages()
+        get_next_new_message()
         # 监听静默超时检测模块 10s
         if time.time() - last_time >= timeout:
+            log(message=f'监听静默超时 {last_time}')
             remove_timeout_listen()
             return time.time()
         return last_time
@@ -825,10 +917,8 @@ class WXBot:
         """停止机器人"""
         try:
             self.run_flag = False
-            self.wx.RemoveListenChat()
-            # self.quit()
-            # self.finished.emit()
-            # UI_is_online_up(False)
+
+            self.wx.StopListening() # 停止监听
             log(level="WARNING", message='siver_wxbot安全退出！！')
             return True
         except Exception as e:
@@ -854,14 +944,12 @@ class WXBot:
                 time.sleep(60)
 
     def main(self):
-        self.key_pass(2025, 5, 30, 0, 0, 0) # 打包保护锁
+        # self.key_pass(2025, 5, 30, 0, 0, 0) # 打包保护锁
         """主运行函数"""
         log(message=f"wxbot\n版本: wxbot_{self.ver}\n作者: https://siver.top\n")
         
         try:
             self.init_wx_listeners()
-            # is_online(True)
-            # UI_nickname_change(self.wx.nickname)
             log(message=f"UI面板状态更新完成")
 
             wait_time = 1  # 每1秒检查一次新消息
@@ -872,12 +960,9 @@ class WXBot:
             log(message='siver_wxbot初始化完成，开始监听消息(作者:https://siver.top)')
             self.run_flag = True
         except Exception as e:
-            # log(level="ERROR", message=traceback.format_exc())
             print(traceback.format_exc())
             log(level="ERROR", message=str(e)+"\n初始化微信监听器失败，请检查微信是否启动登录正确")
-            # while True:
             self.run_flag = False
-            # time.sleep(100)
         
         
         # 以下为测试代码test VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
@@ -890,14 +975,16 @@ class WXBot:
                 check_counter += 1
                 if check_counter >= check_interval:
                     try:
+                        if self.callback_is_die:
+                            self.wx.StopListening() # 停止微信监听器
+                            log(level="ERROR", message="检测到回调函数出错!!已停止所有监听并跳出主线程!!")
+                            break
                         if not self.check_wechat_window():
-                            # is_online(False)
                             self.is_err(self.wx.nickname+" wxbot监听出错！！微信可能已被弹出登录！！在线检查失败！！")
                             while self.run_flag:
                                 log(level="ERROR", message=f"微信{self.wx.nickname}已被弹出登录！！请检查微信是否登录！！")
                                 time.sleep(100)
                     except Exception as e:
-                        # is_online(False)
                         self.is_err(self.wx.nickname+" wxbot监听出错！！微信可能已被弹出登录！！在线检查失败！！", e)
                         while self.run_flag:
                             log(level="ERROR", message=f"微信{self.wx.nickname}已被弹出登录！！请检查微信是否登录！！")
@@ -917,15 +1004,9 @@ class WXBot:
                             self.is_err(self.wx.nickname+"  智能客服bot监听新好友出错！！请检查程序！！", e)
                         check_new_counter = 0
 
-                if not self.config.AllListen_switch: # 根据全局开关切换监听模式还是全局模式
+                if self.config.AllListen_switch: # 根据全局开关切换监听模式还是全局模式
                     try:
-                        self.listen_mode() # 监听模式
-                    except Exception as e:
-                        if not self.run_flag:
-                            log(level="ERROR", message=str(e)+"\n监听模式出错！！请检查程序！！")
-                else:
-                    try:
-                        last_time = self.ALLListen_mode(last_time=last_time, timeout=10) # 全局模式
+                        last_time = self.ALLListen_mode(last_time=last_time) # 全局模式
                     except Exception as e:
                         if not self.run_flag:
                             log(level="ERROR", message=str(e)+"\n全局模式出错！！请检查程序！！")
@@ -933,6 +1014,7 @@ class WXBot:
 
             except Exception as e:
                 self.is_err(self.wx.nickname+" wxbot消息处理出错！！微信可能已被弹出登录！！处理监听失败！！", e)
+                self.run_flag = False
 
             time.sleep(wait_time)
         log(level="WARNING", message='siver_wxbot安全退出！！')

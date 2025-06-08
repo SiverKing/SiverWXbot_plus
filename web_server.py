@@ -12,7 +12,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from functools import wraps
 import threading
-from wxbot_class_only import WXBot
+from wxbot_class_only_V2 import WXBot
 from logger import log
 import logger
 
