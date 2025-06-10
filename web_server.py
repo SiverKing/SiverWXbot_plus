@@ -409,7 +409,7 @@ def main():
         log('INFO', '服务5s后启动')
         log('INFO', '请访问 http://localhost:10001 或者 http://127.0.0.1:10001 进行登录')
         # 启动Flask应用
-        app.run(host='0.0.0.0', port=PORT, debug=True)
+        app.run(host='0.0.0.0', port=PORT, debug=False)
     except Exception as e:
         log('ERROR', f'服务器启动失败: {str(e)}')
     finally:

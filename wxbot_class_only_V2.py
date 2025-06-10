@@ -415,12 +415,12 @@ class WXBot:
         """监听群组欢迎新人"""
         result = True
         log(message=f"{chat.who} 系统消息:" + message.content)
-        if "加入群聊" in message.content and random.random()<1.3: # 130%概率
+        if "加入群聊" in message.content and random.random()<1.3: # 100%概率触发
             new_friend = self.find_new_group_friend(message.content, 1)  # 扫码加入
             log(message=f"{chat.who} 新群友:" + new_friend)
             time.sleep(5)
             result = chat.SendMsg(msg=self.config.group_welcome_msg, at=new_friend)
-        elif "加入了群聊" in message.content and random.random()<1.3: # 130%概率
+        elif "加入了群聊" in message.content and random.random()<1.3: # 100%概率触发
             new_friend = self.find_new_group_friend(message.content, 3)  # 个人邀请
             log(message=f"{chat.who} 新群友:" + new_friend)
             time.sleep(5)
@@ -674,7 +674,7 @@ class WXBot:
         """发送指令列表"""
         commands = (
             '指令列表[发送中括号里内容]：\n'
-            '[/状态]'
+            '[/状态]\n'
             '[/当前用户] (返回当前监听用户列表)\n'
             '[/添加用户***] （将用户***添加进监听列表）\n'
             '[/删除用户***]\n'
@@ -908,7 +908,7 @@ class WXBot:
         get_next_new_message()
         # 监听静默超时检测模块 10s
         if time.time() - last_time >= timeout:
-            log(message=f'监听静默超时 {last_time}')
+            # log(message=f'监听静默超时 {last_time}')
             remove_timeout_listen()
             return time.time()
         return last_time
