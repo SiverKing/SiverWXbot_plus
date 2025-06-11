@@ -265,8 +265,8 @@ class DeepSeekAPI:
                     # log(message=chunk_message, end="", flush=True)
                     if chunk_message:
                         content += chunk_message
-            log(message=content.strip())
-            log(message="\n")
+            log(message="API接口返回："+content.strip())
+            # log(message="\n")
             return content.strip()
 
         else:
@@ -944,7 +944,7 @@ class WXBot:
                 time.sleep(60)
 
     def main(self):
-        # self.key_pass(2025, 5, 30, 0, 0, 0) # 打包保护锁
+        # self.key_pass(2025, 6, 20, 0, 0, 0) # 打包保护锁
         """主运行函数"""
         log(message=f"wxbot\n版本: wxbot_{self.ver}\n作者: https://siver.top\n")
         
