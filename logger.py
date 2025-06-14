@@ -56,8 +56,10 @@ def log(level="INFO", message=''):
     # 写入log到本地
     try:
         now_day = datetime.now().strftime("%y%m%d")
-        with open(LOG_PATH+f'/log_{now_day}.txt', 'a', encoding='utf-8') as f:
+        with open(LOG_PATH+f'/log_{now_day}.txt', 'a', encoding='utf-8-sig') as f:
             f.write(f'[{timestamp}]: {message}' + '\n') # 写入log到本地
+        # with open(LOG_PATH+f'/log_{now_day}.txt', 'a', encoding='utf-8') as f:
+            # f.write(f'[{timestamp}]: {message}' + '\n') # 写入log到本地
     except:
         os.makedirs(LOG_PATH)
         print(f"文件夹 '{LOG_PATH}' 创建成功！")

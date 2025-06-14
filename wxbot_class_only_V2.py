@@ -353,13 +353,14 @@ class WXBot:
             # chat_name = chat.ChatInfo().get('chat_name')
             text = datetime.now().strftime("%Y/%m/%d %H:%M:%S ") + f'类型：{msg.type} 属性：{msg.attr} 窗口：{chat.who} 发送人：{msg.sender_remark} - 消息：{msg.content}'
             log(message=text)
+            """ # 有log本地文件记录，暂不重复写消息文件
             try:
                 with open(self.msgs_path+'/wx_msgs.txt', 'a', encoding='utf-8') as f:
                     f.write(text + '\n') # 写入新消息到本地
             except:
                 os.makedirs(self.msgs_path)
                 log(message=f"文件夹 '{self.msgs_path}' 创建成功！")
-
+            """
             if isinstance(msg, FriendMessage): # 好友群友的消息
                 if self.config.AllListen_switch:
                     # 更新监听列表中该会话的最新消息时间
