@@ -416,12 +416,12 @@ class WXBot:
         """监听群组欢迎新人"""
         result = True
         log(message=f"{chat.who} 系统消息:" + message.content)
-        if "加入群聊" in message.content and random.random()<1.3: # 100%概率触发
+        if "加入群聊" in message.content and random.random()<0.3: # 100%概率触发
             new_friend = self.find_new_group_friend(message.content, 1)  # 扫码加入
             log(message=f"{chat.who} 新群友:" + new_friend)
             time.sleep(5)
             result = chat.SendMsg(msg=self.config.group_welcome_msg, at=new_friend)
-        elif "加入了群聊" in message.content and random.random()<1.3: # 100%概率触发
+        elif "加入了群聊" in message.content and random.random()<0.3: # 100%概率触发
             new_friend = self.find_new_group_friend(message.content, 3)  # 个人邀请
             log(message=f"{chat.who} 新群友:" + new_friend)
             time.sleep(5)
