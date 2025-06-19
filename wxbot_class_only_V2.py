@@ -469,6 +469,10 @@ class WXBot:
                 result = chat.SendMsg(msg="常见问题")
                 time.sleep(1)
                 result = self.wx.SendUrlCard(url="https://plus.wxauto.org/docs/issues/", friends=chat.who, timeout=30)
+            if "/环境要求" in message.content: # 为wxauto群机器人定制的功能
+                result = chat.SendMsg(msg="环境要求")
+                time.sleep(1)
+                result = self.wx.SendUrlCard(url="https://plus.wxauto.org/docs/install/", friends=chat.who, timeout=30)
             return result
 
         # 命令处理
