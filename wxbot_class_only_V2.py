@@ -9,6 +9,7 @@ import re
 import traceback
 import email_send
 from openai import OpenAI
+import requests
 from datetime import datetime, timedelta
 import random
 from logger import log
@@ -216,63 +217,128 @@ class WXBotConfig:
         return f"{days}天{hours}时{minutes}分{seconds}秒"
 
 
-class DeepSeekAPI:
-    """DeepSeek API 交互类"""
+class API:
+    """Dify API 交互类"""
     def __init__(self, config):
         self.config = config
         self.DS_NOW_MOD = config.model1  # 默认使用模型1
-        self.client = OpenAI(api_key=config.api_key, base_url=config.base_url)
+        self.api_key = "Bearer " + config.api_key
+        self.base_url = config.base_url
+        # self.client = OpenAI(api_key=config.api_key, base_url=config.base_url)
 
     def chat(self, message, model=None, stream=True, prompt=None):
         """
-        调用 DeepSeek API 获取对话回复
+        调用 Dify API 获取对话回复
         """
-        if model is None:
-            model = self.DS_NOW_MOD
-        if prompt is None:
-            prompt = self.config.prompt
-
-        try:
-            response = self.client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": prompt},
-                    {"role": "user", "content": message},
-                ],
-                stream=stream
-            )
-        except Exception as e:
-            log(level="ERROR", message="调用 API 出错:" + str(e))
-            return "API返回错误，请稍后再试"
-            # raise
-
-        if stream:
-            reasoning_content = ""
-            content = ""
-            for chunk in response:
-                if not hasattr(chunk, 'choices') or not chunk.choices:
-                    continue
-                    
-                delta = chunk.choices[0].delta
-                
-                if hasattr(delta, 'reasoning_content') and delta.reasoning_content:
-                    chunk_message = delta.reasoning_content
-                    # log(message=chunk_message, end="", flush=True)
-                    if chunk_message:
-                        reasoning_content += chunk_message
-                elif hasattr(delta, 'content') and delta.content:
-                    chunk_message = delta.content
-                    # log(message=chunk_message, end="", flush=True)
-                    if chunk_message:
-                        content += chunk_message
-            log(message="API接口返回："+content.strip())
-            # log(message="\n")
-            return content.strip()
-
+        # print("=== 简单文本对话 ===")
+        response = self.run_dify_conversation(
+            query=message,
+            response_mode="blocking"
+        )
+        
+        if "event" in response and response["event"] == "message":
+            result = self.handle_blocking_response(response)
+            log(f"🤖 AI回复: {result['answer']}")
+            log(f"会话ID: {result['conversation_id']}")
+            return result['answer']
         else:
-            output = response.choices[0].message.content
-            log(message=output)
-            return output
+            log(level="ERROR", message=f"❌ 错误: {response.get('error', 'Unknown error')}")
+            return "API返回错误，请稍后再试"
+
+    def handle_blocking_response(self, response_data):
+        """
+        处理阻塞模式(blocking)的响应
+        """
+        if response_data.get("event") == "message":
+            return {
+                "success": True,
+                "conversation_id": response_data.get("conversation_id"),
+                "answer": response_data.get("answer", ""),
+                "message_id": response_data.get("message_id"),
+                "metadata": response_data.get("metadata", {}),
+                "usage": response_data.get("usage", {}),
+                "retriever_resources": response_data.get("retriever_resources", [])
+            }
+        else:
+            return {
+                "success": False,
+                "error": f"Unexpected event type: {response_data.get('event')}",
+                "raw_response": response_data
+            }
+    def run_dify_conversation(self,
+        query=str,
+        inputs={},
+        conversation_id=None,
+        files=[],
+        auto_generate_name=True,
+        response_mode="blocking"
+    ):
+        """
+        执行Dify对话工作流API，严格遵循官方文档规范
+        官方文档：https://docs.dify.ai/api/chat-messages
+        
+        :param query: 用户输入/提问内容
+        :param inputs: App定义的变量值
+        :param conversation_id: 会话ID（用于多轮对话）
+        :param files: 文件列表（支持Vision能力）
+        :param auto_generate_name: 是否自动生成标题
+        :param response_mode: 响应模式（blocking/streaming）
+        :return: API响应数据
+        """
+        # API端点
+        # url = "http://121.37.67.153:8088/v1/chat-messages"
+        url = self.base_url
+        # 设置请求头
+        headers = {
+            "Authorization": self.api_key,
+            "Content-Type": "application/json"
+        }
+        
+        # 构建符合文档要求的请求体
+        payload = {
+            "inputs": inputs,
+            "query": query,
+            "response_mode": response_mode,
+            "user": "api-user",  # 用户标识
+            "conversation_id": conversation_id,
+            "auto_generate_name": auto_generate_name
+        }
+        
+        # 添加文件参数（如果提供）
+        if files:
+            payload["files"] = files
+        
+        try:
+            # 发送请求
+            response = requests.post(url, headers=headers, json=payload)
+            response.raise_for_status()  # 检查HTTP错误
+            
+            # 解析响应
+            if response_mode == "blocking":
+                return response.json()
+            else:
+                # 流式响应需要特殊处理（此处只返回原始响应）
+                return {"raw_stream": response.text}
+                
+        except requests.exceptions.RequestException as e:
+            # 详细的错误处理
+            error_info = {
+                "error_type": "request_error",
+                "message": str(e)
+            }
+            
+            if e.response is not None:
+                try:
+                    error_data = e.response.json()
+                    error_info.update({
+                        "status_code": e.response.status_code,
+                        "error_code": error_data.get("code", "unknown"),
+                        "api_message": error_data.get("message", "No error details")
+                    })
+                except:
+                    error_info["response_text"] = e.response.text
+                    
+            return {"success": False, "error": error_info}
 
 
 class WXBot:
@@ -283,7 +349,7 @@ class WXBot:
         self.ver_log = "日志：切换wxautox内核为V2版本"
         self.run_flag = True
         self.config = WXBotConfig()
-        self.api = DeepSeekAPI(self.config)
+        self.api = API(self.config)
         self.wx = None
         self.all_Mode_listen_list = [] # 全局模式的动态·监听列表
         self.start_time = datetime.now()
