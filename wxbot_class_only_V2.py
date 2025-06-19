@@ -457,6 +457,18 @@ class WXBot:
                 time.sleep(random.randint(1, 10))
                 result = chat.SendMsg(msg=reply, at=message.sender)
                 return result
+            if "/文档" in message.content: # 为wxauto群机器人定制的功能
+                result = chat.SendMsg(msg="文档")
+                time.sleep(1)
+                result = self.wx.SendUrlCard(url="https://docs.wxauto.org/", friends=chat.who, timeout=30)
+            if "/封号" in message.content: # 为wxauto群机器人定制的功能
+                result = chat.SendMsg(msg="wxauto不封号，遵守链接卡片里的内容")
+                time.sleep(1)
+                result = self.wx.SendUrlCard(url="https://plus.wxauto.org/docs/issues/#%e4%bc%9a%e5%b0%81%e5%8f%b7%e5%90%97", friends=chat.who, timeout=30)
+            if "/常见问题" in message.content: # 为wxauto群机器人定制的功能
+                result = chat.SendMsg(msg="常见问题")
+                time.sleep(1)
+                result = self.wx.SendUrlCard(url="https://plus.wxauto.org/docs/issues/", friends=chat.who, timeout=30)
             return result
 
         # 命令处理
