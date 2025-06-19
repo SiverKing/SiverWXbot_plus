@@ -371,14 +371,14 @@ class WXBot:
                             break
                 result = self.process_message(chat, msg)
                 if not result:
-                    self.callback_is_die = True # 反馈主线程回调函数出错
+                    # self.callback_is_die = True # 反馈主线程回调函数出错
                     self.is_err(self.wx.nickname+f" wxbot处理监听新消息失败！", text+'\n'+result['message'])
             
             elif isinstance(msg, SystemMessage): # 系统的消息
                 if self.config.group_welcome: # 群新人欢迎语开关
                     result = self.send_group_welcome_msg(chat, msg) # 获取子窗口对象与消息对象送入处理
                     if not result:
-                        self.callback_is_die = True # 反馈主线程回调函数出错
+                        # self.callback_is_die = True # 反馈主线程回调函数出错
                         self.is_err(self.wx.nickname+f" wxbot发送群新人欢迎语失败！", text+'\n'+result['message'])
         except Exception as e:
             self.callback_is_die = True # 反馈主线程回调函数出错
