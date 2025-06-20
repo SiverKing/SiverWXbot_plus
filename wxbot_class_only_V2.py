@@ -516,12 +516,17 @@ class WXBot:
                 try:
                     reply = self.api.chat(content_without_at, prompt=self.config.prompt)
                 except Exception as e:
-                    # log(level="ERROR", message=traceback.format_exc())
                     print(traceback.format_exc())
                     log(level="ERROR", message=str(e)+"\n群组中调用AI回复错误！！")
                     reply = "请稍后再试"
                 time.sleep(random.randint(1, 10))
-                result = chat.SendMsg(msg=reply, at=message.sender)
+                if "@所有人" in reply: # 群聊@所有人需求
+                    result = self.wx.AtAll(msg=re.sub("@所有人", "", reply).strip(), who=chat.who)
+                    if not result:
+                        log(level="ERROR", message=f"群组 {chat.who} @所有人失败, {result['message']}")
+                        result = chat.SendMsg(msg=reply, at=message.sender)
+                else:
+                    result = chat.SendMsg(msg=reply, at=message.sender)
                 return result
             return result
 
@@ -958,7 +963,7 @@ class WXBot:
                 return
             if msgs:
                 for msg in msgs:
-                    if msg.attr == 'friend':
+                    if msg.attr == 'friend' and chat_type == 'friend': # 过滤群聊和系统消息
                         # new_msg = self.next_message_handle() # 处理next获取到的新消息
                         if not self.is_chat_listened(chat):
                             self.add_chat_to_listen(chat)
