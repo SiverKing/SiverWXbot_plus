@@ -732,7 +732,7 @@ class WXBot:
             log(message="以下是新朋友：\n" + str(NewFriends))
             for new in NewFriends:
                 new_name = new.name + '_机器人备注'
-                new.Accept(remark = new_name) # 接受好友请求，并设置备注和标签
+                new.accept(remark = new_name) # 接受好友请求，并设置备注和标签
                 log(message="已通过" + new.name + "的好友请求")
                 self.wx.SwitchToChat() # 通过请求完后手动切换回聊天页面
                 time.sleep(5)
