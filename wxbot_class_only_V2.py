@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox V2版本
 # 作者：https://siver.top
-# 版本：1.9.2
+# 版本：2.1.0
 
 import time
 import json
@@ -23,6 +23,7 @@ is_wxautox = True  # 是否为wxautox 即plus版本
 from wxautox.msgs import FriendMessage
 from wxautox.msgs import SystemMessage
 from wxautox import WxParam
+from wxautox.utils.useful import check_license
 WxParam.MESSAGE_HASH = True # 是否启用消息哈希值用于辅助判断消息，开启后会稍微影响性能，默认False
 '''
 ENABLE_FILE_LOGGER ( bool ) ：是否启用日志文件，默认True
@@ -345,8 +346,8 @@ class WXBot:
     """微信机器人主类"""
     def __init__(self):
 
-        self.ver = "V2.0.0"
-        self.ver_log = "日志：切换wxautox内核为V2版本"
+        self.ver = "V2.1.0"
+        self.ver_log = "日志：新增wxautox激活检测"
         self.run_flag = True
         self.config = WXBotConfig()
         self.api = API(self.config)
@@ -355,6 +356,10 @@ class WXBot:
         self.start_time = datetime.now()
         self.callback_is_die = False
         self.msgs_path = './wx_msgs/'
+
+    def wxautox_activate_check(self):
+        """检查wxautox是否激活"""
+        return check_license()
 
     def is_err(self, id, err="无"):
         """错误中断并发送邮件"""
@@ -376,7 +381,7 @@ class WXBot:
         result = None
         # self.wx = None # 先清空
         if not self.wx:
-            print("本次未获取客户端，正在初始化微信客户端...")
+            log(message="本次未获取客户端，正在初始化微信客户端...")
             self.wx = WeChat()
         
         self.config.AtMe = "@" + self.wx.nickname  # 绑定AtMe
@@ -1020,6 +1025,13 @@ class WXBot:
         """主运行函数"""
         log(message=f"wxbot\n版本: wxbot_{self.ver}\n作者: https://siver.top\n")
         
+        # wxautox激活检测
+        if self.wxautox_activate_check():
+            log(message="wxautox已激活")
+        else:
+            log(level="ERROR", message="wxautox未激活，请激活后再运行程序！！")
+            return False
+
         try:
             self.init_wx_listeners()
             log(message=f"UI面板状态更新完成")
