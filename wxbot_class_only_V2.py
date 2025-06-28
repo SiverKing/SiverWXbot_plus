@@ -25,6 +25,7 @@ from wxautox.msgs import SystemMessage
 from wxautox import WxParam
 from wxautox.utils.useful import check_license
 WxParam.MESSAGE_HASH = True # 是否启用消息哈希值用于辅助判断消息，开启后会稍微影响性能，默认False
+WxParam.FORCE_MESSAGE_XBIAS = True # 是否强制重新自动获取X偏移量，如果设置为True，则每次启动都会重新获取，默认False
 '''
 ENABLE_FILE_LOGGER ( bool ) ：是否启用日志文件，默认True
 DEFAULT_SAVE_PATH ( str ) ：下载文件/图片默认保存路径，默认为当前工作目录下的wxautox文件下载文件夹
@@ -296,8 +297,8 @@ class DifyAPI:
         
         if "event" in response and response["event"] == "message":
             result = self.handle_blocking_response(response)
-            log(f"🤖 AI回复: {result['answer']}")
-            log(f"会话ID: {result['conversation_id']}")
+            log(message=f"🤖 AI回复: {result['answer']}")
+            log(message=f"会话ID: {result['conversation_id']}")
             return result['answer']
         else:
             log(level="ERROR", message=f"❌ 错误: {response.get('error', 'Unknown error')}")
