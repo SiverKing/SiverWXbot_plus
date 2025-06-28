@@ -239,8 +239,8 @@ class API:
         
         if "event" in response and response["event"] == "message":
             result = self.handle_blocking_response(response)
-            log(f"🤖 AI回复: {result['answer']}")
-            log(f"会话ID: {result['conversation_id']}")
+            log(message=f"🤖 AI回复: {result['answer']}")
+            log(message=f"会话ID: {result['conversation_id']}")
             return result['answer']
         else:
             log(level="ERROR", message=f"❌ 错误: {response.get('error', 'Unknown error')}")
