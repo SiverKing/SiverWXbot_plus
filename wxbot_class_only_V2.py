@@ -219,8 +219,8 @@ class WXBotConfig:
         return f"{days}天{hours}时{minutes}分{seconds}秒"
 
 
-class DeepSeekAPI:
-    """DeepSeek API 交互类"""
+class OpenAIAPI:
+    """OpenAI API 交互类"""
     def __init__(self, config):
         self.config = config
         self.DS_NOW_MOD = config.model1  # 默认使用模型1
@@ -228,7 +228,7 @@ class DeepSeekAPI:
 
     def chat(self, message, model=None, stream=True, prompt=None):
         """
-        调用 DeepSeek API 获取对话回复
+        调用 OpenAI API 获取对话回复
         """
         if model is None:
             model = self.DS_NOW_MOD
@@ -286,7 +286,7 @@ class WXBot:
         self.ver_log = version_log
         self.run_flag = True
         self.config = WXBotConfig()
-        self.api = DeepSeekAPI(self.config)
+        self.api = OpenAIAPI(self.config)
         self.wx = None
         self.all_Mode_listen_list = [] # 全局模式的动态·监听列表
         self.start_time = datetime.now()

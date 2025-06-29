@@ -214,6 +214,13 @@ def dashboard():
     if 'api_key' in config:
         config['api_key_display'] = '*' * len(config['api_key'])
     
+    # 确保api_sdk_list和api_sdk字段存在（兼容旧配置）
+    if 'api_sdk_list' not in config:
+        config['api_sdk_list'] = ["openai SDK", "dify"]  # 默认值
+    
+    if 'api_sdk' not in config:
+        config['api_sdk'] = config['api_sdk_list'][0]  # 默认选择第一个
+    
     return render_template('dashboard.html', 
                          config=config,
                          logs=log_messages[-50:])  # 只显示最近50条日志
@@ -302,7 +309,7 @@ def save_config_route():
                 merged_config[field] = bool(merged_config[field])
         
         # 确保列表字段是列表类型
-        list_fields = ['listen_list', 'group', 'new_friend_msg']
+        list_fields = ['listen_list', 'group', 'new_friend_msg', 'api_sdk_list']
         for field in list_fields:
             if field in merged_config:
                 if not isinstance(merged_config[field], list):

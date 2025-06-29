@@ -172,6 +172,15 @@
                             <!-- API 配置 -->
                             <div class="config-section">
                                 <h5>API 配置</h5>
+                                <!-- 添加API SDK下拉列表 -->
+                                <div class="mb-3">
+                                    <label for="api_sdk" class="form-label">API SDK</label>
+                                    <select class="form-select" id="api_sdk" name="api_sdk">
+                                        {% for sdk in config.api_sdk_list %}
+                                            <option value="{{ sdk }}" {% if config.api_sdk == sdk %}selected{% endif %}>{{ sdk }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
                                 <div class="mb-3">
                                     <label for="api_key" class="form-label">API Key</label>
                                     <input type="password" class="form-control" id="api_key" name="api_key" value="{{ config.api_key_display }}">
@@ -428,6 +437,8 @@ window.addEventListener('DOMContentLoaded', function() {
             $('#btnSave').click(function() {
                 // 获取所有配置字段
                 const configData = {
+                    // 新增API SDK字段
+                    api_sdk: $('#api_sdk').val(),
                     // 布尔值字段 - 手动获取状态
                     AllListen_switch: $('#AllListen_switch').is(':checked'),
                     group_switch: $('#group_switch').is(':checked'),
