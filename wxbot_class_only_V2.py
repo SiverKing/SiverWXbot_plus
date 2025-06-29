@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox V2版本
 # 作者：https://siver.top
-# 版本：2.1.0
+version = "V2.1.1"
+version_log = "fix:error.html"
 
 import time
 import json
@@ -281,8 +282,8 @@ class WXBot:
     """微信机器人主类"""
     def __init__(self):
 
-        self.ver = "V2.1.0"
-        self.ver_log = "日志：新增wxautox激活检测"
+        self.ver = version
+        self.ver_log = version_log
         self.run_flag = True
         self.config = WXBotConfig()
         self.api = DeepSeekAPI(self.config)
