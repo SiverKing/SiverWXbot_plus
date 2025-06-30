@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox V2版本
 # 作者：https://siver.top
-version = "V2.2.0"
-version_log = "feat:添加dify api类，可切换api接口，合并main与dify分支"
+version = "V2.2.1"
+version_log = "fix:延长登录保持时间、修复登出按钮"
 
 import time
 import json

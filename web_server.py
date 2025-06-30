@@ -38,7 +38,7 @@ app.config.update(
     SESSION_COOKIE_SECURE=True,    # 只允许HTTPS传输cookie
     SESSION_COOKIE_HTTPONLY=True,  # 防止JavaScript访问cookie
     SESSION_COOKIE_SAMESITE='Lax', # 防止CSRF攻击
-    PERMANENT_SESSION_LIFETIME=timedelta(hours=2)  # session有效期
+    PERMANENT_SESSION_LIFETIME=timedelta(days=15)  # session有效期
 )
 
 # 配置参数
@@ -163,6 +163,10 @@ def login():
     if session.get('logged_in'):
         return redirect(url_for('dashboard'))
     
+    # 检查是否有登出成功参数
+    logout_success = request.args.get('logout') == 'success'
+    error = None
+    
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
@@ -189,7 +193,8 @@ def login():
             log('WARNING', f'登录失败: 用户名或密码错误 (用户名: {username})')
             return render_template('login.html', error='用户名或密码错误')
     
-    return render_template('login.html')
+    # 渲染登录页面
+    return render_template('login.html', error=error, logout_success=logout_success)
 
 # 登出
 @app.route('/logout')
@@ -198,7 +203,10 @@ def logout():
     # 清除session数据
     session.clear()
     # 创建新的session ID
-    session.regenerate()
+    # session.regenerate()
+    # 清除session数据 - 使用标准方法
+    session.pop('logged_in', None)
+    session.pop('username', None)
     return redirect(url_for('login'))
 
 # 仪表盘主页

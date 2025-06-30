@@ -50,9 +50,22 @@
                         <h3><i class="bi bi-robot"></i> 机器人管理系统</h3>
                     </div>
                     <div class="login-body">
-                        {% if error %}
-                        <div class="alert alert-danger">{{ error }}</div>
+                        <!-- 登出成功提示 -->
+                        {% if logout_success %}
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            <i class="bi bi-check-circle-fill me-2"></i> 您已成功退出系统
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
                         {% endif %}
+                        
+                        <!-- 错误提示 -->
+                        {% if error %}
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            <i class="bi bi-exclamation-circle-fill me-2"></i> {{ error }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                        {% endif %}
+                        
                         <form method="POST" action="/">
                             <div class="mb-3">
                                 <label for="username" class="form-label">用户名</label>
