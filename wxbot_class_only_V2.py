@@ -1036,7 +1036,7 @@ class WXBot:
                 return
             if msgs:
                 for msg in msgs:
-                    if msg.attr == 'friend':
+                    if msg.attr == 'friend' and chat_type == 'friend': # 仅处理好友消息(过滤群聊)
                         # new_msg = self.next_message_handle() # 处理next获取到的新消息
                         if not self.is_chat_listened(chat):
                             self.add_chat_to_listen(chat)
