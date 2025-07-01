@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox V2版本
 # 作者：https://siver.top
-version = "V2.2.1"
-version_log = "fix:延长登录保持时间、修复登出按钮"
+version = "V2.2.2"
+version_log = "fix:全局监听过滤群聊消息"
 
 import time
 import json
@@ -1031,7 +1031,7 @@ class WXBot:
                 return
             if msgs:
                 for msg in msgs:
-                    if msg.attr == 'friend':
+                    if msg.attr == 'friend' and chat_type == 'friend': # 仅处理包含 chat_type 且为 friend 类型的消息（排除群聊）
                         # new_msg = self.next_message_handle() # 处理next获取到的新消息
                         if not self.is_chat_listened(chat):
                             self.add_chat_to_listen(chat)
