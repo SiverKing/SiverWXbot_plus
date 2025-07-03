@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox V2版本
 # 作者：https://siver.top
-version = "V2.2.2"
-version_log = "fix:全局监听过滤群聊消息"
+version = "V2.2.3"
+version_log = "feat:首次启动强制显示主窗口以刷新状态"
 
 import time
 import json
@@ -451,6 +451,7 @@ class WXBot:
         if not self.wx:
             log(message="本次未获取客户端，正在初始化微信客户端...")
             self.wx = WeChat()
+            self.wx.Show() # 首次强制显示主窗口聚焦
         
         self.config.AtMe = "@" + self.wx.nickname  # 绑定AtMe
         log(message='绑定@：' + self.config.AtMe)
