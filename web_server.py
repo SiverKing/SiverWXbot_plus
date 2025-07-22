@@ -134,20 +134,6 @@ def read_config():
         log('ERROR', f'读取配置文件失败: {str(e)}')
         return None
 
-# 保存配置文件
-def save_config(config_data):
-    """保存配置文件"""
-    try:
-        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-            json.dump(config_data, f, ensure_ascii=False, indent=4)
-        log('SUCCESS', '配置文件保存成功')
-        return True
-    except Exception as e:
-        log('ERROR', f'保存配置文件失败: {str(e)}')
-        return False
-
-
-
 
 @app.route('/api/check_auth')
 def check_auth():
