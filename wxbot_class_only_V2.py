@@ -609,7 +609,7 @@ class WXBot:
             if "/云部署" in message.content: # 为wxauto群机器人定制的功能
                 result = chat.SendMsg(msg="云部署·推荐wxauto合作厂商\nwxauto(x)完整初始环境、内置防异地检查软件(wxauto官方开发)与方法\n链接查看详情：https://plus.wxauto.org/docs/cloud/")
                 time.sleep(1)
-            if "/云部署异地" in message.content: # 为wxauto群机器人定制的功能
+            if "/云部署异地" == message.content: # 为wxauto群机器人定制的功能
                 result = chat.SendMsg(msg="wxauto合作厂商云部署初始环境内置防异地检查软件(wxauto官方开发)与方法\n链接查看详情：https://plus.wxauto.org/docs/cloud/")
                 time.sleep(1)
             return result
