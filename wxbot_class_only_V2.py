@@ -606,10 +606,10 @@ class WXBot:
             if "/微信4.0" in message.content: # 为wxauto群机器人定制的功能
                 result = chat.SendMsg(msg="wxauto暂不支持4.0微信，因为4.0微信还在频繁更新，每次更新变动较大会频繁影响wxauto自动化操作，后续会在微信4.0版本稳定后再支持。\n你可以使用最新的3.9.12.51版本微信，微信官网就可以下载，并且3.9和4.0可以共存，装在不同路径即可")
                 time.sleep(1)
-            if "/云部署" in message.content: # 为wxauto群机器人定制的功能
+            if "/云部署" == message.content: # 为wxauto群机器人定制的功能
                 result = chat.SendMsg(msg="云部署·推荐wxauto合作厂商\nwxauto(x)完整初始环境、内置防异地检查软件(wxauto官方开发)与方法\n链接查看详情：https://plus.wxauto.org/docs/cloud/")
                 time.sleep(1)
-            if "/云部署异地" == message.content: # 为wxauto群机器人定制的功能
+            if "/云部署异地" in message.content: # 为wxauto群机器人定制的功能
                 result = chat.SendMsg(msg="wxauto合作厂商云部署初始环境内置防异地检查软件(wxauto官方开发)与方法\n链接查看详情：https://plus.wxauto.org/docs/cloud/")
                 time.sleep(1)
             return result
