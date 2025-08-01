@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox V2版本
 # 作者：https://siver.top
-version = "V2.2.3"
-version_log = "feat:增加群关键词 /异地"
+version = "V2.2.3.1"
+version_log = "fix:调整部分回复话术"
 
 import time
 import json
@@ -592,7 +592,7 @@ class WXBot:
                 time.sleep(1)
                 # result = self.wx.SendUrlCard(url="https://docs.wxauto.org/", friends=chat.who, timeout=30)
             if "/封号" in message.content: # 为wxauto群机器人定制的功能
-                result = chat.SendMsg(msg="wxauto不封号，遵守链接里的内容\nhttps://plus.wxauto.org/docs/issues/#%e4%bc%9a%e5%b0%81%e5%8f%b7%e5%90%97")
+                result = chat.SendMsg(msg="wxauto不封号，请遵守链接里的内容\nhttps://plus.wxauto.org/docs/issues/#%e4%bc%9a%e5%b0%81%e5%8f%b7%e5%90%97")
                 time.sleep(1)
                 # result = self.wx.SendUrlCard(url="https://plus.wxauto.org/docs/issues/#%e4%bc%9a%e5%b0%81%e5%8f%b7%e5%90%97", friends=chat.who, timeout=30)
             if "/常见问题" in message.content: # 为wxauto群机器人定制的功能
@@ -604,7 +604,7 @@ class WXBot:
                 time.sleep(1)
                 # result = self.wx.SendUrlCard(url="https://plus.wxauto.org/docs/install/", friends=chat.who, timeout=30)
             if "/微信4.0" in message.content: # 为wxauto群机器人定制的功能
-                result = chat.SendMsg(msg="wxauto暂不支持4.0微信，因为4.0微信还在频繁更新，每次更新变动较大会频繁影响wxauto自动化操作，后续会在微信4.0版本稳定后再支持。\n你可以使用最新的3.9.12.51版本微信，微信官网就可以下载，并且3.9和4.0可以共存，装在不同路径即可")
+                result = chat.SendMsg(msg="wxauto开源版暂不支持4.0微信，目前plus版本已经发布beta测试包可支持4.0.5版本\n你可以使用最新的3.9.12.51版本微信，微信官网就可以下载，并且3.9和4.0可以共存，装在不同路径即可")
                 time.sleep(1)
             if "/云部署" in message.content: # 为wxauto群机器人定制的功能
                 result = chat.SendMsg(msg="云部署·推荐wxauto合作厂商\nwxauto(x)完整初始环境、内置有防异地检查软件(wxauto官方开发)与方法\n链接查看详情：https://plus.wxauto.org/deploy/")
