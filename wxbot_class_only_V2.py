@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox V2版本
 # 作者：https://siver.top
-version = "V2.2.3.1"
-version_log = "fix:调整部分回复话术"
+version = "V2.2.4.0"
+version_log = "V2.2.4 feat:/定时掉线指令、定时启停功能"
 
 import time
 import json
@@ -604,13 +604,16 @@ class WXBot:
                 time.sleep(1)
                 # result = self.wx.SendUrlCard(url="https://plus.wxauto.org/docs/install/", friends=chat.who, timeout=30)
             if "/微信4.0" in message.content: # 为wxauto群机器人定制的功能
-                result = chat.SendMsg(msg="wxauto开源版暂不支持4.0微信，目前plus版本已经发布beta测试包可支持4.0.5版本\n你可以使用最新的3.9.12.51版本微信，微信官网就可以下载，并且3.9和4.0可以共存，装在不同路径即可")
+                result = chat.SendMsg(msg="wxauto开源版暂不支持4.0微信，目前plus版本已经发布beta测试包可支持4.0.5版本\n你可以使用最新的3.9.12.55版本微信，微信官网就可以下载，并且3.9和4.0可以共存，装在不同路径即可")
                 time.sleep(1)
             if "/云部署" in message.content: # 为wxauto群机器人定制的功能
                 result = chat.SendMsg(msg="云部署·推荐wxauto合作厂商\nwxauto(x)完整初始环境、内置有防异地检查软件(wxauto官方开发)与方法\n链接查看详情：https://plus.wxauto.org/deploy/")
                 time.sleep(1)
             if "/异地" in message.content: # 为wxauto群机器人定制的功能
                 result = chat.SendMsg(msg="wxauto合作厂商云部署初始环境内置有防异地检查软件(wxauto官方开发)与方法\n链接查看详情：https://plus.wxauto.org/deploy/\n其他云用户防异地查看此参考：https://blog.siverking.online/index.php/archives/19/")
+                time.sleep(1)
+            if "/定时掉线" in message.content: # 为wxauto群机器人定制的功能
+                result = chat.SendMsg(msg="经过了调查以及测试，目前得到的信息总结下来，每天定时掉线发生的原因与系统类型、设备类型、微信客户端版本、有无使用自动操作没有直接关系，大概率为官方对账号权重的调整导致的，掉线的账号大多为电脑端操作量显著大于手机端，或手机端几乎没有操作的账号。掉线为官方服务端作废会话状态，主动退出无法避免，再次登录还需要重新扫码。上述情况属于人工询问加问卷调查统计出的符合大部分人的情况。部分用户说自己有的号不掉线或者本地不掉线什么的属于幸存者偏差，是个例情况。具体腾讯腾讯机制无人清楚，只能通过统计得出")
                 time.sleep(1)
             return result
 

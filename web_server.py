@@ -6,6 +6,7 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 import json
 import os
+import time
 from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta
 import logging
@@ -15,7 +16,7 @@ import threading
 from wxbot_class_only_V2 import WXBot
 from logger import log
 import logger
-
+import email_send
 import pythoncom
 
 # fix_paths.py
@@ -385,6 +386,64 @@ def load_config():
     
     return jsonify({'status': 'success', 'config': config})
 
+def time_start_stop():
+    """定时启停"""
+    start_hour = 6
+    start_minute = 30
+    stop_hour = 1
+    stop_minute = 30
+    def is_target_time(target_hour, target_minute):
+        """
+        校验当前时间是否匹配指定的小时和分钟
+        """
+        # 获取当前本地时间
+        now = datetime.now()
+        # 比较小时和分钟是否匹配
+        return (now.hour == target_hour) and (now.minute == target_minute)
+    def time_check_thread():
+        global bot_thread, bot
+        log('INFO', f'启动定时启停线程，启动时间：{start_hour}:{start_minute}，停止时间：{stop_hour}:{stop_minute}')
+
+        """定时检查线程"""
+        while True:
+            if is_target_time(start_hour, start_minute): # 启动时间
+                log('INFO', '到达预定启动时间，正在启动机器人')
+                if bot_thread and bot_thread.is_alive():
+                    log("WARNING", "状态：机器人已在运行")
+                    email_send.send_email(subject="定时启动机器人", content="机器人已在运行，无需启动")
+                else:
+                    def run_bot():
+                        pythoncom.CoInitialize()  # 防止多线程调用COM组件时出错
+                        global bot
+                        bot = WXBot()
+                        bot.run()
+                        pythoncom.CoUninitialize()  # 释放COM组件
+                    try:
+                        bot_thread = threading.Thread(target=run_bot, daemon=True)
+                        bot_thread.start()
+                        email_send.send_email(subject="定时启动机器人", content="机器人已启动")
+                    except Exception as e:
+                        log('ERROR', f'启动机器人失败: {str(e)}')
+                time.sleep(60) # 防止一分钟内重复启动
+            if is_target_time(stop_hour, stop_minute): # 停止时间
+                log('INFO', '到达预定停止时间，正在停止机器人')
+                if bot_thread and bot_thread.is_alive():
+                    if bot.stop_wxbot():  # 调用停止函数并检查返回值
+                        log('SUCCESS', '机器人已停止')
+                        bot_thread = None
+                        bot = None
+                        email_send.send_email(subject="定时停止机器人", content="机器人已停止")
+                    else:
+                        log('ERROR', '停止机器人失败')
+                else:
+                    log('WARNING', '状态：机器人未运行')
+                    email_send.send_email(subject="定时停止机器人", content="机器人未运行，无需停止")
+                time.sleep(60) # 防止一分钟内重复停止
+            time.sleep(10)
+    time_thread = threading.Thread(target=time_check_thread, daemon=True)
+    time_thread.start()
+    
+
 # 主函数
 def main():
     """主函数"""
@@ -408,6 +467,8 @@ def main():
         # log('INFO', '配置文件存在')
         log('INFO', '服务5s后启动')
         log('INFO', '请访问 http://localhost:10001 或者 http://127.0.0.1:10001 进行登录')
+        # 启动定时启停线程
+        time_start_stop()
         # 启动Flask应用
         app.run(host='0.0.0.0', port=PORT, debug=False)
     except Exception as e:
