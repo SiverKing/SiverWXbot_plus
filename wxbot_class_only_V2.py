@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox V2版本
 # 作者：https://siver.top
-version = "V2.2.4.0"
-version_log = "V2.2.4 feat:/定时掉线指令、定时启停功能"
+version = "V2.2.4.1"
+version_log = "V2.2.4.1 feat:增加监听线程池大小提升性能"
 
 import time
 import json
@@ -27,6 +27,7 @@ from wxautox import WxParam
 from wxautox.utils.useful import check_license
 WxParam.MESSAGE_HASH = True # 是否启用消息哈希值用于辅助判断消息，开启后会稍微影响性能，默认False
 WxParam.FORCE_MESSAGE_XBIAS = True # 是否强制重新自动获取X偏移量，如果设置为True，则每次启动都会重新获取，默认False
+WxParam.LISTENER_EXCUTOR_WORKERS = 8 # 监听执行器线程池大小，根据自身需求和设备性能设置，默认4
 '''
 ENABLE_FILE_LOGGER ( bool ) ：是否启用日志文件，默认True
 DEFAULT_SAVE_PATH ( str ) ：下载文件/图片默认保存路径，默认为当前工作目录下的wxautox文件下载文件夹
