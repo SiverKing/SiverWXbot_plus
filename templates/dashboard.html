@@ -119,7 +119,13 @@
                 <label class="form-check-label" for="AllListen_switch">监听所有消息</label>
               </div>
               <div class="mb-3">
-                <label id="listenListLabel" class="form-label">监听列表</label>
+                <label id="listenListLabel" class="form-label">
+                  {% if config.AllListen_switch %}
+                    黑名单
+                  {% else %}
+                    监听列表（白名单）
+                  {% endif %}
+                </label>
                 <div id="listen_list_container">
                   {% for item in config.listen_list %}
                   <div class="list-item">
@@ -365,6 +371,14 @@ function saveConfig(callback){
     error:function(xhr){alert('保存配置出错:'+xhr.responseText);}
   });
 }
+// 动态切换监听列表标题
+$('#AllListen_switch').change(function() {
+  if ($(this).is(':checked')) {
+    $('#listenListLabel').text('黑名单');
+  } else {
+    $('#listenListLabel').text('监听列表（白名单）');
+  }
+});
 // 新人欢迎概率滑动条和输入框双向绑定
 const $slider = $('#group_welcome_random');
 const $number = $('#group_welcome_random_number');

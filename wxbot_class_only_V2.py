@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox V2版本
 # 作者：https://siver.top
-version = "V2.5.0"
-version_log = "V2.5.0 feat:新增每日定时启停功能"
+version = "V2.5.1"
+version_log = "V2.5.1 fix:修复全局监听开关黑白名单切换显示"
 
 import time
 import json
