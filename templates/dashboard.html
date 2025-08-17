@@ -265,6 +265,24 @@
                 {% endfor %}
             </div>
             </div>
+            
+            <!-- 定时启停配置 -->
+            <div class="config-section">
+            <h5>定时启停配置</h5>
+            <div class="mb-3 form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="everyday_start_stop_bot_switch" name="everyday_start_stop_bot_switch" {% if config.everyday_start_stop_bot_switch %}checked{% endif %}>
+                <label class="form-check-label" for="everyday_start_stop_bot_switch">启用定时启停</label>
+            </div>
+            <div class="mb-3">
+                <label for="everyday_start_bot_time" class="form-label">启动时间</label>
+                <input type="time" class="form-control" id="everyday_start_bot_time" name="everyday_start_bot_time" value="{{ config.everyday_start_bot_time }}">
+            </div>
+            <div class="mb-3">
+                <label for="everyday_stop_bot_time" class="form-label">停止时间</label>
+                <input type="time" class="form-control" id="everyday_stop_bot_time" name="everyday_stop_bot_time" value="{{ config.everyday_stop_bot_time }}">
+            </div>
+            </div>
+
 
           </form>
         </div>
@@ -314,7 +332,11 @@ function saveConfig(callback){
     group_welcome_random:parseFloat($('#group_welcome_random').val()),
     keyword_dict:{},
     everyday_msg_switch: $('#everyday_msg_switch').is(':checked'),
-    everyday_msg_dict: {}
+    everyday_msg_dict: {},
+    everyday_start_stop_bot_switch: $('#everyday_start_stop_bot_switch').is(':checked'),
+    everyday_start_bot_time: $('#everyday_start_bot_time').val(),
+    everyday_stop_bot_time: $('#everyday_stop_bot_time').val()
+
   };
   $('input[name="listen_list"]').each(function(){let v=$(this).val().trim();if(v)configData.listen_list.push(v);});
   $('input[name="group"]').each(function(){let v=$(this).val().trim();if(v)configData.group.push(v);});

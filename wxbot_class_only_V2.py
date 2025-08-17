@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox V2版本
 # 作者：https://siver.top
-version = "V2.4.0"
-version_log = "V2.4.0 feat:新增每日定时消息"
+version = "V2.5.0"
+version_log = "V2.5.0 feat:新增每日定时启停功能"
 
 import time
 import json
@@ -1215,7 +1215,7 @@ class WXBot:
                 self.run_flag = False
 
             time.sleep(wait_time)
-        log(level="WARNING", message='siver_wxbot安全退出！！')
+        log(level="WARNING", message='siver_wxbot主线程安全退出，正在退出监听...')
     def run(self):
         """启动函数"""
         self.main()

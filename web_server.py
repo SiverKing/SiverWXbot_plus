@@ -20,6 +20,8 @@ from logger import log
 import logger
 import pythoncom
 import webbrowser
+import time
+import email_send
 
 # fix_paths.py
 import sys
@@ -160,6 +162,11 @@ def dashboard():
     config.setdefault('chat_keyword_switch', False)          # 私聊关键词开关
     config.setdefault('group_keyword_switch', False)         # 群组关键词开关
     config.setdefault('keyword_dict', {})                    # 关键词字典
+    config.setdefault('everyday_msg_switch', False)           # 每日定时消息开关
+    config.setdefault('everyday_start_stop_bot_switch', False)
+    config.setdefault('everyday_start_bot_time', "08:00")
+    config.setdefault('everyday_stop_bot_time', "23:00")
+
 
     return render_template('dashboard.html', config=config, logs=log_messages[-50:])
 
@@ -178,6 +185,8 @@ def _coerce_bool_fields(merged_config):
         # —— 新增布尔字段 —— 
         'chat_keyword_switch',
         'group_keyword_switch',
+        'everyday_msg_switch',
+        'everyday_start_stop_bot_switch',   # 新增
     ]
     for field in boolean_fields:
         if field in merged_config:
@@ -340,6 +349,66 @@ def load_config():
         config['api_key_display'] = '*' * len(config['api_key'])
     return jsonify({'status': 'success', 'config': config})
 
+def time_start_stop():
+    """定时启停"""
+    time_config = read_config()
+    start_hour = datetime.strptime(time_config.get("everyday_start_bot_time"), "%H:%M").hour
+    start_minute = datetime.strptime(time_config.get("everyday_start_bot_time"), "%H:%M").minute
+    stop_hour = datetime.strptime(time_config.get("everyday_stop_bot_time"), "%H:%M").hour
+    stop_minute = datetime.strptime(time_config.get("everyday_stop_bot_time"), "%H:%M").minute
+    def is_target_time(target_hour, target_minute):
+        """
+        校验当前时间是否匹配指定的小时和分钟
+        """
+        # 获取当前本地时间
+        now = datetime.now()
+        # 比较小时和分钟是否匹配
+        return (now.hour == target_hour) and (now.minute == target_minute)
+    def time_check_thread():
+        global bot_thread, bot
+        log('INFO', f'启动定时启停线程，启动时间：{start_hour}:{start_minute}，停止时间：{stop_hour}:{stop_minute}')
+
+        """定时检查线程"""
+        while True:
+            if is_target_time(start_hour, start_minute): # 启动时间
+                log('INFO', '到达预定启动时间，正在启动机器人')
+                if bot_thread and bot_thread.is_alive():
+                    log("WARNING", "状态：机器人已在运行")
+                    email_send.send_email(subject="定时启动机器人", content="机器人已在运行，无需启动")
+                else:
+                    def run_bot():
+                        pythoncom.CoInitialize()  # 防止多线程调用COM组件时出错
+                        global bot
+                        bot = WXBot()
+                        bot.run()
+                        pythoncom.CoUninitialize()  # 释放COM组件
+                    try:
+                        bot_thread = threading.Thread(target=run_bot, daemon=True)
+                        bot_thread.start()
+                        email_send.send_email(subject="定时启动机器人", content="机器人已启动")
+                    except Exception as e:
+                        log('ERROR', f'启动机器人失败: {str(e)}')
+                time.sleep(60) # 防止一分钟内重复启动
+            if is_target_time(stop_hour, stop_minute): # 停止时间
+                log('INFO', '到达预定停止时间，正在停止机器人')
+                if bot_thread and bot_thread.is_alive():
+                    if bot.stop_wxbot():  # 调用停止函数并检查返回值
+                        log('SUCCESS', '机器人已停止')
+                        bot_thread = None
+                        bot = None
+                        email_send.send_email(subject="定时停止机器人", content="机器人已停止")
+                    else:
+                        log('ERROR', '停止机器人失败')
+                else:
+                    log('WARNING', '状态：机器人未运行')
+                    email_send.send_email(subject="定时停止机器人", content="机器人未运行，无需停止")
+                time.sleep(60) # 防止一分钟内重复停止
+            time.sleep(10)
+    if time_config.get("everyday_start_stop_bot_switch"):
+        time_thread = threading.Thread(target=time_check_thread, daemon=True)
+        time_thread.start()
+
+
 def main():
     logging.basicConfig(
         level=logging.INFO,
@@ -356,6 +425,9 @@ def main():
         log('INFO', '请访问 http://localhost:10001 或者 http://127.0.0.1:10001 进行登录')
          # 启动后自动打开浏览器
         webbrowser.open("http://127.0.0.1:10001")
+        # 定时启停
+        time_start_stop()
+        # 启动服务器
         app.run(host='0.0.0.0', port=PORT, debug=False)
     except Exception as e:
         log('ERROR', f'服务器启动失败: {str(e)}')
