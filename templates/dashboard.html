@@ -1,554 +1,389 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>机器人管理系统</title>
-    <link href="https://s4.zstatic.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://s4.zstatic.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="https://s4.zstatic.net/npm/summernote@0.8.18/dist/summernote-lite.min.css" rel="stylesheet">
-    <style>
-        /* 不同模式下的输入框样式 */
-        .list-mode input[name="listen_list"] {
-            border-left: 3px solid #28a745;  /* 监听模式绿色边框 */
-        }
-
-        .exclude-mode input[name="listen_list"] {
-            border-left: 3px solid #fd7e14;  /* 排除模式橙色边框 */
-        }
-
-        /* 提示文本动画 */
-        .hint-transition {
-            transition: all 0.3s ease;
-        }
-        :root {
-            --primary-color: #2575fc;
-            --secondary-color: #6a11cb;
-            --success-color: #28a745;
-            --danger-color: #dc3545;
-            --warning-color: #ffc107;
-            --info-color: #17a2b8;
-        }
-        body {
-            background-color: #f8f9fa;
-        }
-        .navbar {
-            background: linear-gradient(135deg, var(--secondary-color) 0%, var(--primary-color) 100%);
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
-        .navbar-brand {
-            font-weight: 600;
-        }
-        .card {
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-            margin-bottom: 20px;
-            border: none;
-        }
-        .card-header {
-            background-color: white;
-            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-            font-weight: 600;
-        }
-        .btn-action {
-            border-radius: 50px;
-            padding: 8px 20px;
-            font-weight: 500;
-            margin: 0 5px;
-        }
-        .btn-start {
-            background-color: var(--success-color);
-            border-color: var(--success-color);
-        }
-        .btn-stop {
-            background-color: var(--danger-color);
-            border-color: var(--danger-color);
-        }
-        .btn-load {
-            background-color: var(--info-color);
-            border-color: var(--info-color);
-        }
-        .btn-save {
-            background-color: var(--primary-color);
-            border-color: var(--primary-color);
-        }
-        .log-container {
-            height: 300px;
-            overflow-y: auto;
-            background-color: #2d3748;
-            color: white;
-            border-radius: 8px;
-            padding: 15px;
-            font-family: 'Courier New', Courier, monospace;
-        }
-        .log-entry {
-            margin-bottom: 5px;
-            border-left: 3px solid;
-            padding-left: 10px;
-        }
-        .text-info {
-            color: #17a2b8 !important;
-        }
-        .text-warning {
-            color: #ffc107 !important;
-        }
-        .text-danger {
-            color: #dc3545 !important;
-        }
-        .text-success {
-            color: #28a745 !important;
-        }
-        .form-switch .form-check-input {
-            width: 3em;
-            height: 1.5em;
-        }
-        .config-section {
-            margin-bottom: 30px;
-        }
-        .config-section h5 {
-            border-bottom: 1px solid #eee;
-            padding-bottom: 10px;
-            margin-bottom: 20px;
-            color: var(--primary-color);
-        }
-        .list-item {
-            display: flex;
-            margin-bottom: 10px;
-        }
-        .list-item input {
-            flex-grow: 1;
-            margin-right: 10px;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>机器人管理系统</title>
+<link href="https://s4.zstatic.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://s4.zstatic.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+<link href="https://s4.zstatic.net/npm/summernote@0.8.18/dist/summernote-lite.min.css" rel="stylesheet">
+<style>
+    :root {
+        --primary-color: #2575fc;
+        --secondary-color: #6a11cb;
+        --success-color: #28a745;
+        --danger-color: #dc3545;
+        --warning-color: #ffc107;
+        --info-color: #17a2b8;
+    }
+    body { background-color: #f8f9fa; }
+    .navbar { background: linear-gradient(135deg, var(--secondary-color) 0%, var(--primary-color) 100%); }
+    .card { border-radius: 10px; margin-bottom: 20px; border: none; box-shadow: 0 4px 6px rgba(0,0,0,.05); }
+    .card-header { background-color: white; font-weight: 600; }
+    .btn-action { border-radius: 50px; padding: 8px 20px; font-weight: 500; margin: 0 5px; }
+    .btn-start { background-color: var(--success-color); border-color: var(--success-color); }
+    .btn-stop { background-color: var(--danger-color); border-color: var(--danger-color); }
+    .btn-load { background-color: var(--info-color); border-color: var(--info-color); }
+    .btn-save { background-color: var(--primary-color); border-color: var(--primary-color); }
+    .log-container { height: 300px; overflow-y: auto; background:#2d3748; color:white; border-radius:8px; padding:15px; font-family:'Courier New',monospace; }
+    .config-section { margin-bottom: 30px; }
+    .config-section h5 { border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 20px; color: var(--primary-color); }
+    .list-item { display: flex; margin-bottom: 10px; }
+    .list-item input { flex-grow: 1; margin-right: 10px; }
+    .keyword-item textarea { min-height:72px; }
+</style>
 </head>
 <body>
-    <!-- 导航栏 -->
-    <nav class="navbar navbar-expand-lg navbar-dark mb-4">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="#">
-                <i class="bi bi-robot"></i> 机器人管理系统
-            </a>
-            <div class="d-flex align-items-center">
-                <span class="text-white me-3">欢迎, {{ session.username }}</span>
-                <a href="/logout" class="btn btn-sm btn-outline-light">
-                    <i class="bi bi-box-arrow-right"></i> 退出
-                </a>
-            </div>
-        </div>
-    </nav>
+<nav class="navbar navbar-expand-lg navbar-dark mb-4">
+  <div class="container-fluid">
+    <a class="navbar-brand" href="#"><i class="bi bi-robot"></i> 机器人管理系统</a>
+    <div class="d-flex align-items-center">
+      <span class="text-white me-3">欢迎, {{ session.username }}</span>
+      <a href="/logout" class="btn btn-sm btn-outline-light"><i class="bi bi-box-arrow-right"></i> 退出</a>
+    </div>
+  </div>
+</nav>
 
-    <div class="container-fluid">
-        <!-- 操作按钮区 -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-body text-center">
-                        <button id="btnStart" class="btn btn-action btn-start">
-                            <i class="bi bi-play-fill"></i> 启动机器人
-                        </button>
-                        <button id="btnStop" class="btn btn-action btn-stop">
-                            <i class="bi bi-stop-fill"></i> 关闭机器人
-                        </button>
-                        <button id="btnLoad" class="btn btn-action btn-load">
-                            <i class="bi bi-arrow-down-circle"></i> 加载配置
-                        </button>
-                        <button id="btnSave" class="btn btn-action btn-save">
-                            <i class="bi bi-save-fill"></i> 保存配置
-                        </button>
-                    </div>
+<div class="container-fluid">
+  <!-- 操作按钮 -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card"><div class="card-body text-center">
+        <button id="btnStart" class="btn btn-action btn-start"><i class="bi bi-play-fill"></i> 启动机器人</button>
+        <button id="btnStop" class="btn btn-action btn-stop"><i class="bi bi-stop-fill"></i> 关闭机器人</button>
+        <button id="btnLoad" class="btn btn-action btn-load"><i class="bi bi-arrow-down-circle"></i> 加载配置</button>
+        <button id="btnSave" class="btn btn-action btn-save"><i class="bi bi-save-fill"></i> 保存配置</button>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <!-- 配置编辑 -->
+    <div class="col-md-8">
+      <div class="card">
+        <div class="card-header"><i class="bi bi-gear-fill"></i> 配置编辑</div>
+        <div class="card-body">
+          <form id="configForm">
+            <!-- API 配置 -->
+            <div class="config-section">
+              <h5>API 配置</h5>
+              <div class="mb-3">
+                <label for="api_sdk" class="form-label">API SDK</label>
+                <select class="form-select" id="api_sdk" name="api_sdk">
+                  {% for sdk in config.api_sdk_list %}
+                    <option value="{{ sdk }}" {% if config.api_sdk == sdk %}selected{% endif %}>{{ sdk }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="mb-3">
+                <label for="api_key" class="form-label">API Key</label>
+                <input type="password" class="form-control" id="api_key" name="api_key" value="{{ config.api_key_display }}">
+              </div>
+              <div class="mb-3">
+                <label for="base_url" class="form-label">Base URL</label>
+                <input type="text" class="form-control" id="base_url" name="base_url" value="{{ config.base_url }}">
+              </div>
+              <div class="mb-3">
+                <label for="model1" class="form-label">模型1</label>
+                <input type="text" class="form-control" id="model1" name="model1" value="{{ config.model1 }}">
+              </div>
+              <div class="mb-3">
+                <label for="model2" class="form-label">模型2</label>
+                <input type="text" class="form-control" id="model2" name="model2" value="{{ config.model2 }}">
+              </div>
+            </div>
+
+            <!-- Prompt 配置 -->
+            <div class="config-section">
+              <h5>Prompt 配置</h5>
+              <div class="mb-3">
+                <label for="prompt" class="form-label">Prompt</label>
+                <textarea class="form-control summernote" id="prompt" name="prompt" rows="5">{{ config.prompt }}</textarea>
+              </div>
+            </div>
+
+            <!-- 管理员配置 -->
+            <div class="config-section">
+              <h5>管理员配置</h5>
+              <div class="mb-3">
+                <label for="admin" class="form-label">管理员名称</label>
+                <input type="text" class="form-control" id="admin" name="admin" value="{{ config.admin }}">
+              </div>
+            </div>
+
+            <!-- 监听配置 -->
+            <div class="config-section">
+              <h5>监听配置</h5>
+              <div class="mb-3 form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="AllListen_switch" name="AllListen_switch" {% if config.AllListen_switch %}checked{% endif %}>
+                <label class="form-check-label" for="AllListen_switch">监听所有消息</label>
+              </div>
+              <div class="mb-3">
+                <label id="listenListLabel" class="form-label">监听列表</label>
+                <div id="listen_list_container">
+                  {% for item in config.listen_list %}
+                  <div class="list-item">
+                    <input type="text" class="form-control" name="listen_list" value="{{ item }}">
+                    <button type="button" class="btn btn-danger btn-remove-item"><i class="bi bi-trash"></i></button>
+                  </div>
+                  {% endfor %}
                 </div>
+                <button type="button" class="btn btn-sm btn-primary mt-2" id="btnAddListenItem"><i class="bi bi-plus"></i> 添加项</button>
+              </div>
             </div>
-        </div>
 
-        <!-- 配置编辑区 -->
-        <div class="row">
-            <div class="col-md-8">
-                <div class="card">
-                    <div class="card-header">
-                        <i class="bi bi-gear-fill"></i> 配置编辑
-                    </div>
-                    <div class="card-body">
-                        <form id="configForm">
-                            <!-- API 配置 -->
-                            <div class="config-section">
-                                <h5>API 配置</h5>
-                                <!-- 添加API SDK下拉列表 -->
-                                <div class="mb-3">
-                                    <label for="api_sdk" class="form-label">API SDK</label>
-                                    <select class="form-select" id="api_sdk" name="api_sdk">
-                                        {% for sdk in config.api_sdk_list %}
-                                            <option value="{{ sdk }}" {% if config.api_sdk == sdk %}selected{% endif %}>{{ sdk }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="api_key" class="form-label">API Key</label>
-                                    <input type="password" class="form-control" id="api_key" name="api_key" value="{{ config.api_key_display }}">
-                                </div>
-                                <div class="mb-3">
-                                    <label for="base_url" class="form-label">Base URL</label>
-                                    <input type="text" class="form-control" id="base_url" name="base_url" value="{{ config.base_url }}">
-                                </div>
-                                <div class="mb-3">
-                                    <label for="model1" class="form-label">模型1</label>
-                                    <input type="text" class="form-control" id="model1" name="model1" value="{{ config.model1 }}">
-                                </div>
-                                <div class="mb-3">
-                                    <label for="model2" class="form-label">模型2</label>
-                                    <input type="text" class="form-control" id="model2" name="model2" value="{{ config.model2 }}">
-                                </div>
-                            </div>
+            <!-- 群组配置 -->
+            <div class="config-section">
+              <h5>群组配置</h5>
+              <div class="mb-3 form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="group_switch" name="group_switch" {% if config.group_switch %}checked{% endif %}>
+                <label class="form-check-label" for="group_switch">启用群组回复</label>
+              </div>
+              <div class="mb-3 form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="group_reply_at" name="group_reply_at" {% if config.group_reply_at %}checked{% endif %}>
+                <label class="form-check-label" for="group_reply_at">@回复</label>
+              </div>
+              <div class="mb-3 form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="group_welcome" name="group_welcome" {% if config.group_welcome %}checked{% endif %}>
+                <label class="form-check-label" for="group_welcome">新人欢迎</label>
+              </div>
 
-                            <!-- Prompt 配置 -->
-                            <div class="config-section">
-                                <h5>Prompt 配置</h5>
-                                <div class="mb-3">
-                                    <label for="prompt" class="form-label">Prompt</label>
-                                    <textarea class="form-control summernote" id="prompt" name="prompt" rows="5">{{ config.prompt }}</textarea>
-                                </div>
-                            </div>
-                            <!-- 管理员配置 -->
-                            <div class="config-section">
-                                <h5>管理员配置</h5>
-                                <!-- 在适当位置添加（建议放在基础配置区域） -->
-                                <div class="mb-3">
-                                    <label for="admin" class="form-label">管理员名称</label>
-                                    <input type="text" class="form-control" id="admin" name="admin" value="{{ config.admin }}">
-                                </div>
-                            </div>
-                            <!-- 监听配置 -->
-                            <div class="config-section">
-                                <h5>监听配置</h5>
-                                <div class="mb-3 form-check form-switch">
-                                    <input class="form-check-input" type="checkbox" id="AllListen_switch" name="AllListen_switch" {% if config.AllListen_switch %}checked{% endif %}>
-                                    <label class="form-check-label" for="AllListen_switch">监听所有消息</label>
-                                </div>
-                                
-                                <div class="mb-3">
-                                    <!-- 修改这里：给label添加id -->
-                                    <label id="listenListLabel" class="form-label">监听列表</label>
-                                    <div id="listen_list_container">
-                                        <!-- 原有列表内容保持不变 -->
-                                        {% for item in config.listen_list %}
-                                        <div class="list-item">
-                                            <input type="text" class="form-control" name="listen_list" value="{{ item }}">
-                                            <button type="button" class="btn btn-danger btn-remove-item">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                        </div>
-                                        {% endfor %}
-                                    </div>
-                                    <!-- 保持原有添加按钮 -->
-                                    <button type="button" class="btn btn-sm btn-primary mt-2" id="btnAddListenItem">
-                                        <i class="bi bi-plus"></i> 添加项
-                                    </button>
-                                </div>
-                            </div>
-
-                            <!-- 群组配置 -->
-                            <div class="config-section">
-                                <h5>群组配置</h5>
-                                <div class="mb-3 form-check form-switch">
-                                    <input class="form-check-input" type="checkbox" id="group_switch" name="group_switch" {% if config.group_switch %}checked{% endif %}>
-                                    <label class="form-check-label" for="group_switch">启用群组回复</label>
-                                </div>
-                                <div class="mb-3 form-check form-switch">
-                                    <input class="form-check-input" type="checkbox" id="group_reply_at" name="group_reply_at" {% if config.group_reply_at %}checked{% endif %}>
-                                    <label class="form-check-label" for="group_reply_at">@回复</label>
-                                </div>
-                                <div class="mb-3 form-check form-switch">
-                                    <input class="form-check-input" type="checkbox" id="group_welcome" name="group_welcome" {% if config.group_welcome %}checked{% endif %}>
-                                    <label class="form-check-label" for="group_welcome">新人欢迎</label>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="group_welcome_msg" class="form-label">欢迎消息</label>
-                                    <textarea class="form-control summernote" id="group_welcome_msg" name="group_welcome_msg" rows="3">{{ config.group_welcome_msg }}</textarea>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">群组列表</label>
-                                    <div id="group_container">
-                                        {% for item in config.group %}
-                                        <div class="list-item">
-                                            <input type="text" class="form-control" name="group" value="{{ item }}">
-                                            <button type="button" class="btn btn-danger btn-remove-item"><i class="bi bi-trash"></i></button>
-                                        </div>
-                                        {% endfor %}
-                                    </div>
-                                    <button type="button" class="btn btn-sm btn-primary mt-2" id="btnAddGroupItem">
-                                        <i class="bi bi-plus"></i> 添加群组
-                                    </button>
-                                </div>
-                            </div>
-
-                            <!-- 好友配置 -->
-                            <div class="config-section">
-                                <h5>好友配置</h5>
-                                <div class="mb-3 form-check form-switch">
-                                    <input class="form-check-input" type="checkbox" id="new_friend_switch" name="new_friend_switch" {% if config.new_friend_switch %}checked{% endif %}>
-                                    <label class="form-check-label" for="new_friend_switch">自动通过好友</label>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">好友欢迎消息</label>
-                                    <div id="new_friend_msg_container">
-                                        {% for item in config.new_friend_msg %}
-                                        <div class="list-item">
-                                            <input type="text" class="form-control" name="new_friend_msg" value="{{ item }}">
-                                            <button type="button" class="btn btn-danger btn-remove-item"><i class="bi bi-trash"></i></button>
-                                        </div>
-                                        {% endfor %}
-                                    </div>
-                                    <button type="button" class="btn btn-sm btn-primary mt-2" id="btnAddFriendMsgItem">
-                                        <i class="bi bi-plus"></i> 添加消息
-                                    </button>
-                                </div>
-                            </div>
-                        </form>
-                    </div>
+              <!-- 新人欢迎概率 -->
+              <div class="mb-3">
+                <label class="form-label" for="group_welcome_random">
+                  新人欢迎概率：
+                  <span id="group_welcome_random_display">{{ (config.group_welcome_random * 100) | round(0) }}%</span>
+                </label>
+                <div class="d-flex align-items-center gap-2">
+                  <input type="range" min="0" max="1" step="0.01" id="group_welcome_random" name="group_welcome_random" value="{{ config.group_welcome_random }}" class="form-range" style="max-width:340px">
+                  <input type="number" min="0" max="1" step="0.01" id="group_welcome_random_number" class="form-control form-control-sm" style="max-width:120px" value="{{ config.group_welcome_random }}">
                 </div>
+              </div>
+
+              <div class="mb-3">
+                <label for="group_welcome_msg" class="form-label">欢迎消息</label>
+                <textarea class="form-control summernote" id="group_welcome_msg" name="group_welcome_msg" rows="3">{{ config.group_welcome_msg }}</textarea>
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label">群组列表</label>
+                <div id="group_container">
+                  {% for item in config.group %}
+                  <div class="list-item">
+                    <input type="text" class="form-control" name="group" value="{{ item }}">
+                    <button type="button" class="btn btn-danger btn-remove-item"><i class="bi bi-trash"></i></button>
+                  </div>
+                  {% endfor %}
+                </div>
+                <button type="button" class="btn btn-sm btn-primary mt-2" id="btnAddGroupItem"><i class="bi bi-plus"></i> 添加群组</button>
+              </div>
             </div>
 
-            <!-- 日志显示区 -->
-            <div class="col-md-4">
-                <div class="card">
-                    <div class="card-header">
-                        <i class="bi bi-card-text"></i> 系统日志
-                    </div>
-                    <div class="card-body">
-                        <div class="log-container" id="logContainer">
-                            {% for log in logs %}
-                            <div class="log-entry {{ log.color }}">
-                                [{{ log.time }}] [{{ log.level }}] {{ log.message }}
-                            </div>
-                            {% endfor %}
-                        </div>
-                        <button class="btn btn-sm btn-outline-secondary mt-3 w-100" id="btnClearLogs">
-                            <i class="bi bi-trash"></i> 清空日志
-                        </button>
-                    </div>
-                </div>
+            <!-- 好友配置 -->
+            <div class="config-section">
+            <h5>好友配置</h5>
+            <div class="mb-3 form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="new_friend_switch" name="new_friend_switch" {% if config.new_friend_switch %}checked{% endif %}>
+                <label class="form-check-label" for="new_friend_switch">自动通过好友</label>
             </div>
+            <div class="mb-3">
+                <label class="form-label">好友欢迎消息</label>
+                <div id="new_friend_msg_container">
+                {% for item in config.new_friend_msg %}
+                <div class="list-item">
+                    <textarea class="form-control summernote" name="new_friend_msg">{{ item }}</textarea>
+                    <button type="button" class="btn btn-danger btn-remove-item"><i class="bi bi-trash"></i></button>
+                </div>
+                {% endfor %}
+                </div>
+                <button type="button" class="btn btn-sm btn-primary mt-2" id="btnAddFriendMsgItem">
+                <i class="bi bi-plus"></i> 添加消息
+                </button>
+            </div>
+            </div>
+
+            <!-- 关键词配置 -->
+            <div class="config-section">
+              <h5>关键词配置</h5>
+              <div class="mb-3 form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="chat_keyword_switch" name="chat_keyword_switch" {% if config.chat_keyword_switch %}checked{% endif %}>
+                <label class="form-check-label" for="chat_keyword_switch">私聊关键词开关</label>
+              </div>
+              <div class="mb-3 form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="group_keyword_switch" name="group_keyword_switch" {% if config.group_keyword_switch %}checked{% endif %}>
+                <label class="form-check-label" for="group_keyword_switch">群组关键词开关</label>
+              </div>
+              <div class="mb-2 d-flex justify-content-between align-items-center">
+                <div class="small text-muted">左侧输入关键词，右侧输入回复内容。</div>
+                <button type="button" class="btn btn-sm btn-primary" id="btnAddKeyword"><i class="bi bi-plus"></i> 添加关键词</button>
+              </div>
+              <div id="keyword_container">
+                {% for k,v in config.keyword_dict.items() %}
+                <div class="keyword-item row g-2 align-items-start mb-2">
+                  <div class="col-4"><input type="text" class="form-control" name="keyword_key" value="{{ k }}"></div>
+                  <div class="col-7"><textarea class="form-control" name="keyword_value">{{ v }}</textarea></div>
+                  <div class="col-1 d-grid"><button type="button" class="btn btn-danger btn-remove-keyword"><i class="bi bi-trash"></i></button></div>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+          </form>
         </div>
+      </div>
     </div>
 
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://s4.zstatic.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://s4.zstatic.net/npm/summernote@0.8.18/dist/summernote-lite.min.js"></script>
-    <script>
-        // 拦截未认证的AJAX请求
-        $(document).ajaxComplete(function(event, xhr, settings) {
-            if (xhr.status === 401) {  // 未授权
-                alert('会话已过期，请重新登录');
-                window.location.href = '/';
-            }
-        });
+    <!-- 日志 -->
+    <div class="col-md-4">
+      <div class="card">
+        <div class="card-header"><i class="bi bi-card-text"></i> 系统日志</div>
+        <div class="card-body">
+          <div class="log-container" id="logContainer">
+            {% for log in logs %}
+            <div class="log-entry {{ log.color }}">[{{ log.time }}] [{{ log.level }}] {{ log.message }}</div>
+            {% endfor %}
+          </div>
+          <button class="btn btn-sm btn-outline-secondary mt-3 w-100" id="btnClearLogs"><i class="bi bi-trash"></i> 清空日志</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
-        // 检查登录状态
-        function checkAuth() {
-            $.ajax({
-                url: '/api/check_auth',
-                type: 'GET',
-                success: function(response) {
-                    if (!response.authenticated) {
-                        window.location.href = '/';
-                    }
-                }
-            });
-        }
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://s4.zstatic.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://s4.zstatic.net/npm/summernote@0.8.18/dist/summernote-lite.min.js"></script>
+<script>
+// 保存配置函数
+function saveConfig(callback){
+  const configData={
+    api_sdk:$('#api_sdk').val(),
+    AllListen_switch:$('#AllListen_switch').is(':checked'),
+    group_switch:$('#group_switch').is(':checked'),
+    group_reply_at:$('#group_reply_at').is(':checked'),
+    group_welcome:$('#group_welcome').is(':checked'),
+    new_friend_switch:$('#new_friend_switch').is(':checked'),
+    chat_keyword_switch:$('#chat_keyword_switch').is(':checked'),
+    group_keyword_switch:$('#group_keyword_switch').is(':checked'),
+    api_key:$('#api_key').val(),
+    base_url:$('#base_url').val(),
+    model1:$('#model1').val(),
+    model2:$('#model2').val(),
+    admin:$('#admin').val(),
+    prompt:$('#prompt').summernote('code'),
+    group_welcome_msg:$('#group_welcome_msg').summernote('code'),
+    listen_list:[], group:[], new_friend_msg:[],
+    group_welcome_random:parseFloat($('#group_welcome_random').val()),
+    keyword_dict:{}
+  };
+  $('input[name="listen_list"]').each(function(){let v=$(this).val().trim();if(v)configData.listen_list.push(v);});
+  $('input[name="group"]').each(function(){let v=$(this).val().trim();if(v)configData.group.push(v);});
+  $('input[name="new_friend_msg"]').each(function(){let v=$(this).val().trim();if(v)configData.new_friend_msg.push(v);});
+  $('#keyword_container .keyword-item').each(function(){
+    let k=$(this).find('input[name="keyword_key"]').val().trim();
+    let v=$(this).find('textarea[name="keyword_value"]').val();
+    if(k)configData.keyword_dict[k]=v;
+  });
+  $.ajax({
+    url:'/save_config',type:'POST',contentType:'application/json',
+    data:JSON.stringify(configData),
+    success:function(res){if(res.status==='success'){if(callback)callback();}else{alert('配置保存失败:'+res.message);}},
+    error:function(xhr){alert('保存配置出错:'+xhr.responseText);}
+  });
+}
+// 新人欢迎概率滑动条和输入框双向绑定
+const $slider = $('#group_welcome_random');
+const $number = $('#group_welcome_random_number');
+const $disp = $('#group_welcome_random_display');
 
-        // 每分钟检查一次
-        setInterval(checkAuth, 60000);
-        
-        // 监听开关变化
-document.getElementById('AllListen_switch').addEventListener('change', function() {
-    const label = document.getElementById('listenListLabel');
-    // 根据开关状态切换文字
-    label.textContent = this.checked ? '排除监听列表' : '监听列表';
+function syncFromSlider() {
+  const v = parseFloat($slider.val());
+  $number.val(v.toFixed(2));
+  $disp.text(Math.round(v * 100) + '%');
+}
+
+function syncFromNumber() {
+  let v = parseFloat($number.val());
+  if (isNaN(v)) v = 0;
+  v = Math.min(1, Math.max(0, v)); // 限制在0~1之间
+  $number.val(v.toFixed(2));
+  $slider.val(v);
+  $disp.text(Math.round(v * 100) + '%');
+}
+
+$slider.on('input change', syncFromSlider);
+$number.on('input change', syncFromNumber);
+
+// 页面加载时先刷新一次
+syncFromSlider();
+
+// 保存按钮
+$('#btnSave').click(()=> saveConfig());
+
+// 启动按钮：先保存再启动
+$('#btnStart').click(()=> saveConfig(()=> $.post('/start_bot',res=>alert(res.message)).fail(xhr=>alert('启动机器人失败:'+xhr.responseText))));
+
+// 停止按钮
+$('#btnStop').click(()=> $.post('/stop_bot',res=>alert(res.message)).fail(xhr=>alert('停止机器人失败:'+xhr.responseText)));
+// 删除：监听列表/群组列表/好友欢迎消息（统一样式 .list-item）
+$(document).on('click', '.btn-remove-item', function () {
+  // 为了防误删，可在此加入确认弹窗：if(!confirm('确认删除该条目？')) return;
+  $(this).closest('.list-item').remove();
 });
 
-// 页面加载时初始化状态
-window.addEventListener('DOMContentLoaded', function() {
-    const switchBtn = document.getElementById('AllListen_switch');
-    const label = document.getElementById('listenListLabel');
-    // 初始化时设置正确文本
-    label.textContent = switchBtn.checked ? '排除监听列表' : '监听列表';
+// 删除：关键词配置（每行样式 .keyword-item）
+$(document).on('click', '.btn-remove-keyword', function () {
+  $(this).closest('.keyword-item').remove();
+});
+// 关键词添加/删除
+$('#btnAddKeyword').click(()=> $('#keyword_container').append(`<div class="keyword-item row g-2 mb-2"><div class="col-4"><input type="text" class="form-control" name="keyword_key"></div><div class="col-7"><textarea class="form-control" name="keyword_value"></textarea></div><div class="col-1 d-grid"><button type="button" class="btn btn-danger btn-remove-keyword"><i class="bi bi-trash"></i></button></div></div>`));
+$(document).on('click','.btn-remove-keyword',function(){$(this).closest('.keyword-item').remove();});
+// 添加监听项
+$('#btnAddListenItem').click(function() {
+  $('#listen_list_container').append(`
+    <div class="list-item">
+      <input type="text" class="form-control" name="listen_list" value="">
+      <button type="button" class="btn btn-danger btn-remove-item"><i class="bi bi-trash"></i></button>
+    </div>
+  `);
 });
 
-        $(document).ready(function() {
-            // 初始化富文本编辑器
-            $('.summernote').summernote({
-                height: 150,
-                toolbar: [
-                    ['style', ['bold', 'italic', 'underline', 'clear']],
-                    ['font', ['strikethrough', 'superscript', 'subscript']],
-                    ['para', ['ul', 'ol', 'paragraph']],
-                    ['insert', ['link', 'picture', 'video']],
-                    ['view', ['fullscreen', 'codeview', 'help']]
-                ]
-            });
+// 添加群组项
+$('#btnAddGroupItem').click(function() {
+  $('#group_container').append(`
+    <div class="list-item">
+      <input type="text" class="form-control" name="group" value="">
+      <button type="button" class="btn btn-danger btn-remove-item"><i class="bi bi-trash"></i></button>
+    </div>
+  `);
+});
 
-            // 添加监听项
-            $('#btnAddListenItem').click(function() {
-                $('#listen_list_container').append(`
-                    <div class="list-item">
-                        <input type="text" class="form-control" name="listen_list" value="">
-                        <button type="button" class="btn btn-danger btn-remove-item"><i class="bi bi-trash"></i></button>
-                    </div>
-                `);
-            });
+// 添加好友消息项（富文本）
+$('#btnAddFriendMsgItem').click(function() {
+  const newItem = $(`
+    <div class="list-item">
+      <textarea class="form-control summernote" name="new_friend_msg"></textarea>
+      <button type="button" class="btn btn-danger btn-remove-item"><i class="bi bi-trash"></i></button>
+    </div>
+  `);
+  $('#new_friend_msg_container').append(newItem);
+  // 初始化 summernote
+  newItem.find('.summernote').summernote({
+    height: 100,
+    toolbar: [
+      ['style', ['bold', 'italic', 'underline', 'clear']],
+      ['font', ['strikethrough', 'superscript', 'subscript']],
+      ['para', ['ul', 'ol', 'paragraph']],
+      ['insert', ['link']],
+      ['view', ['fullscreen', 'codeview']]
+    ]
+  });
+});
 
-            // 添加群组项
-            $('#btnAddGroupItem').click(function() {
-                $('#group_container').append(`
-                    <div class="list-item">
-                        <input type="text" class="form-control" name="group" value="">
-                        <button type="button" class="btn btn-danger btn-remove-item"><i class="bi bi-trash"></i></button>
-                    </div>
-                `);
-            });
+// 清空日志
+$('#btnClearLogs').click(()=> $('#logContainer').empty());
 
-            // 添加好友消息项
-            $('#btnAddFriendMsgItem').click(function() {
-                $('#new_friend_msg_container').append(`
-                    <div class="list-item">
-                        <input type="text" class="form-control" name="new_friend_msg" value="">
-                        <button type="button" class="btn btn-danger btn-remove-item"><i class="bi bi-trash"></i></button>
-                    </div>
-                `);
-            });
-
-            // 删除列表项
-            $(document).on('click', '.btn-remove-item', function() {
-                $(this).closest('.list-item').remove();
-            });
-
-            // 加载配置
-            $('#btnLoad').click(function() {
-                $.get('/load_config', function(response) {
-                    if (response.status === 'success') {
-                        // 这里可以添加代码来更新表单
-                        location.reload(); // 简单起见，直接刷新页面
-                    } else {
-                        alert('加载配置失败: ' + response.message);
-                    }
-                });
-            });
-
-            // 修改保存配置的JavaScript代码
-            $('#btnSave').click(function() {
-                // 获取所有配置字段
-                const configData = {
-                    // 新增API SDK字段
-                    api_sdk: $('#api_sdk').val(),
-                    // 布尔值字段 - 手动获取状态
-                    AllListen_switch: $('#AllListen_switch').is(':checked'),
-                    group_switch: $('#group_switch').is(':checked'),
-                    group_reply_at: $('#group_reply_at').is(':checked'),
-                    group_welcome: $('#group_welcome').is(':checked'),
-                    new_friend_switch: $('#new_friend_switch').is(':checked'),
-                    
-                    // 文本字段
-                    api_key: $('#api_key').val(),
-                    base_url: $('#base_url').val(),
-                    model1: $('#model1').val(),
-                    model2: $('#model2').val(),
-                    admin: $('#admin').val(),
-                    
-                    // 富文本字段
-                    prompt: $('#prompt').summernote('code'),
-                    group_welcome_msg: $('#group_welcome_msg').summernote('code'),
-                    
-                    // 列表字段
-                    listen_list: [],
-                    group: [],
-                    new_friend_msg: []
-                };
-
-                // 处理监听列表
-                $('input[name="listen_list"]').each(function() {
-                    if ($(this).val().trim() !== '') {
-                        configData.listen_list.push($(this).val().trim());
-                    }
-                });
-
-                // 处理群组列表
-                $('input[name="group"]').each(function() {
-                    if ($(this).val().trim() !== '') {
-                        configData.group.push($(this).val().trim());
-                    }
-                });
-
-                // 处理好友消息列表
-                $('input[name="new_friend_msg"]').each(function() {
-                    if ($(this).val().trim() !== '') {
-                        configData.new_friend_msg.push($(this).val().trim());
-                    }
-                });
-
-                // 发送到服务器
-                $.ajax({
-                    url: '/save_config',
-                    type: 'POST',
-                    contentType: 'application/json',
-                    data: JSON.stringify(configData),
-                    success: function(response) {
-                        if (response.status === 'success') {
-                            alert('配置保存成功');
-                            // 更新API Key显示
-                            if (configData.api_key && configData.api_key !== '{{ config.api_key }}') {
-                                $('#api_key').val('*'.repeat(configData.api_key.length));
-                            }
-                        } else {
-                            alert('配置保存失败: ' + response.message);
-                        }
-                    },
-                    error: function(xhr) {
-                        alert('保存配置时出错: ' + xhr.responseText);
-                    }
-                });
-            });
-
-            // 启动机器人
-            $('#btnStart').click(function() {
-                $.post('/start_bot', function(response) {
-                    alert(response.message);
-                }).fail(function(xhr) {
-                    alert('启动机器人失败: ' + xhr.responseText);
-                });
-            });
-
-            // 停止机器人
-            $('#btnStop').click(function() {
-                $.post('/stop_bot', function(response) {
-                    alert(response.message);
-                }).fail(function(xhr) {
-                    alert('停止机器人失败: ' + xhr.responseText);
-                });
-            });
-
-            // 清空日志
-            $('#btnClearLogs').click(function() {
-                $('#logContainer').empty();
-            });
-
-            // 实时更新日志
-            function updateLogs() {
-                $.get('/get_logs', function(response) {
-                    const container = $('#logContainer');
-                    container.empty();
-                    response.logs.forEach(log => {
-                        container.append(`
-                            <div class="log-entry ${log.color}">
-                                [${log.time}] [${log.level}] ${log.message}
-                            </div>
-                        `);
-                    });
-                    container.scrollTop(container[0].scrollHeight);
-                });
-            }
-
-            // 每3秒更新一次日志
-            setInterval(updateLogs, 3000);
-        });
-    </script>
+// 日志轮询
+setInterval(()=> $.get('/get_logs',r=>{const c=$('#logContainer');c.empty();r.logs.forEach(l=>c.append(`<div class="log-entry ${l.color}">[${l.time}] [${l.level}] ${l.message}</div>`));c.scrollTop(c[0].scrollHeight);}),3000);
+</script>
 </body>
 </html>

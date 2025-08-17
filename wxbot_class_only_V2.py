@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox V2版本
 # 作者：https://siver.top
-version = "V2.2.3"
-version_log = "feat:首次启动强制显示主窗口以刷新状态"
+version = "V2.3.0"
+version_log = "V2.3.0 feat:新增关键词功能，添加群欢迎概率"
 
 import time
 import json
@@ -55,12 +55,16 @@ class WXBotConfig:
         self.group_reply_at = False  # 群聊回复@开关
         self.group_switch = False # 群机器人开关
         self.group_welcome = False # 群新人欢迎开关
+        self.group_welcome_random = 1.0 # 群新人欢迎随机概率
         self.group_welcome_msg = "欢迎新朋友！请先查看群公告！本消息由wxautox发送!" # 群新人欢迎语
         self.new_frined_switch = False  # 新好友开关
         self.new_frien_msg = []  # 新好友消息列表
         self.model1 = ""         # 模型1标识
         self.model2 = ""         # 模型2标识
         self.prompt = ""         # AI提示词
+        self.chat_keyword_switch = False  # 聊天关键词开关
+        self.group_keyword_switch = False  # 群聊关键词开关
+        self.keyword_dict = {}   # 关键词字典
         self.load_config()
         self.update_global_config()
 
@@ -125,10 +129,15 @@ class WXBotConfig:
         self.group_switch = self.config.get('group_switch')
         self.group_reply_at = self.config.get('group_reply_at')
         self.group_welcome = self.config.get('group_welcome')
+        self.group_welcome_random = self.config.get('group_welcome_random')
         self.group_welcome_msg = self.config.get('group_welcome_msg', '')
         # 新好友
         self.new_frined_switch = self.config.get('new_friend_switch')
         self.new_frien_msg = self.config.get('new_friend_msg', [])
+        #关键词
+        self.chat_keyword_switch = self.config.get('chat_keyword_switch')
+        self.group_keyword_switch = self.config.get('group_keyword_switch')
+        self.keyword_dict = self.config.get('keyword_dict', {})
         log(message="全局配置更新完成")
 
     def save_config(self):
@@ -527,7 +536,15 @@ class WXBot:
     def wx_send_ai(self, chat, message):
         """发送AI生成的消息"""
         try:
-            reply = self.api.chat(message.content, prompt=self.config.prompt)
+            is_keyword = False
+            if self.config.chat_keyword_switch: # 关键词回复开关
+                for keyword in self.config.keyword_dict:
+                    if keyword in message.content:
+                        is_keyword = True
+                        log(message=f"私聊 {chat.who} 关键字消息：" + message.content)
+                        reply = self.config.keyword_dict[keyword]
+            if not is_keyword:
+                reply = self.api.chat(message.content, prompt=self.config.prompt)
         except Exception as e:
             # log(level="ERROR", message=traceback.format_exc() + str(e))
             print(traceback.format_exc())
@@ -556,12 +573,12 @@ class WXBot:
         """监听群组欢迎新人"""
         result = True
         log(message=f"{chat.who} 系统消息:" + message.content)
-        if "加入群聊" in message.content and random.random()<1.3: # 100%概率触发
+        if "加入群聊" in message.content and random.random()<self.config.group_welcome_random: # 概率触发
             new_friend = self.find_new_group_friend(message.content, 1)  # 扫码加入
             log(message=f"{chat.who} 新群友:" + new_friend)
             time.sleep(5)
             result = chat.SendMsg(msg=self.config.group_welcome_msg, at=new_friend)
-        elif "加入了群聊" in message.content and random.random()<1.3: # 100%概率触发
+        elif "加入了群聊" in message.content and random.random()<self.config.group_welcome_random: # 概率触发
             new_friend = self.find_new_group_friend(message.content, 3)  # 个人邀请
             log(message=f"{chat.who} 新群友:" + new_friend)
             time.sleep(5)
@@ -597,6 +614,13 @@ class WXBot:
                 time.sleep(random.randint(1, 10))
                 result = chat.SendMsg(msg=reply, at=message.sender)
                 return result
+            # 群组关键词处理
+            if self.config.group_keyword_switch:
+                for keyword in self.config.keyword_dict:
+                    if keyword in message.content:
+                        log(message=f"群组 {chat.who} 关键字消息：" + message.content)
+                        chat.SendMsg(msg=self.config.keyword_dict[keyword])
+                        time.sleep(1)
             return result
 
         # 命令处理
