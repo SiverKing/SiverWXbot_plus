@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox V2版本
 # 作者：https://siver.top
-version = "V2.3.0"
-version_log = "V2.3.0 feat:新增关键词功能，添加群欢迎概率"
+version = "V2.4.0"
+version_log = "V2.4.0 feat:新增每日定时消息"
 
 import time
 import json
@@ -14,9 +14,7 @@ import requests
 from datetime import datetime, timedelta
 import random
 from logger import log
-# from Common import log
-# from Common import is_online
-# from Common import UI_nickname_change
+import schedule
 import os
 
 from wxautox import WeChat  # plus版需要找wxauto作者购买 https://github.com/cluic/wxauto
@@ -65,6 +63,8 @@ class WXBotConfig:
         self.chat_keyword_switch = False  # 聊天关键词开关
         self.group_keyword_switch = False  # 群聊关键词开关
         self.keyword_dict = {}   # 关键词字典
+        self.everyday_msg_switch = False  # 每日定时消息开关
+        self.everyday_msg_dict = {}  # 每日定时消息字典
         self.load_config()
         self.update_global_config()
 
@@ -138,6 +138,9 @@ class WXBotConfig:
         self.chat_keyword_switch = self.config.get('chat_keyword_switch')
         self.group_keyword_switch = self.config.get('group_keyword_switch')
         self.keyword_dict = self.config.get('keyword_dict', {})
+        # 每日定时消息
+        self.everyday_msg_switch = self.config.get('everyday_msg_switch')
+        self.everyday_msg_dict = self.config.get('everyday_msg_dict', {})
         log(message="全局配置更新完成")
 
     def save_config(self):
@@ -493,9 +496,28 @@ class WXBot:
                     log(message=f"添加群组 {user} 监听完成")
                 else:
                     log(level="ERROR", message=f"添加群组 {user} 监听失败, {result['message']}")
-            
+        
+        # 定时消息注册
+        if self.config.everyday_msg_switch:
+            log(message="定时消息注册...")
+            try:
+                for user in self.config.everyday_msg_dict:
+                    time = self.config.everyday_msg_dict.get(user).get('time')
+                    schedule.every().day.at(time).do(self.send_everyday_msg, user)
+                    log(message=f"注册定时消息：每天{time} 给 {user} 发消息")
+                log(message="定时消息注册完成")
+            except Exception as e:
+                log(level="ERROR", message=f"定时消息注册失败：{e}")
         log(message="监听器初始化完成")
-
+    def send_everyday_msg(self, user):
+        """定时消息发送"""
+        log(message=f"{user} 定时消息时间到，正在发送...")
+        msgs = self.config.everyday_msg_dict.get(user).get('msgs')
+        for msg in msgs:
+            result = self.wx.SendMsg(msg=msg, who=user)
+            time.sleep(random.randint(1, 3))
+            if not result:
+                log(level="ERROR", message=f"定时消息发送失败：{result['message']}")
     def message_handle_callback(self, msg, chat):
         """监听模式回调"""
         try:
@@ -1176,12 +1198,16 @@ class WXBot:
                             self.is_err(self.wx.nickname+"  智能客服bot监听新好友出错！！请检查程序！！", e)
                         check_new_counter = 0
 
+                # 全局监听模式
                 if self.config.AllListen_switch: # 根据全局开关切换监听模式还是全局模式
                     try:
                         last_time = self.ALLListen_mode(last_time=last_time) # 全局模式
                     except Exception as e:
                         if not self.run_flag:
                             log(level="ERROR", message=str(e)+"\n全局模式出错！！请检查程序！！")
+                # 定时任务
+                if self.config.everyday_msg_switch:
+                    schedule.run_pending()
                 
 
             except Exception as e:

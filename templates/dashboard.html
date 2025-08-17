@@ -227,6 +227,45 @@
                 {% endfor %}
               </div>
             </div>
+
+            <!-- 定时消息配置 -->
+            <div class="config-section">
+            <h5>定时消息配置</h5>
+
+            <div class="mb-3 form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="everyday_msg_switch" name="everyday_msg_switch" {% if config.everyday_msg_switch %}checked{% endif %}>
+                <label class="form-check-label" for="everyday_msg_switch">启用定时消息</label>
+            </div>
+
+            <div class="mb-2 d-flex justify-content-between align-items-center">
+                <div class="small text-muted">为指定好友或群组设置每天定时消息</div>
+                <button type="button" class="btn btn-sm btn-primary" id="btnAddEverydayMsgTarget">
+                <i class="bi bi-plus"></i> 添加定时对象
+                </button>
+            </div>
+
+            <div id="everyday_msg_container">
+                {% for target, val in config.everyday_msg_dict.items() %}
+                <div class="everyday-msg-item border p-2 mb-2 rounded">
+                <div class="d-flex mb-2">
+                    <input type="text" class="form-control me-2" name="everyday_target" value="{{ target }}" placeholder="对象名称 (好友/群组)">
+                    <input type="time" class="form-control me-2" name="everyday_time" value="{{ val.time }}">
+                    <button type="button" class="btn btn-danger btn-remove-everyday"><i class="bi bi-trash"></i></button>
+                </div>
+                <div class="everyday-msgs">
+                    {% for msg in val.msgs %}
+                    <div class="list-item mb-1">
+                    <input type="text" class="form-control" name="everyday_msg" value="{{ msg }}">
+                    <button type="button" class="btn btn-sm btn-outline-danger btn-remove-item"><i class="bi bi-x"></i></button>
+                    </div>
+                    {% endfor %}
+                </div>
+                <button type="button" class="btn btn-sm btn-secondary btnAddEverydayMsg"><i class="bi bi-plus"></i> 添加消息</button>
+                </div>
+                {% endfor %}
+            </div>
+            </div>
+
           </form>
         </div>
       </div>
@@ -273,7 +312,9 @@ function saveConfig(callback){
     group_welcome_msg:$('#group_welcome_msg').summernote('code'),
     listen_list:[], group:[], new_friend_msg:[],
     group_welcome_random:parseFloat($('#group_welcome_random').val()),
-    keyword_dict:{}
+    keyword_dict:{},
+    everyday_msg_switch: $('#everyday_msg_switch').is(':checked'),
+    everyday_msg_dict: {}
   };
   $('input[name="listen_list"]').each(function(){let v=$(this).val().trim();if(v)configData.listen_list.push(v);});
   $('input[name="group"]').each(function(){let v=$(this).val().trim();if(v)configData.group.push(v);});
@@ -283,6 +324,18 @@ function saveConfig(callback){
     let v=$(this).find('textarea[name="keyword_value"]').val();
     if(k)configData.keyword_dict[k]=v;
   });
+  $('#everyday_msg_container .everyday-msg-item').each(function() {
+    const target = $(this).find('input[name="everyday_target"]').val().trim();
+    const time = $(this).find('input[name="everyday_time"]').val();
+    let msgs = [];
+    $(this).find('input[name="everyday_msg"]').each(function(){
+        let v = $(this).val().trim();
+        if(v) msgs.push(v);
+    });
+    if(target) {
+        configData.everyday_msg_dict[target] = { time: time, msgs: msgs };
+    }
+    });
   $.ajax({
     url:'/save_config',type:'POST',contentType:'application/json',
     data:JSON.stringify(configData),
@@ -378,6 +431,39 @@ $('#btnAddFriendMsgItem').click(function() {
     ]
   });
 });
+
+// 添加定时对象
+$('#btnAddEverydayMsgTarget').click(function() {
+  const block = $(`
+    <div class="everyday-msg-item border p-2 mb-2 rounded">
+      <div class="d-flex mb-2">
+        <input type="text" class="form-control me-2" name="everyday_target" placeholder="对象名称 (好友/群组)">
+        <input type="time" class="form-control me-2" name="everyday_time" value="08:00">
+        <button type="button" class="btn btn-danger btn-remove-everyday"><i class="bi bi-trash"></i></button>
+      </div>
+      <div class="everyday-msgs"></div>
+      <button type="button" class="btn btn-sm btn-secondary btnAddEverydayMsg"><i class="bi bi-plus"></i> 添加消息</button>
+    </div>
+  `);
+  $('#everyday_msg_container').append(block);
+});
+
+// 删除定时对象
+$(document).on('click', '.btn-remove-everyday', function() {
+  $(this).closest('.everyday-msg-item').remove();
+});
+
+// 添加定时消息
+$(document).on('click', '.btnAddEverydayMsg', function() {
+  $(this).siblings('.everyday-msgs').append(`
+    <div class="list-item mb-1">
+      <input type="text" class="form-control" name="everyday_msg" placeholder="请输入消息">
+      <button type="button" class="btn btn-sm btn-outline-danger btn-remove-item"><i class="bi bi-x"></i></button>
+    </div>
+  `);
+});
+
+// 删除单条消息（已在通用删除逻辑里写过 .btn-remove-item，这里会自动生效）
 
 // 清空日志
 $('#btnClearLogs').click(()=> $('#logContainer').empty());
