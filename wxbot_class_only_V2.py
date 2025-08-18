@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox V2版本
 # 作者：https://siver.top
-version = "V2.5.1"
-version_log = "V2.5.1 fix:修复全局监听开关黑白名单切换显示"
+version = "V2.5.2"
+version_log = "V2.5.2 feat:/状态指令返回更新增加内容"
 
 import time
 import json
@@ -715,11 +715,29 @@ class WXBot:
                 send_msg += "当前群机器人状态：开启\n"
                 send_msg += "当前群：" + ", ".join(self.config.group) + "\n"
                 if self.config.group_welcome:
-                    send_msg += "当前群机器人欢迎语状态：开启\n"
+                    send_msg += f"当前群机器人欢迎语状态：开启 欢迎概率：{self.config.group_welcome_random}\n"
                 else:
                     send_msg += "当前群机器人欢迎语状态：关闭\n"
             else:
                 send_msg += "当前群机器人状态：关闭\n"
+            if self.config.chat_keyword_switch:
+                send_msg += "当前私聊关键词回复状态：开启\n"
+            else:
+                send_msg += "当前私聊关键词回复状态：关闭\n"
+            if self.config.group_keyword_switch:
+                send_msg += "当前群聊关键词回复状态：开启\n"
+            else:
+                send_msg += "当前群聊关键词回复状态：关闭\n"
+
+            send_msg += "当前关键词："
+            for key in self.config.keyword_dict:
+                send_msg += key + ", "
+            send_msg += "\n"
+            if self.config.everyday_msg_switch:
+                send_msg += "当前定时消息状态：开启\n"
+            else:
+                send_msg += "当前定时消息状态：关闭\n"
+            
             result = chat.SendMsg(send_msg)
         else:
             result = self.wx_send_ai(chat, message)
