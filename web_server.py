@@ -265,6 +265,8 @@ def save_config(config_data):
         log('ERROR', f'保存配置文件失败: {str(e)}')
         return False
 
+#   保存配置
+update_config_status = False # 记录是否更新了定时启停状态
 @app.route('/save_config', methods=['POST'])
 @login_required
 def save_config_route():
@@ -288,6 +290,8 @@ def save_config_route():
         _coerce_dict_fields(merged_config)
 
         if save_config(merged_config):
+            global update_config_status
+            update_config_status = True # 执行了保存配置
             return jsonify({'status': 'success', 'message': '配置保存成功'})
         else:
             return jsonify({'status': 'error', 'message': '配置保存失败'})
@@ -351,11 +355,6 @@ def load_config():
 
 def time_start_stop():
     """定时启停"""
-    time_config = read_config()
-    start_hour = datetime.strptime(time_config.get("everyday_start_bot_time"), "%H:%M").hour
-    start_minute = datetime.strptime(time_config.get("everyday_start_bot_time"), "%H:%M").minute
-    stop_hour = datetime.strptime(time_config.get("everyday_stop_bot_time"), "%H:%M").hour
-    stop_minute = datetime.strptime(time_config.get("everyday_stop_bot_time"), "%H:%M").minute
     def is_target_time(target_hour, target_minute):
         """
         校验当前时间是否匹配指定的小时和分钟
@@ -365,48 +364,71 @@ def time_start_stop():
         # 比较小时和分钟是否匹配
         return (now.hour == target_hour) and (now.minute == target_minute)
     def time_check_thread():
-        global bot_thread, bot
-        log('INFO', f'启动定时启停线程，启动时间：{start_hour}:{start_minute}，停止时间：{stop_hour}:{stop_minute}')
-
         """定时检查线程"""
+        global bot_thread, bot, update_config_status
+        # 读取配置文件
+        time_config = read_config()
+        everyday_start_stop_bot_switch = time_config.get("everyday_start_stop_bot_switch")
+        start_hour = datetime.strptime(time_config.get("everyday_start_bot_time"), "%H:%M").hour
+        start_minute = datetime.strptime(time_config.get("everyday_start_bot_time"), "%H:%M").minute
+        stop_hour = datetime.strptime(time_config.get("everyday_stop_bot_time"), "%H:%M").hour
+        stop_minute = datetime.strptime(time_config.get("everyday_stop_bot_time"), "%H:%M").minute
+        if everyday_start_stop_bot_switch:
+            log('INFO', f'启动定时启停线程，启动时间：{start_hour}:{start_minute}，停止时间：{stop_hour}:{stop_minute}')
+        else:
+            log('INFO', '定时启停未启用，未启用')
+
         while True:
-            if is_target_time(start_hour, start_minute): # 启动时间
-                log('INFO', '到达预定启动时间，正在启动机器人')
-                if bot_thread and bot_thread.is_alive():
-                    log("WARNING", "状态：机器人已在运行")
-                    email_send.send_email(subject="定时启动机器人", content="机器人已在运行，无需启动")
+            if update_config_status: # 保存配置后更新定时启停状态
+                update_config_status = False
+                time_config = read_config()
+                everyday_start_stop_bot_switch = time_config.get("everyday_start_stop_bot_switch")
+                start_hour = datetime.strptime(time_config.get("everyday_start_bot_time"), "%H:%M").hour
+                start_minute = datetime.strptime(time_config.get("everyday_start_bot_time"), "%H:%M").minute
+                stop_hour = datetime.strptime(time_config.get("everyday_stop_bot_time"), "%H:%M").hour
+                stop_minute = datetime.strptime(time_config.get("everyday_stop_bot_time"), "%H:%M").minute
+                if everyday_start_stop_bot_switch:
+                    log('INFO', f'配置更新，启动定时启停线程，启动时间：{start_hour}:{start_minute}，停止时间：{stop_hour}:{stop_minute}')
                 else:
-                    def run_bot():
-                        pythoncom.CoInitialize()  # 防止多线程调用COM组件时出错
-                        global bot
-                        bot = WXBot()
-                        bot.run()
-                        pythoncom.CoUninitialize()  # 释放COM组件
-                    try:
-                        bot_thread = threading.Thread(target=run_bot, daemon=True)
-                        bot_thread.start()
-                        email_send.send_email(subject="定时启动机器人", content="机器人已启动")
-                    except Exception as e:
-                        log('ERROR', f'启动机器人失败: {str(e)}')
-                time.sleep(60) # 防止一分钟内重复启动
-            if is_target_time(stop_hour, stop_minute): # 停止时间
-                log('INFO', '到达预定停止时间，正在停止机器人')
-                if bot_thread and bot_thread.is_alive():
-                    if bot.stop_wxbot():  # 调用停止函数并检查返回值
-                        log('SUCCESS', '机器人已停止')
-                        bot_thread = None
-                        bot = None
-                        email_send.send_email(subject="定时停止机器人", content="机器人已停止")
+                    log('INFO', '配置更新，定时启停未启用')
+            if everyday_start_stop_bot_switch:
+                if is_target_time(start_hour, start_minute): # 启动时间
+                    log('INFO', '到达预定启动时间，正在启动机器人')
+                    if bot_thread and bot_thread.is_alive():
+                        log("WARNING", "状态：机器人已在运行")
+                        email_send.send_email(subject="定时启动机器人", content="机器人已在运行，无需启动")
                     else:
-                        log('ERROR', '停止机器人失败')
-                else:
-                    log('WARNING', '状态：机器人未运行')
-                    email_send.send_email(subject="定时停止机器人", content="机器人未运行，无需停止")
-                time.sleep(60) # 防止一分钟内重复停止
+                        def run_bot():
+                            pythoncom.CoInitialize()  # 防止多线程调用COM组件时出错
+                            global bot
+                            bot = WXBot()
+                            bot.run()
+                            pythoncom.CoUninitialize()  # 释放COM组件
+                        try:
+                            bot_thread = threading.Thread(target=run_bot, daemon=True)
+                            bot_thread.start()
+                            email_send.send_email(subject="定时启动机器人", content="机器人已启动")
+                        except Exception as e:
+                            log('ERROR', f'启动机器人失败: {str(e)}')
+                    time.sleep(60) # 防止一分钟内重复启动
+                if is_target_time(stop_hour, stop_minute): # 停止时间
+                    log('INFO', '到达预定停止时间，正在停止机器人')
+                    if bot_thread and bot_thread.is_alive():
+                        if bot.stop_wxbot():  # 调用停止函数并检查返回值
+                            log('SUCCESS', '机器人已停止')
+                            bot_thread = None
+                            bot = None
+                            email_send.send_email(subject="定时停止机器人", content="机器人已停止")
+                        else:
+                            log('ERROR', '停止机器人失败')
+                    else:
+                        log('WARNING', '状态：机器人未运行')
+                        email_send.send_email(subject="定时停止机器人", content="机器人未运行，无需停止")
+                    time.sleep(60) # 防止一分钟内重复停止
             time.sleep(10)
-    if time_config.get("everyday_start_stop_bot_switch"):
-        time_thread = threading.Thread(target=time_check_thread, daemon=True)
-        time_thread.start()
+    
+    time_thread = threading.Thread(target=time_check_thread, daemon=True)
+    time_thread.start()
 
 
 def main():

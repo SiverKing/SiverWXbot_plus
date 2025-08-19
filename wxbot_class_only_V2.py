@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox V2版本
 # 作者：https://siver.top
-version = "V2.5.2"
-version_log = "V2.5.2 feat:/状态指令返回更新增加内容"
+version = "V2.5.3"
+version_log = "V2.5.3 fix:定时启停需要重启程序的bug"
 
 import time
 import json
