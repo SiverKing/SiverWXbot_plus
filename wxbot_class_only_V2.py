@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox V2版本
 # 作者：https://siver.top
-version = "V2.5.3"
-version_log = "V2.5.3 fix:定时启停需要重启程序的bug"
+version = "V2.5.4"
+version_log = "V2.5.4 fix:定时消息同用户无法设置多个定时任务的问题"
 
 import time
 import json
@@ -501,19 +501,21 @@ class WXBot:
         if self.config.everyday_msg_switch:
             log(message="定时消息注册...")
             try:
-                for user in self.config.everyday_msg_dict:
-                    time = self.config.everyday_msg_dict.get(user).get('time')
-                    schedule.every().day.at(time).do(self.send_everyday_msg, user)
-                    log(message=f"注册定时消息：每天{time} 给 {user} 发消息")
+                for user, tasks in self.config.everyday_msg_dict.items():  # 遍历用户和对应的任务列表
+                    for task in tasks:  # 遍历每个用户的定时任务
+                        time_str = task.get('time')  # 定时时间
+                        msgs = task.get('msgs')  # 定时消息列表
+                        schedule.every().day.at(time_str).do(self.send_everyday_msg, user, msgs)
+                        log(message=f"注册定时消息：每天{time_str} 给 {user} 发消息")
                 log(message="定时消息注册完成")
             except Exception as e:
                 log(level="ERROR", message=f"定时消息注册失败：{e}")
         log(message="监听器初始化完成")
-    def send_everyday_msg(self, user):
+    def send_everyday_msg(self, user, msgs):
         """定时消息发送"""
         log(message=f"{user} 定时消息时间到，正在发送...")
-        msgs = self.config.everyday_msg_dict.get(user).get('msgs')
         for msg in msgs:
+            log(message=f"正在向 {user} 发送定时消息：{msg}")
             result = self.wx.SendMsg(msg=msg, who=user)
             time.sleep(random.randint(1, 3))
             if not result:

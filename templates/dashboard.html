@@ -250,26 +250,30 @@
                 </button>
             </div>
 
+            <!-- 替换 #everyday_msg_container 内部循环（BEGIN） -->
             <div id="everyday_msg_container">
-                {% for target, val in config.everyday_msg_dict.items() %}
+              {% for target, task_list in config.everyday_msg_dict.items() %}
+                {% for item in task_list %}
                 <div class="everyday-msg-item border p-2 mb-2 rounded">
-                <div class="d-flex mb-2">
+                  <div class="d-flex mb-2">
                     <input type="text" class="form-control me-2" name="everyday_target" value="{{ target }}" placeholder="对象名称 (好友/群组)">
-                    <input type="time" class="form-control me-2" name="everyday_time" value="{{ val.time }}">
+                    <input type="time" class="form-control me-2" name="everyday_time" value="{{ item.time }}">
                     <button type="button" class="btn btn-danger btn-remove-everyday"><i class="bi bi-trash"></i></button>
-                </div>
-                <div class="everyday-msgs">
-                    {% for msg in val.msgs %}
+                  </div>
+                  <div class="everyday-msgs">
+                    {% for msg in item.msgs %}
                     <div class="list-item mb-1">
-                    <input type="text" class="form-control" name="everyday_msg" value="{{ msg }}">
-                    <button type="button" class="btn btn-sm btn-outline-danger btn-remove-item"><i class="bi bi-x"></i></button>
+                      <input type="text" class="form-control" name="everyday_msg" value="{{ msg }}">
+                      <button type="button" class="btn btn-sm btn-outline-danger btn-remove-item"><i class="bi bi-x"></i></button>
                     </div>
                     {% endfor %}
-                </div>
-                <button type="button" class="btn btn-sm btn-secondary btnAddEverydayMsg"><i class="bi bi-plus"></i> 添加消息</button>
+                  </div>
+                  <button type="button" class="btn btn-sm btn-secondary btnAddEverydayMsg"><i class="bi bi-plus"></i> 添加消息</button>
                 </div>
                 {% endfor %}
+              {% endfor %}
             </div>
+            <!-- 替换 #everyday_msg_container 内部循环（END） -->
             </div>
             
             <!-- 定时启停配置 -->
@@ -352,7 +356,9 @@ function saveConfig(callback){
     let v=$(this).find('textarea[name="keyword_value"]').val();
     if(k)configData.keyword_dict[k]=v;
   });
-  $('#everyday_msg_container .everyday-msg-item').each(function() {
+  // —— 按 target 分组合并为数组 —— 
+  const grouped = {};
+  $('#everyday_msg_container .everyday-msg-item').each(function () {
     const target = $(this).find('input[name="everyday_target"]').val().trim();
     const time = $(this).find('input[name="everyday_time"]').val();
     let msgs = [];
@@ -360,10 +366,12 @@ function saveConfig(callback){
         let v = $(this).val().trim();
         if(v) msgs.push(v);
     });
-    if(target) {
-        configData.everyday_msg_dict[target] = { time: time, msgs: msgs };
-    }
-    });
+    if (!target) return;
+    if (!grouped[target]) grouped[target] = [];
+    grouped[target].push({ time, msgs });
+  });
+  configData.everyday_msg_dict = grouped;
+
   $.ajax({
     url:'/save_config',type:'POST',contentType:'application/json',
     data:JSON.stringify(configData),

@@ -31,12 +31,14 @@
     },
     "everyday_msg_switch": true,
     "everyday_msg_dict": {
-        "文件传输助手": {
-            "time": "19:00",
-            "msgs": [
-                "每天19:00给文件传输助手发送一条消息"
-            ]
-        }
+        "文件传输助手": [
+            {
+                "time": "19:00",
+                "msgs": [
+                    "每天19:00给文件传输助手发送一条消息"
+                ]
+            }
+        ]
     },
     "everyday_start_stop_bot_switch": false,
     "everyday_start_bot_time": "01:30",
