@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox V2版本
 # 作者：https://siver.top
-version = "V2.5.5"
-version_log = "V2.5.5 fix:修改消息属性判断方式防止拍一拍误识别"
+version = "V2.5.6"
+version_log = "V2.5.6 fix:定时消息会重复触发的bug"
 
 import time
 import json
@@ -501,11 +501,12 @@ class WXBot:
         if self.config.everyday_msg_switch:
             log(message="定时消息注册...")
             try:
+                schedule.clear('everyday_msg')  # 按 tag 清理
                 for user, tasks in self.config.everyday_msg_dict.items():  # 遍历用户和对应的任务列表
                     for task in tasks:  # 遍历每个用户的定时任务
                         time_str = task.get('time')  # 定时时间
                         msgs = task.get('msgs')  # 定时消息列表
-                        schedule.every().day.at(time_str).do(self.send_everyday_msg, user, msgs)
+                        schedule.every().day.at(time_str).do(self.send_everyday_msg, user, msgs).tag('everyday_msg')
                         log(message=f"注册定时消息：每天{time_str} 给 {user} 发消息")
                 log(message="定时消息注册完成")
             except Exception as e:
