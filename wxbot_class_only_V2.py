@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox V2版本
 # 作者：https://siver.top
-version = "V2.5.4"
-version_log = "V2.5.4 fix:定时消息同用户无法设置多个定时任务的问题"
+version = "V2.5.5"
+version_log = "V2.5.5 fix:修改消息属性判断方式防止拍一拍误识别"
 
 import time
 import json
@@ -534,7 +534,7 @@ class WXBot:
                 os.makedirs(self.msgs_path)
                 log(message=f"文件夹 '{self.msgs_path}' 创建成功！")
             """
-            if isinstance(msg, FriendMessage): # 好友群友的消息
+            if msg.attr == "friend": # 好友群友的消息
                 if self.config.AllListen_switch:
                     # 更新监听列表中该会话的最新消息时间
                     for listen_chat in self.all_Mode_listen_list:
@@ -547,7 +547,7 @@ class WXBot:
                     # self.callback_is_die = True # 反馈主线程回调函数出错
                     self.is_err(self.wx.nickname+f" wxbot处理监听新消息失败！", text+'\n'+result['message'])
             
-            elif isinstance(msg, SystemMessage): # 系统的消息
+            elif msg.attr == "system": # 系统的消息
                 if self.config.group_welcome: # 群新人欢迎语开关
                     result = self.send_group_welcome_msg(chat, msg) # 获取子窗口对象与消息对象送入处理
                     if not result:
