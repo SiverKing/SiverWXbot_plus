@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox V2版本
 # 作者：https://siver.top
-version = "V2.5.6"
-version_log = "V2.5.6 fix:定时消息会重复触发的bug"
+version = "V2.5.7"
+version_log = "V2.5.7 fix:定时消息发送报错会终止程序的bug"
 
 import time
 import json
@@ -517,10 +517,15 @@ class WXBot:
         log(message=f"{user} 定时消息时间到，正在发送...")
         for msg in msgs:
             log(message=f"正在向 {user} 发送定时消息：{msg}")
-            result = self.wx.SendMsg(msg=msg, who=user)
-            time.sleep(random.randint(1, 3))
-            if not result:
-                log(level="ERROR", message=f"定时消息发送失败：{result['message']}")
+            try:
+                result = self.wx.SendMsg(msg=msg, who=user)
+                time.sleep(random.randint(1, 3))
+                if not result:
+                    log(level="ERROR", message=f"定时消息发送失败：{result['message']}")
+                    self.is_err(self.wx.nickname+f" wxbot定时消息发送失败！", f"{user} 定时消息发送失败：{result['message']}")
+            except Exception as e:
+                log(level="ERROR", message=f"定时消息发送失败：{e}")
+                self.is_err(self.wx.nickname+f" wxbot定时消息发送失败！", f"{user} 定时消息发送失败：{e}")
     def message_handle_callback(self, msg, chat):
         """监听模式回调"""
         try:
