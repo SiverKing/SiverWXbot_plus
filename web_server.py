@@ -21,6 +21,7 @@ import logger
 import pythoncom
 import webbrowser
 import time
+import socket
 import email_send
 
 # fix_paths.py
@@ -429,6 +430,16 @@ def time_start_stop():
     
     time_thread = threading.Thread(target=time_check_thread, daemon=True)
     time_thread.start()
+def find_free_port(start_port=10001, max_port=11000):
+    """从 start_port 开始寻找空闲端口"""
+    for port in range(start_port, max_port):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(("0.0.0.0", port))
+                return port
+            except OSError:
+                continue
+    raise RuntimeError("未找到可用端口")
 
 
 def main():
@@ -444,13 +455,15 @@ def main():
                 json.dump({}, f)
             log('WARNING', '配置文件不存在，已创建空配置文件')
         log('INFO', '服务5s后启动')
-        log('INFO', '请访问 http://localhost:10001 或者 http://127.0.0.1:10001 进行登录')
-         # 启动后自动打开浏览器
-        webbrowser.open("http://127.0.0.1:10001")
+        # 动态选择端口
+        free_port = find_free_port(10001, 11000)
+        log('INFO', f'请访问 http://localhost:{free_port} 或者 http://127.0.0.1:{free_port} 进行登录')
+        # 启动后自动打开浏览器
+        webbrowser.open(f"http://127.0.0.1:{free_port}")
         # 定时启停
         time_start_stop()
         # 启动服务器
-        app.run(host='0.0.0.0', port=PORT, debug=False)
+        app.run(host='0.0.0.0', port=free_port, debug=False)
     except Exception as e:
         log('ERROR', f'服务器启动失败: {str(e)}')
     finally:

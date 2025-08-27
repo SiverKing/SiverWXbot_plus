@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox V2版本
 # 作者：https://siver.top
-version = "V2.5.7"
-version_log = "V2.5.7 fix:定时消息发送报错会终止程序的bug"
+version = "V2.5.8"
+version_log = "V2.5.8 feat:自动寻找空闲端口启动"
 
 import time
 import json
