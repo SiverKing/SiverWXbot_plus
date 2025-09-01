@@ -1,0 +1,6 @@
+flask
+pywin32
+openai
+requests
+schedule
+wxautox
