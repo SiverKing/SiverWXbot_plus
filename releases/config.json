@@ -1,7 +1,8 @@
 {
     "api_sdk_list": [
         "OpenAI SDK",
-        "Dify"
+        "Dify",
+        "Coze"
     ],
     "api_sdk": "Dify",
     "api_key": "your_api_key",
