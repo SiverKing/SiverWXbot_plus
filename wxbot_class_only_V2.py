@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox V2版本
 # 作者：https://siver.top
-version = "V2.5.8"
-version_log = "V2.5.8 feat:自动寻找空闲端口启动"
+version = "V2.6.0"
+version_log = "V2.6.0 feat:新增支持扣子接口"
 
 import time
 import json
@@ -14,8 +14,10 @@ import requests
 from datetime import datetime, timedelta
 import random
 from logger import log
-import schedule
+import schedule # 定时任务库
 import os
+from cozepy import COZE_CN_BASE_URL # 扣子官方python库
+from cozepy import Coze, TokenAuth, Message, ChatStatus, MessageContentType, ChatEventType
 
 from wxautox import WeChat  # plus版需要找wxauto作者购买 https://github.com/cluic/wxauto
 is_wxautox = True  # 是否为wxautox 即plus版本
@@ -413,6 +415,48 @@ class DifyAPI:
                     error_info["response_text"] = e.response.text
                     
             return {"success": False, "error": error_info}
+class CozeAPI:
+    """Coze API 交互类"""
+    def __init__(self, config):
+        self.config = config
+        self.DS_NOW_MOD = config.model1  # 默认使用模型1
+        self.bot_id = config.model1 # 在 Coze 中创建一个机器人实例，从网页链接中复制最后一个数字作为机器人的 ID 。
+        self.user_id = "SiverWxBot" # 机器人用户标识
+        self.api_key = config.api_key
+        self.base_url = COZE_CN_BASE_URL # 采用扣子官方定义api地址
+        # self.client = OpenAI(api_key=config.api_key, base_url=config.base_url)
+        self.coze = Coze(auth=TokenAuth(token=self.api_key), base_url=self.base_url) # 实例化扣子api对象
+
+    def chat(self, message, model=None, stream=True, prompt=None):
+        """
+        调用 Coze API 获取对话回复
+        """
+        # 调用 coze.chat.stream 方法来创建一个聊天。该 create 方法属于流式传输类型。
+        # 聊天，并将返回一个聊天迭代器。开发人员应使用该迭代器进行迭代以获取……
+        # 记录聊天事件并进行处理。
+        chunk_message = ""
+        try:
+            for event in self.coze.chat.stream(
+                bot_id=self.bot_id,
+                user_id=self.user_id+str(time.time()),
+                additional_messages=[
+                    Message.build_user_question_text(message),
+                ],
+            ):
+                if event.event == ChatEventType.CONVERSATION_MESSAGE_DELTA:
+                    # print(event.message.content, end="", flush=True)
+                    chunk_message += event.message.content # 拼接流式回答
+                    
+
+                if event.event == ChatEventType.CONVERSATION_CHAT_COMPLETED:
+                    # print()
+                    log(f"token消耗:{event.chat.usage.token_count}")
+
+            log(f"扣子回复：{chunk_message}")
+            return chunk_message
+        except Exception as e:
+            log(level="ERROR", message=f"❌ 调用Coze接口错误: {e}")
+            return "API返回错误，请稍后再试"
 
 class WXBot:
     """微信机器人主类"""
@@ -428,6 +472,9 @@ class WXBot:
         elif self.config.api_sdk == "OpenAI SDK":
             log(message="使用OpenAI SDK")
             self.api = OpenAIAPI(self.config)
+        elif self.config.api_sdk == "Coze":
+            log(message="使用Coze API")
+            self.api = CozeAPI(self.config)
         else:
             log(level="ERROR", message="未配置API SDK, 默认使用OpenAI SDK")
             self.api = OpenAIAPI(self.config)
