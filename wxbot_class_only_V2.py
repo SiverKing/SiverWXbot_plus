@@ -21,8 +21,7 @@ from cozepy import Coze, TokenAuth, Message, ChatStatus, MessageContentType, Cha
 
 from wxautox import WeChat  # plus版需要找wxauto作者购买 https://github.com/cluic/wxauto
 is_wxautox = True  # 是否为wxautox 即plus版本
-from wxautox.msgs import FriendMessage
-from wxautox.msgs import SystemMessage
+from wxautox.msgs import *
 from wxautox import WxParam
 from wxautox.utils.useful import check_license
 WxParam.MESSAGE_HASH = True # 是否启用消息哈希值用于辅助判断消息，开启后会稍微影响性能，默认False
