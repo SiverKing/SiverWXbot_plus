@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox V2版本
 # 作者：https://siver.top
-version = "V2.6.0"
-version_log = "V2.6.0 feat:新增支持扣子接口"
+version = "V2.6.1"
+version_log = "V2.6.1 fix:修复coze Message类导入与wxautox Message类导入冲突的问题"
 
 import time
 import json
@@ -17,7 +17,7 @@ from logger import log
 import schedule # 定时任务库
 import os
 from cozepy import COZE_CN_BASE_URL # 扣子官方python库
-from cozepy import Coze, TokenAuth, Message, ChatStatus, MessageContentType, ChatEventType
+from cozepy import Coze, TokenAuth, Message as CozeMessage, ChatStatus, MessageContentType, ChatEventType
 
 from wxautox import WeChat  # plus版需要找wxauto作者购买 https://github.com/cluic/wxauto
 is_wxautox = True  # 是否为wxautox 即plus版本
@@ -439,7 +439,7 @@ class CozeAPI:
                 bot_id=self.bot_id,
                 user_id=self.user_id+str(time.time()),
                 additional_messages=[
-                    Message.build_user_question_text(message),
+                    CozeMessage.build_user_question_text(message),
                 ],
             ):
                 if event.event == ChatEventType.CONVERSATION_MESSAGE_DELTA:
