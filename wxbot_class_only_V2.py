@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox V2版本
 # 作者：https://siver.top
-version = "V4.0.0"
-version_log = "V4.0.0 up:更新为wxautox4 适配4微信"
+version = "V4.0.1"
+version_log = "V4.0.1 fix:适配新版本全局监听"
 
 import time
 import json
@@ -1141,7 +1141,9 @@ class WXBot:
                     self.all_Mode_listen_list.remove(listen_chat)
 
         def get_next_new_message():
-            messages_new = self.wx.GetNextNewMessage(filter_mute=True)
+            def Next_callback(msg):
+                log(message=f'收到消息：{msg.sender}: {msg.content}')
+            messages_new = self.wx.GetNextNewMessage(filter_mute=False, callback=Next_callback)
             chat = messages_new.get('chat_name')
             chat_type = messages_new.get('chat_type')
             msgs = messages_new.get('msg')
@@ -1156,7 +1158,6 @@ class WXBot:
                             self.add_chat_to_listen(chat)
                         else:
                             log(message=chat + '在监听列表')
-                        # for msg in new_msg:
                         self.process_message(self.wx.GetSubWindow(nickname=chat), msg)
 
         """全局监听模式"""
