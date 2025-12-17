@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox V2版本
 # 作者：https://siver.top
-version = "V2.6.1"
-version_log = "V2.6.1 fix:修复coze Message类导入与wxautox Message类导入冲突的问题"
+version = "V4.0.0"
+version_log = "V4.0.0 up:更新为wxautox4 适配4微信"
 
 import time
 import json
@@ -19,11 +19,11 @@ import os
 from cozepy import COZE_CN_BASE_URL # 扣子官方python库
 from cozepy import Coze, TokenAuth, Message as CozeMessage, ChatStatus, MessageContentType, ChatEventType
 
-from wxautox import WeChat  # plus版需要找wxauto作者购买 https://github.com/cluic/wxauto
+from wxautox4 import WeChat  # plus版需要找wxauto作者购买 https://github.com/cluic/wxauto
 is_wxautox = True  # 是否为wxautox 即plus版本
-from wxautox.msgs import *
-from wxautox import WxParam
-from wxautox.utils.useful import check_license
+from wxautox4.msgs import *
+from wxautox4 import WxParam
+from wxautox4.utils.useful import check_license
 WxParam.MESSAGE_HASH = True # 是否启用消息哈希值用于辅助判断消息，开启后会稍微影响性能，默认False
 WxParam.FORCE_MESSAGE_XBIAS = True # 是否强制重新自动获取X偏移量，如果设置为True，则每次启动都会重新获取，默认False
 '''
@@ -576,7 +576,7 @@ class WXBot:
         """监听模式回调"""
         try:
             # chat_name = chat.ChatInfo().get('chat_name')
-            text = datetime.now().strftime("%Y/%m/%d %H:%M:%S ") + f'类型：{msg.type} 属性：{msg.attr} 窗口：{chat.who} 发送人：{msg.sender_remark} - 消息：{msg.content}'
+            text = datetime.now().strftime("%Y/%m/%d %H:%M:%S ") + f'类型：{msg.type} 属性：{msg.attr} 窗口：{chat.who} 发送人：{msg.sender} - 消息：{msg.content}'
             log(message=text)
             """ # 有log本地文件记录，暂不重复写消息文件
             try:
