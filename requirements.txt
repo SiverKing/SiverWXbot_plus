@@ -3,5 +3,5 @@ pywin32
 openai
 requests
 schedule
-wxautox
+wxautox4
 cozepy
