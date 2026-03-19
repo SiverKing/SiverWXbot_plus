@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox V2版本
 # 作者：https://siver.top
 
-version = "V4.0.1"
-version_log = "V4.0.1 fix:适配新版本全局监听"
+version = "V4.1.1"
+version_log = "V4.1.1 add:README"
 
 # ============================================================
 # 标准库导入
@@ -326,12 +326,16 @@ class OpenAIAPI:
     def __init__(self, config):
         self.config = config
         self.DS_NOW_MOD = config.model1  # 当前使用的模型，默认为 model1
-        # 添加更详细的日志配置
+        # 添加更详细的日志配置和自定义 headers（用于备用方案）
         self.client = OpenAI(
             api_key=config.api_key,
             base_url=config.base_url,
             timeout=30.0,  # 设置超时时间
-            max_retries=2   # 设置重试次数
+            max_retries=2,  # 设置重试次数
+            default_headers={
+                "User-Agent": "Mozilla/5.0",
+                "Accept": "*/*"
+            }
         )
 
     def chat(self, message, model=None, stream=False, prompt=None):
@@ -361,26 +365,9 @@ class OpenAIAPI:
         except Exception as e:
             error_msg = str(e)
             error_type = type(e).__name__
-            log(level="ERROR", message=f"调用 API 出错 [{error_type}]: {error_msg}")
-
-            # 检查是否是 JSON 解析错误（通常意味着 API 返回了 HTML 而不是 JSON）
-            if "JSONDecodeError" in error_msg or "Expecting value" in error_msg:
-                log(level="ERROR", message=f"API 返回了非 JSON 格式的内容")
-                log(level="ERROR", message=f"可能原因：1) API 密钥失效 2) 触发了 Cloudflare 验证 3) API 服务异常")
-                log(level="ERROR", message=f"请检查：base_url={self.config.base_url}, model={model}")
-                return "API 返回格式错误，请检查 API 密钥和服务状态"
-
-            # 检查是否是超时错误
-            if "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
-                log(level="ERROR", message="API 请求超时，请检查网络连接或稍后重试")
-                return "API 请求超时，请稍后再试"
-
-            # 检查是否是连接错误
-            if "connection" in error_msg.lower() or "connect" in error_msg.lower():
-                log(level="ERROR", message="无法连接到 API 服务器，请检查网络和 base_url 配置")
-                return "无法连接到 API 服务器，请检查网络"
-
-            return f"API 调用失败: {error_type}"
+            log(level="WARN", message=f"Chat Completions API 调用失败 [{error_type}]: {error_msg}")
+            log(level="INFO", message="尝试备用方案（Responses API）")
+            return self._try_responses_api(message, model, stream, prompt)
 
         try:
             if stream:
@@ -416,8 +403,8 @@ class OpenAIAPI:
                     log(message=f"API 流式返回成功（共 {chunk_count} 个块）：{result[:100]}...")
                     return result
                 else:
-                    log(level="WARN", message=f"流式响应为空（收到 {chunk_count} 个块）")
-                    return "AI 未返回有效内容"
+                    log(level="WARN", message=f"流式响应为空（收到 {chunk_count} 个块），尝试备用方案")
+                    return self._try_responses_api(message, model, stream, prompt)
             else:
                 # 非流式模式：直接取 choices[0] 的消息内容
                 if response.choices and len(response.choices) > 0:
@@ -429,15 +416,50 @@ class OpenAIAPI:
                         log(message=f"API 非流式返回成功：{output[:100]}...")
                         return output
                     else:
-                        log(level="WARN", message="非流式响应内容为空")
-                        return "AI 未返回有效内容"
+                        log(level="WARN", message="非流式响应内容为空，尝试备用方案")
+                        return self._try_responses_api(message, model, stream, prompt)
                 else:
-                    log(level="ERROR", message="响应中没有 choices")
-                    return "API 返回格式异常"
+                    log(level="WARN", message="响应中没有 choices，尝试备用方案")
+                    return self._try_responses_api(message, model, stream, prompt)
         except Exception as e:
             error_type = type(e).__name__
-            log(level="ERROR", message=f"解析 API 响应出错 [{error_type}]: {str(e)}")
-            return "解析响应失败，请稍后再试"
+            log(level="WARN", message=f"解析 API 响应出错 [{error_type}]: {str(e)}，尝试备用方案")
+            return self._try_responses_api(message, model, stream, prompt)
+
+    def _try_responses_api(self, message, model, stream, prompt):
+        """
+        备用方案：使用 Responses API 调用。
+        当 Chat Completions API 返回非 JSON 格式时自动降级到此方案。
+        注意：备用方案暂不支持流式输出，统一使用非流式模式。
+        """
+        try:
+            if stream:
+                log(level="WARN", message="备用方案不支持流式输出，将使用非流式模式")
+
+            log(message=f"备用方案：使用 Responses API, model={model}")
+            # Responses API 的 input 只接受字符串，将 prompt 拼接到消息中
+            input_text = f"这是prompt：{prompt}\n\n这是消息：{message}" if prompt and prompt.strip() else message
+
+            response = self.client.responses.create(
+                model=model,
+                input=input_text,
+                reasoning={"effort": "none"}
+            )
+
+            # 从 output 中提取文本内容
+            if response.output and len(response.output) > 0:
+                output_item = response.output[0]
+                if hasattr(output_item, 'content') and output_item.content:
+                    text = output_item.content[0].text
+                    log(message=f"备用方案返回成功：{text[:100]}...")
+                    return text
+
+            log(level="WARN", message="备用方案响应内容为空")
+            return "AI 未返回有效内容"
+
+        except Exception as e:
+            log(level="ERROR", message=f"备用方案也失败 [{type(e).__name__}]: {str(e)}")
+            return "API 接口失效，请联系管理员"
 
 
 class DifyAPI:

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/Siver/.claude/plugins/cache/ui-ux-pro-max-skill/ui-ux-pro-max/2.0.1/.claude/skills/ui-ux-pro-max/**)",
+      "Bash(python scripts/search.py \"admin dashboard bot management tool Chinese minimal clean\" --design-system -p \"WXBot Dashboard\")"
+    ]
+  }
+}
