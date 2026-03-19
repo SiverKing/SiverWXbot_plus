@@ -104,6 +104,8 @@
 
 ### 安装步骤
 
+> 💡 **懒得折腾？** 直接从 [Releases](../../releases) 下载打包好的 `.exe`，解压即用，无需安装 Python 和依赖。
+
 1. **克隆项目**
 ```bash
 git clone https://github.com/yourusername/wxbot_plus.git
