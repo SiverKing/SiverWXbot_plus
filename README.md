@@ -1,19 +1,22 @@
 # 🤖 Siver 微信机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.2.0-blue.svg)](https://github.com/yourusername/wxbot_plus)
+[![Version](https://img.shields.io/badge/version-V4.3.1-blue.svg)](https://github.com/yourusername/wxbot_plus)
 [![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
 
 > 一个功能完整、架构清晰的微信机器人框架，支持多 AI 平台接入、灵活的监听模式、丰富的管理命令和智能的消息处理流程。
 
 **作者**: [Siver](https://siver.top)
-**当前版本**: V4.2.0 - 全新 UI + 自定义定时消息
+**当前版本**: V4.3.1 - 配置文件整理 + 打包路径修复
 
 ---
 
 ## ✨ 核心特性
 
 ### 🎯 多 AI 平台支持
+- **DusAPI** ⭐ 推荐 - 兼容 Claude、GPT 等全系模型，国内稳定低延迟，一个 Key 搞定所有需求
+  - 官网：[dusapi.com](https://dusapi.com)
+  - 兼容性最好，速度最快，使用最丝滑顺畅
 - **OpenAI SDK** - 兼容所有 OpenAI 格式的 API（DeepSeek、通义千问等）
   - 支持流式和非流式输出
   - 支持思维链内容（reasoning_content）
@@ -63,8 +66,9 @@
 - 系统管理：更新配置、查看状态、查看版本
 
 ### 🌐 Web 管理界面
+- **状态面板** - 首页实时展示运行状态、消息统计、在线时长等关键指标，5 秒自动刷新
 - **全新 UI** - 侧边栏导航 + 分类标签页，配置一目了然
-- **用户认证** - 安全的登录系统
+- **用户认证** - 账密从代码分离到 `admin.json`，修改无需改代码
 - **实时日志** - 底部可折叠日志面板，支持级别筛选（INFO/SUCCESS/WARNING/ERROR）
 - **配置管理** - 在线修改所有配置，保存即生效
 - **监听模式提示** - 黑名单/白名单模式醒目提示
@@ -72,6 +76,21 @@
 ### 📧 告警通知
 - **邮件告警** - 发生错误时自动发送邮件通知
 - **离线检测** - 微信离线时自动告警
+
+---
+
+## 🌟 推荐使用 DusAPI
+
+> **为什么推荐 DusAPI？**
+
+| | DusAPI | 直连 OpenAI |
+|---|---|---|
+| 国内访问 | ✅ 稳定低延迟 | ❌ 需要代理 |
+| 模型覆盖 | ✅ Claude + GPT 全系 | ⚠️ 仅 OpenAI |
+| 一个 Key | ✅ 搞定所有模型 | ❌ 各平台单独申请 |
+| 兼容性 | ✅ 最优 | ⚠️ 部分接口差异 |
+
+👉 前往 [dusapi.com](https://dusapi.com) 注册获取 Key，支持 Claude 3.5/3.7、GPT-4o、DeepSeek 等主流模型。
 
 ---
 
@@ -164,7 +183,7 @@ python web_server.py
 
 | 配置项 | 类型 | 说明 |
 |--------|------|------|
-| `api_sdk` | string | AI 接口类型：`OpenAI` / `Dify` / `Coze` |
+| `api_sdk` | string | AI 接口类型：`DusAPI`（推荐）/ `OpenAI SDK` / `Dify` / `Coze` |
 | `api_key` | string | AI 平台的 API 密钥 |
 | `base_url` | string | API 请求基础地址 |
 | `model1` / `model2` | string | 模型标识，可通过命令切换 |
@@ -183,6 +202,17 @@ python web_server.py
 | `关键词回复` | object | 关键词→回复内容映射 |
 | `每日定时消息开关` | boolean | 是否开启定时消息 |
 | `定时消息列表` | array | 定时任务列表，支持 once/daily/weekly/monthly/custom |
+
+### admin.json 账密文件
+
+位于 `config/admin.json`，首次启动自动创建，直接编辑后重启服务生效，也可在面板「账号密码」页在线修改：
+
+```json
+{
+    "username": "admin",
+    "password": "123456"
+}
+```
 
 ### email.txt 配置文件
 
@@ -262,7 +292,8 @@ python web_server.py
 
 3. 默认账号：
    - 用户名：`admin`
-   - 密码：`admin`
+   - 密码：`123456`
+   - 账密保存在 `config/admin.json`，直接修改文件后重启生效
 
 ---
 
@@ -275,10 +306,12 @@ wxbot_plus/
 ├── logger.py                  # 日志模块
 ├── email_send.py              # 邮件发送模块
 ├── requirements.txt           # 依赖列表
-├── config.json                # 配置文件（自动生成）
-├── email.txt                  # 邮件配置（自动生成）
+├── config/                    # 配置文件目录（自动创建）
+│   ├── config.json            # 机器人配置
+│   ├── admin.json             # Web 管理账密
+│   └── email.txt              # 邮件告警配置
+├── panel_logs/                # 运行日志目录（自动创建）
 ├── templates/                 # Web 界面模板
-├── logs/                      # 日志文件目录
 └── wxauto_logs/               # wxautox 日志目录
 ```
 
@@ -356,6 +389,21 @@ Dify 平台接口类，通过 HTTP 请求调用 Dify 对话工作流。
 
 ## 📝 开发日志
 
+### V4.3.1 (2026-03-20)
+- 配置文件统一整理到 `config/` 目录，日志目录重命名为 `panel_logs/`
+- 修复打包为 exe 后路径错误导致配置文件无法创建的问题（所有模块统一使用 exe 所在目录作为基础路径）
+- 新增面板内修改后台账号密码功能
+- 新增面板内修改报错邮箱配置功能
+
+### V4.3.0 (2026-03-19)
+- 新增 Web 状态面板：首页实时展示运行状态、消息统计、运行时长、监听模式等，5 秒自动刷新
+- 新增 DusAPI 支持：兼容 Claude、GPT 全系模型，国内稳定低延迟
+- Web 管理账密从硬编码抽离到 `admin.json`，修改无需改代码
+- 登录页配色重设计，与管理面板风格统一
+
+### V4.2.1 (2026-03-19)
+- 修复：创建默认配置文件
+
 ### V4.2.0 (2026-03-19)
 - Web 管理界面全面重构：侧边栏导航 + 分类标签页
 - 日志面板改为底部可折叠面板，支持级别筛选
@@ -363,7 +411,7 @@ Dify 平台接口类，通过 HTTP 请求调用 Dify 对话工作流。
 - 监听模式增加醒目的黑名单/白名单提示
 
 ### V4.1.1 (2026-03-18)
-- 优化 OpenAI 兼容接口调用，兼容 Dusapi
+- 优化 OpenAI 兼容接口调用，兼容 DusAPI
 - 添加 README 文档
 
 ### V4.1.0
@@ -397,9 +445,9 @@ Dify 平台接口类，通过 HTTP 请求调用 Dify 对话工作流。
    - 建议配置备用 API
 
 4. **安全建议**
-   - 不要将 `config.json` 和 `email.txt` 提交到公共仓库
+   - 不要将 `config/` 目录（含 `config.json`、`admin.json`、`email.txt`）提交到公共仓库
    - 定期更换 API 密钥
-   - Web 管理界面建议修改默认密码
+   - 修改 `config/admin.json` 中的默认密码（默认：`123456`），或在面板「账号密码」页修改
 
 5. **性能优化**
    - 白名单模式性能优于黑名单模式

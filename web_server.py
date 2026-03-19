@@ -12,7 +12,6 @@ import os
 from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta
 import logging
-from logging.handlers import RotatingFileHandler
 from functools import wraps
 import threading
 from wxbot_class_only_V2 import WXBot
@@ -27,10 +26,16 @@ import email_send
 # fix_paths.py
 import sys
 def resource_path(relative_path):
-    """ 获取资源的绝对路径"""
+    """ 获取资源的绝对路径（打包后指向 _MEIPASS，用于只读资源如 templates）"""
     if hasattr(sys, '_MEIPASS'):
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.join(os.path.abspath("."), relative_path)
+
+def base_dir():
+    """获取运行时基础目录（打包后为 exe 所在目录，开发时为脚本所在目录）"""
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.dirname(sys.executable)
+    return os.path.abspath(".")
 
 # 初始化 Flask 应用
 app = Flask(__name__, template_folder=resource_path('templates'))
@@ -47,13 +52,38 @@ app.config.update(
 # 配置参数
 app.secret_key = 'your_secret_key_here'
 PORT = 10001
-CONFIG_FILE = 'config.json'
+CONFIG_FILE = os.path.join(base_dir(), 'config', 'config.json')
+ADMIN_FILE  = os.path.join(base_dir(), 'config', 'admin.json')
+EMAIL_FILE  = os.path.join(base_dir(), 'config', 'email.txt')
 
-# 用户认证信息
-USERS = {
-    "admin": "admin",
-    "user": "123456"
-}
+# 启动时确保目录存在
+os.makedirs(os.path.join(base_dir(), 'config'),      exist_ok=True)
+os.makedirs(os.path.join(base_dir(), 'panel_logs'),  exist_ok=True)
+
+def load_admin_credentials():
+    """从 admin.json 读取账密，文件不存在时自动创建默认账密文件"""
+    default = {"username": "admin", "password": "123456"}
+    if not os.path.exists(ADMIN_FILE):
+        try:
+            with open(ADMIN_FILE, 'w', encoding='utf-8') as f:
+                json.dump(default, f, ensure_ascii=False, indent=4)
+            log('WARNING', f'账密文件不存在，已创建默认账密文件: {ADMIN_FILE}，请及时修改密码')
+        except Exception as e:
+            log('ERROR', f'创建账密文件失败: {e}，使用默认账密')
+        return default
+    try:
+        with open(ADMIN_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return {
+            "username": data.get("username", default["username"]),
+            "password": data.get("password", default["password"]),
+        }
+    except Exception as e:
+        log('ERROR', f'读取账密文件失败: {e}，使用默认账密')
+        return default
+
+# 用户认证信息（从 admin.json 加载）
+USERS = load_admin_credentials()
 
 # 日志颜色映射
 LOG_COLORS = {
@@ -122,7 +152,7 @@ def login():
                 result |= ord(x) ^ ord(y)
             return result == 0
 
-        if username == USERS['admin'] and safe_str_cmp(USERS['user'], password):
+        if username == USERS['username'] and safe_str_cmp(USERS['password'], password):
             session['logged_in'] = True
             session['username'] = username
             session.permanent = True
@@ -155,7 +185,7 @@ def dashboard():
         config['api_key_display'] = '*' * len(config['api_key'])
 
     # 兼容默认
-    config.setdefault('api_sdk_list', ["OpenAI SDK", "Dify"])
+    config.setdefault('api_sdk_list', ["OpenAI SDK", "Dify", "Coze", "DusAPI"])
     config.setdefault('api_sdk', config['api_sdk_list'][0])
 
     # —— 新增字段默认值（关键）——
@@ -362,6 +392,20 @@ def stop_bot():
         log('WARNING', '状态：机器人未运行')
         return jsonify({'status': 'error', 'message': '机器人未运行'})
 
+@app.route('/get_status')
+@login_required
+def get_status():
+    global bot, bot_thread
+    if bot_thread and bot_thread.is_alive() and bot:
+        try:
+            status = bot.get_status()
+            status['bot_running'] = True
+            return jsonify({'status': 'success', 'data': status})
+        except Exception as e:
+            return jsonify({'status': 'success', 'data': {'bot_running': True, 'error': str(e)}})
+    else:
+        return jsonify({'status': 'success', 'data': {'bot_running': False}})
+
 @app.route('/load_config')
 @login_required
 def load_config():
@@ -371,6 +415,74 @@ def load_config():
     if 'api_key' in config:
         config['api_key_display'] = '*' * len(config['api_key'])
     return jsonify({'status': 'success', 'config': config})
+
+@app.route('/get_admin_config')
+@login_required
+def get_admin_config():
+    try:
+        with open(ADMIN_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return jsonify({'status': 'success', 'username': data.get('username', '')})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/save_admin_config', methods=['POST'])
+@login_required
+def save_admin_config():
+    global USERS
+    try:
+        data = request.get_json()
+        username = data.get('username', '').strip()
+        password = data.get('password', '').strip()
+        if not username or not password:
+            return jsonify({'status': 'error', 'message': '用户名和密码不能为空'})
+        new_creds = {'username': username, 'password': password}
+        with open(ADMIN_FILE, 'w', encoding='utf-8') as f:
+            json.dump(new_creds, f, ensure_ascii=False, indent=4)
+        USERS = new_creds
+        log('SUCCESS', f'后台账号已更新，用户名：{username}')
+        return jsonify({'status': 'success', 'message': '账号密码已保存，下次登录生效'})
+    except Exception as e:
+        log('ERROR', f'保存账号密码失败: {e}')
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/get_email_config')
+@login_required
+def get_email_config():
+    try:
+        with open(EMAIL_FILE, 'r', encoding='utf-8') as f:
+            lines = [line.strip() for line in f.readlines()]
+        return jsonify({
+            'status': 'success',
+            'host': lines[0] if len(lines) > 0 else '',
+            'port': lines[1] if len(lines) > 1 else '',
+            'user': lines[2] if len(lines) > 2 else '',
+            'pass': lines[3] if len(lines) > 3 else '',
+        })
+    except FileNotFoundError:
+        return jsonify({'status': 'success', 'host': '', 'port': '', 'user': '', 'pass': ''})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/save_email_config', methods=['POST'])
+@login_required
+def save_email_config():
+    try:
+        data = request.get_json()
+        host = data.get('host', '').strip()
+        port = data.get('port', '').strip()
+        user = data.get('user', '').strip()
+        pwd  = data.get('pass', '').strip()
+        if not all([host, port, user, pwd]):
+            return jsonify({'status': 'error', 'message': '所有字段均不能为空'})
+        content = f"{host}\n{port}\n{user}\n{pwd}\n"
+        with open(EMAIL_FILE, 'w', encoding='utf-8') as f:
+            f.write(content)
+        log('SUCCESS', f'邮件配置已更新，SMTP: {host}:{port}，账号: {user}')
+        return jsonify({'status': 'success', 'message': '邮件配置已保存'})
+    except Exception as e:
+        log('ERROR', f'保存邮件配置失败: {e}')
+        return jsonify({'status': 'error', 'message': str(e)})
 
 def time_start_stop():
     """定时启停"""
@@ -462,18 +574,18 @@ def find_free_port(start_port=10001, max_port=11000):
 
 def main():
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.WARNING,
         format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[RotatingFileHandler('app.log', maxBytes=1024*1024, backupCount=5)]
+        handlers=[logging.NullHandler()]
     )
     log('INFO', '服务器启动中...')
     try:
         if not os.path.exists(CONFIG_FILE):
             default_config = {
-                "api_sdk_list": ["OpenAI SDK", "Dify", "Coze"],
-                "api_sdk": "OpenAI SDK",
+                "api_sdk_list": ["OpenAI SDK", "Dify", "Coze", "DusAPI"],
+                "api_sdk": "DusAPI",
                 "api_key": "your-api-key",
-                "base_url": "https://api.example.com/v1",
+                "base_url": "https://api.dusapi.com/",
                 "model1": "模型名称1",
                 "model2": "模型名称2",
                 "prompt": "你是一个ai回复助手，请根据用户的问题给出回答",

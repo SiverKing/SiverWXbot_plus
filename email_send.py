@@ -15,8 +15,15 @@ import smtplib
 from email.mime.text import MIMEText
 from email.header import Header
 import time
+import os
+import sys
 
-email_path = '.\\email.txt'
+def _base_dir():
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.dirname(sys.executable)
+    return os.path.abspath(".")
+
+email_path = os.path.join(_base_dir(), 'config', 'email.txt')
 
 def read_config(config_path=email_path):
     """从配置文件读取SMTP参数，如果不存在或内容不完整，则创建默认配置文件"""
@@ -35,6 +42,7 @@ def read_config(config_path=email_path):
         print(f"配置文件读取失败: {str(e)}\n正在创建默认配置文件：{config_path}")
         default_content = "smtp.qq.com\n465\n1234567890@qq.com\nsqmpasswordsqm\n\n\n第一行填发件人邮箱的SMTP服务器地址\n第二行填发件人邮箱的SMTP服务器端口\n第三行填写发件人邮箱\n第四行填写邮箱授权码或密码/qq邮箱为授权码"
         try:
+            os.makedirs(os.path.dirname(config_path), exist_ok=True)
             with open(config_path, 'w', encoding='utf-8') as f:
                 f.write(default_content)
             print(f"默认配置文件email.txt已创建：{config_path}")

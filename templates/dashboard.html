@@ -9,70 +9,72 @@
 <link href="https://s4.zstatic.net/npm/summernote@0.8.18/dist/summernote-lite.min.css" rel="stylesheet">
 <style>
 :root {
-  --primary: #2563EB;
-  --primary-light: #3B82F6;
-  --primary-dark: #1D4ED8;
-  --secondary: #6a11cb;
-  --accent: #059669;
-  --bg: #F1F5F9;
+  --primary: #07C160;
+  --primary-light: #38D98A;
+  --primary-dark: #06AD56;
+  --secondary: #576B95;
+  --accent: #07C160;
+  --bg: #F7F7F7;
   --card: #FFFFFF;
-  --card-fg: #0F172A;
-  --muted: #64748B;
-  --muted-bg: #F1F5FD;
-  --border: #E2E8F0;
-  --success: #22C55E;
-  --danger: #EF4444;
-  --warning: #F59E0B;
-  --info: #0EA5E9;
-  --radius: 12px;
+  --card-fg: #191919;
+  --muted: #888888;
+  --muted-bg: #F2F2F2;
+  --border: #E5E5E5;
+  --success: #07C160;
+  --danger: #FA5151;
+  --warning: #FFC300;
+  --info: #10AEFF;
+  --radius: 8px;
   --shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
   --shadow-md: 0 4px 6px -1px rgba(0,0,0,.07), 0 2px 4px -2px rgba(0,0,0,.05);
   --sidebar-w: 220px;
   --topbar-h: 56px;
   --logbar-h: 44px;
+  --sidebar-bg: #2C2C2C;
+  --sidebar-fg: #C8C8C8;
 }
 * { box-sizing: border-box; }
 body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 0; color: var(--card-fg); }
 
 /* ===== Topbar ===== */
 .topbar {
-  height: var(--topbar-h); background: linear-gradient(135deg, var(--secondary) 0%, var(--primary) 100%);
+  height: var(--topbar-h); background: var(--sidebar-bg);
   display: flex; align-items: center; justify-content: space-between; padding: 0 24px;
-  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100; border-bottom: 1px solid #3a3a3a;
 }
 .topbar .brand { color: #fff; font-weight: 700; font-size: 16px; display: flex; align-items: center; gap: 8px; }
-.topbar .brand i { font-size: 20px; }
+.topbar .brand i { font-size: 20px; color: var(--primary); }
 .topbar .user-area { display: flex; align-items: center; gap: 12px; }
-.topbar .user-area span { color: rgba(255,255,255,.85); font-size: 13px; }
-.topbar .user-area a { color: rgba(255,255,255,.85); font-size: 13px; text-decoration: none; border: 1px solid rgba(255,255,255,.3); padding: 4px 12px; border-radius: 6px; transition: all .2s; }
-.topbar .user-area a:hover { background: rgba(255,255,255,.15); color: #fff; }
+.topbar .user-area span { color: rgba(255,255,255,.75); font-size: 13px; }
+.topbar .user-area a { color: rgba(255,255,255,.75); font-size: 13px; text-decoration: none; border: 1px solid rgba(255,255,255,.2); padding: 4px 12px; border-radius: 6px; transition: all .2s; }
+.topbar .user-area a:hover { background: rgba(255,255,255,.1); color: #fff; }
 
 /* ===== Sidebar ===== */
 .sidebar {
   position: fixed; top: var(--topbar-h); left: 0; bottom: 0; width: var(--sidebar-w);
-  background: var(--card); border-right: 1px solid var(--border); padding: 16px 0; overflow-y: auto; z-index: 90;
+  background: var(--sidebar-bg); border-right: 1px solid #3a3a3a; padding: 16px 0; overflow-y: auto; z-index: 90;
 }
 .sidebar .nav-item { padding: 0 12px; margin-bottom: 2px; }
 .sidebar .nav-link {
-  display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px;
-  color: var(--muted); font-size: 13.5px; font-weight: 500; transition: all .15s; cursor: pointer; text-decoration: none;
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 6px;
+  color: var(--sidebar-fg); font-size: 13.5px; font-weight: 500; transition: all .15s; cursor: pointer; text-decoration: none;
 }
 .sidebar .nav-link i { font-size: 16px; width: 20px; text-align: center; }
-.sidebar .nav-link:hover { background: var(--muted-bg); color: var(--card-fg); }
+.sidebar .nav-link:hover { background: rgba(255,255,255,.08); color: #fff; }
 .sidebar .nav-link.active { background: var(--primary); color: #fff; }
 .sidebar .nav-link.active i { color: #fff; }
-.sidebar .nav-divider { height: 1px; background: var(--border); margin: 12px 16px; }
+.sidebar .nav-divider { height: 1px; background: #3a3a3a; margin: 12px 16px; }
 
 /* ===== Main Content ===== */
 .main { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 24px 28px 340px 28px; min-height: calc(100vh - var(--topbar-h)); overflow-y: auto; }
 
 /* ===== Action Bar ===== */
 .action-bar { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; align-items: center; }
-.action-bar .btn { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13.5px; padding: 8px 20px; border-radius: 8px; border: none; transition: all .2s; }
+.action-bar .btn { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13.5px; padding: 8px 20px; border-radius: 6px; border: none; transition: all .2s; }
 .action-bar .btn-start { background: var(--success); color: #fff; }
-.action-bar .btn-start:hover { background: #16A34A; color: #fff; }
+.action-bar .btn-start:hover { background: var(--primary-dark); color: #fff; }
 .action-bar .btn-stop { background: var(--danger); color: #fff; }
-.action-bar .btn-stop:hover { background: #DC2626; color: #fff; }
+.action-bar .btn-stop:hover { background: #e04040; color: #fff; }
 .action-bar .btn-load { background: var(--card); color: var(--card-fg); border: 1px solid var(--border); }
 .action-bar .btn-load:hover { background: var(--muted-bg); }
 .action-bar .btn-save { background: var(--primary); color: #fff; }
@@ -88,18 +90,18 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
 .cfg-card-header .desc { font-size: 12.5px; color: var(--muted); margin-left: auto; }
 .cfg-label { font-size: 13px; font-weight: 600; color: var(--card-fg); margin-bottom: 6px; }
 .cfg-hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
-.form-control, .form-select { border-radius: 8px; border: 1px solid var(--border); font-size: 13.5px; padding: 8px 12px; transition: border-color .15s, box-shadow .15s; }
-.form-control:focus, .form-select:focus { border-color: var(--primary-light); box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+.form-control, .form-select { border-radius: 6px; border: 1px solid var(--border); font-size: 13.5px; padding: 8px 12px; transition: border-color .15s, box-shadow .15s; background: #fff; color: var(--card-fg); }
+.form-control:focus, .form-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(7,193,96,.12); background: #fff; color: var(--card-fg); outline: none; }
 .form-check-input:checked { background-color: var(--primary); border-color: var(--primary); }
-.form-check-label { font-size: 13.5px; }
+.form-check-label { font-size: 13.5px; color: var(--card-fg); }
 
 /* ===== List Items ===== */
 .list-item { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .list-item input, .list-item textarea { flex: 1; }
-.list-item .btn-rm { width: 36px; height: 36px; min-width: 36px; display: flex; align-items: center; justify-content: center; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--danger); font-size: 14px; cursor: pointer; transition: all .15s; padding: 0; }
-.list-item .btn-rm:hover { background: #FEF2F2; border-color: var(--danger); }
-.btn-add { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 600; color: var(--primary); background: var(--muted-bg); border: 1px dashed var(--primary-light); border-radius: 8px; padding: 6px 14px; cursor: pointer; transition: all .15s; }
-.btn-add:hover { background: #DBEAFE; }
+.list-item .btn-rm { width: 36px; height: 36px; min-width: 36px; display: flex; align-items: center; justify-content: center; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--danger); font-size: 14px; cursor: pointer; transition: all .15s; padding: 0; }
+.list-item .btn-rm:hover { background: #FFF0F0; border-color: var(--danger); }
+.btn-add { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 600; color: var(--primary); background: #F0FBF5; border: 1px dashed var(--primary); border-radius: 6px; padding: 6px 14px; cursor: pointer; transition: all .15s; }
+.btn-add:hover { background: #E0F7EC; }
 
 /* ===== Keyword Items ===== */
 .keyword-item { display: flex; gap: 8px; margin-bottom: 8px; align-items: flex-start; }
@@ -109,37 +111,37 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
 .scheduled-msg-item { background: var(--muted-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
 .weekday-btn { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; border: 1.5px solid var(--border); background: var(--card); font-size: 12.5px; font-weight: 600; color: var(--muted); cursor: pointer; transition: all .15s; }
 .weekday-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
-.weekday-btn:hover:not(.active) { border-color: var(--primary-light); color: var(--primary); }
+.weekday-btn:hover:not(.active) { border-color: var(--primary); color: var(--primary); }
 
 /* ===== Log Panel ===== */
-.log-panel { position: fixed; bottom: 0; left: var(--sidebar-w); right: 0; z-index: 80; background: #1E293B; border-top: 1px solid #334155; transition: height .3s ease; }
+.log-panel { position: fixed; bottom: 0; left: var(--sidebar-w); right: 0; z-index: 80; background: #1a1a1a; border-top: 1px solid #333; transition: height .3s ease; }
 .log-panel.collapsed { height: var(--logbar-h); }
 .log-panel.expanded { height: 320px; }
 .log-toolbar { height: var(--logbar-h); display: flex; align-items: center; justify-content: space-between; padding: 0 16px; cursor: pointer; user-select: none; }
-.log-toolbar .log-title { color: #94A3B8; font-size: 12.5px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.log-toolbar .log-title { color: #888; font-size: 12.5px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .log-toolbar .log-title i { font-size: 14px; }
 .log-toolbar .log-actions { display: flex; align-items: center; gap: 8px; }
-.log-toolbar .log-actions .filter-btn { padding: 2px 10px; border-radius: 4px; border: 1px solid #475569; background: transparent; color: #94A3B8; font-size: 11px; cursor: pointer; transition: all .15s; }
-.log-toolbar .log-actions .filter-btn:hover, .log-toolbar .log-actions .filter-btn.active { background: #334155; color: #E2E8F0; border-color: #64748B; }
-.log-toolbar .log-actions .icon-btn { background: none; border: none; color: #94A3B8; font-size: 14px; cursor: pointer; padding: 4px; }
-.log-toolbar .log-actions .icon-btn:hover { color: #E2E8F0; }
+.log-toolbar .log-actions .filter-btn { padding: 2px 10px; border-radius: 4px; border: 1px solid #444; background: transparent; color: #888; font-size: 11px; cursor: pointer; transition: all .15s; }
+.log-toolbar .log-actions .filter-btn:hover, .log-toolbar .log-actions .filter-btn.active { background: #2a2a2a; color: #ddd; border-color: #666; }
+.log-toolbar .log-actions .icon-btn { background: none; border: none; color: #888; font-size: 14px; cursor: pointer; padding: 4px; }
+.log-toolbar .log-actions .icon-btn:hover { color: #ddd; }
 .log-body { height: calc(100% - var(--logbar-h)); overflow-y: auto; padding: 0 16px 12px; font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace; font-size: 12px; line-height: 1.7; }
 .log-body::-webkit-scrollbar { width: 6px; }
-.log-body::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+.log-body::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
 .log-entry { padding: 2px 0; display: flex; align-items: flex-start; gap: 8px; }
-.log-entry .log-time { color: #64748B; white-space: nowrap; min-width: 140px; }
+.log-entry .log-time { color: #555; white-space: nowrap; min-width: 140px; }
 .log-entry .log-badge { display: inline-block; padding: 0 6px; border-radius: 3px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; min-width: 52px; text-align: center; }
-.log-badge.log-info { background: rgba(14,165,233,.15); color: #38BDF8; }
-.log-badge.log-success { background: rgba(34,197,94,.15); color: #4ADE80; }
-.log-badge.log-warning { background: rgba(245,158,11,.15); color: #FBBF24; }
-.log-badge.log-error { background: rgba(239,68,68,.15); color: #F87171; }
-.log-badge.log-debug { background: rgba(148,163,184,.15); color: #94A3B8; }
-.log-entry .log-msg { color: #CBD5E1; word-break: break-all; }
+.log-badge.log-info { background: rgba(16,174,255,.15); color: #10AEFF; }
+.log-badge.log-success { background: rgba(7,193,96,.15); color: #07C160; }
+.log-badge.log-warning { background: rgba(255,195,0,.15); color: #FFC300; }
+.log-badge.log-error { background: rgba(250,81,81,.15); color: #FA5151; }
+.log-badge.log-debug { background: rgba(136,136,136,.15); color: #888; }
+.log-entry .log-msg { color: #bbb; word-break: break-all; }
 
 /* ===== Switch Row ===== */
-.switch-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--muted-bg); border-radius: 8px; margin-bottom: 12px; }
+.switch-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--muted-bg); border-radius: 6px; margin-bottom: 12px; }
 .switch-row .form-check-input { margin: 0; }
-.switch-row label { margin: 0; font-size: 13.5px; font-weight: 500; }
+.switch-row label { margin: 0; font-size: 13.5px; font-weight: 500; color: var(--card-fg); }
 .switch-row .switch-desc { font-size: 12px; color: var(--muted); margin-left: auto; }
 
 /* ===== Responsive ===== */
@@ -148,6 +150,15 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
   .main { margin-left: 0; padding: 16px; }
   .log-panel { left: 0; }
 }
+
+/* ===== Status Panel ===== */
+.stat-card { background: var(--muted-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 14px; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+.stat-icon { font-size: 22px; color: var(--primary); }
+.stat-val { font-size: 22px; font-weight: 700; color: var(--card-fg); line-height: 1; }
+.stat-label { font-size: 11.5px; color: var(--muted); font-weight: 500; }
+.detail-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--muted-bg); border-radius: 6px; border: 1px solid var(--border); }
+.detail-key { font-size: 12.5px; color: var(--muted); font-weight: 500; }
+.detail-val { font-size: 13px; color: var(--card-fg); font-weight: 600; max-width: 55%; text-align: right; word-break: break-all; }
 </style>
 </head>
 <body>
@@ -162,7 +173,9 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
 
 <!-- ===== Sidebar ===== -->
 <nav class="sidebar">
-  <div class="nav-item"><a class="nav-link active" data-tab="tab-api"><i class="bi bi-cloud"></i> API 接口</a></div>
+  <div class="nav-item"><a class="nav-link active" data-tab="tab-status"><i class="bi bi-speedometer2"></i> 状态面板</a></div>
+  <div class="nav-divider"></div>
+  <div class="nav-item"><a class="nav-link" data-tab="tab-api"><i class="bi bi-cloud"></i> API 接口</a></div>
   <div class="nav-item"><a class="nav-link" data-tab="tab-prompt"><i class="bi bi-chat-square-text"></i> Prompt</a></div>
   <div class="nav-item"><a class="nav-link" data-tab="tab-admin"><i class="bi bi-shield-lock"></i> 管理员</a></div>
   <div class="nav-divider"></div>
@@ -173,6 +186,9 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
   <div class="nav-item"><a class="nav-link" data-tab="tab-keyword"><i class="bi bi-key"></i> 关键词回复</a></div>
   <div class="nav-item"><a class="nav-link" data-tab="tab-schedule"><i class="bi bi-alarm"></i> 定时消息</a></div>
   <div class="nav-item"><a class="nav-link" data-tab="tab-startstop"><i class="bi bi-clock-history"></i> 定时启停</a></div>
+  <div class="nav-divider"></div>
+  <div class="nav-item"><a class="nav-link" data-tab="tab-account"><i class="bi bi-person-gear"></i> 账号密码</a></div>
+  <div class="nav-item"><a class="nav-link" data-tab="tab-email"><i class="bi bi-envelope-at"></i> 报错邮箱</a></div>
 </nav>
 
 <!-- ===== Main ===== -->
@@ -187,8 +203,77 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
   </div>
 
   <form id="configForm">
+  <!-- ===== Tab: Status ===== -->
+  <div class="config-panel active" id="tab-status">
+    <div class="cfg-card">
+      <div class="cfg-card-header"><i class="bi bi-speedometer2"></i><h5>运行状态</h5><span class="desc" id="status-refresh-hint">每5秒自动刷新</span></div>
+      <!-- 运行状态大卡 -->
+      <div style="display:flex;align-items:center;gap:16px;padding:16px 20px;border-radius:8px;margin-bottom:20px;border:1px solid var(--border);background:var(--muted-bg);">
+        <div id="status-dot" style="width:14px;height:14px;border-radius:50%;background:#ccc;flex-shrink:0;"></div>
+        <div>
+          <div id="status-text" style="font-size:15px;font-weight:700;color:var(--card-fg);">加载中...</div>
+          <div id="status-sub" style="font-size:12px;color:var(--muted);margin-top:2px;"></div>
+        </div>
+        <div style="margin-left:auto;font-size:12px;color:var(--muted);" id="status-uptime"></div>
+      </div>
+      <!-- 统计卡片网格 -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:20px;">
+        <div class="stat-card" id="sc-received">
+          <div class="stat-icon"><i class="bi bi-envelope-arrow-down"></i></div>
+          <div class="stat-val" id="sv-received">-</div>
+          <div class="stat-label">收到消息</div>
+        </div>
+        <div class="stat-card" id="sc-replied">
+          <div class="stat-icon"><i class="bi bi-reply"></i></div>
+          <div class="stat-val" id="sv-replied">-</div>
+          <div class="stat-label">已回复</div>
+        </div>
+        <div class="stat-card" id="sc-listen">
+          <div class="stat-icon"><i class="bi bi-ear"></i></div>
+          <div class="stat-val" id="sv-listen">-</div>
+          <div class="stat-label">监听模式</div>
+        </div>
+        <div class="stat-card" id="sc-group">
+          <div class="stat-icon"><i class="bi bi-people"></i></div>
+          <div class="stat-val" id="sv-group">-</div>
+          <div class="stat-label">监听群组</div>
+        </div>
+        <div class="stat-card" id="sc-schedule">
+          <div class="stat-icon"><i class="bi bi-alarm"></i></div>
+          <div class="stat-val" id="sv-schedule">-</div>
+          <div class="stat-label">定时任务</div>
+        </div>
+        <div class="stat-card" id="sc-api">
+          <div class="stat-icon"><i class="bi bi-cloud"></i></div>
+          <div class="stat-val" id="sv-api" style="font-size:13px;">-</div>
+          <div class="stat-label">API SDK</div>
+        </div>
+      </div>
+      <!-- 详情行 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div class="detail-row"><span class="detail-key">微信账号</span><span class="detail-val" id="dv-nickname">-</span></div>
+        <div class="detail-row"><span class="detail-key">当前模型</span><span class="detail-val" id="dv-model">-</span></div>
+        <div class="detail-row"><span class="detail-key">启动时间</span><span class="detail-val" id="dv-start">-</span></div>
+        <div class="detail-row"><span class="detail-key">版本</span><span class="detail-val" id="dv-version">-</span></div>
+        <div class="detail-row"><span class="detail-key">最近消息</span><span class="detail-val" id="dv-lasttime">-</span></div>
+        <div class="detail-row"><span class="detail-key">最近发送者</span><span class="detail-val" id="dv-lastsender">-</span></div>
+      </div>
+    </div>
+  </div>
+
   <!-- ===== Tab: API ===== -->
-  <div class="config-panel active" id="tab-api">
+  <div class="config-panel" id="tab-api">
+    <!-- DusAPI 顶部广告横幅 -->
+    <div style="background:linear-gradient(135deg,#06AD56 0%,#07C160 100%);border-radius:8px;padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;gap:16px;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <i class="bi bi-stars" style="font-size:24px;color:#fff;flex-shrink:0;"></i>
+        <div>
+          <div style="color:#fff;font-weight:700;font-size:14px;margin-bottom:2px;">推荐使用 DusAPI · 兼容性更好，速度更快，使用更丝滑顺畅</div>
+          <div style="color:rgba(255,255,255,.85);font-size:12.5px;">支持 Claude、GPT 等全系模型，一个 Key 搞定所有需求，国内稳定低延迟畅快直连使用</div>
+        </div>
+      </div>
+      <a href="https://dusapi.com" target="_blank" style="flex-shrink:0;background:rgba(255,255,255,.25);color:#fff;border:1px solid rgba(255,255,255,.5);border-radius:6px;padding:7px 18px;font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap;transition:all .2s;" onmouseover="this.style.background='rgba(255,255,255,.35)'" onmouseout="this.style.background='rgba(255,255,255,.25)'">立即前往 →</a>
+    </div>
     <div class="cfg-card">
       <div class="cfg-card-header"><i class="bi bi-cloud"></i><h5>API 接口配置</h5><span class="desc">配置 AI 模型的接口参数</span></div>
       <div class="mb-3">
@@ -198,12 +283,20 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
           <option value="{{ sdk }}" {% if config.api_sdk == sdk %}selected{% endif %}>{{ sdk }}</option>
           {% endfor %}
         </select>
-        <div class="cfg-hint">选择 AI 服务提供商的 SDK 类型</div>
+        <div class="cfg-hint">选择 AI 服务提供商的 SDK 类型 · <span style="color:#07C160;font-weight:600;">推荐选择 DusAPI</span>，兼容性更好速度更快使用更丝滑顺畅 · <a href="https://dusapi.com" target="_blank" style="color:#07C160;">dusapi.com</a></div>
+      </div>
+      <!-- DusAPI 选中时的提示卡片 -->
+      <div id="dusapi-hint" style="display:{% if config.api_sdk == 'DusAPI' %}flex{% else %}none{% endif %};align-items:center;gap:10px;background:#F0FBF5;border:1px solid #B7EBD0;border-radius:6px;padding:12px 16px;margin-bottom:16px;">
+        <i class="bi bi-check-circle-fill" style="color:#07C160;font-size:18px;flex-shrink:0;"></i>
+        <div style="font-size:13px;color:#06AD56;">
+          已选择 <strong>DusAPI</strong> · 接口地址已自动填写 · 兼容性更好，速度更快，使用更丝滑顺畅 ·
+          <a href="https://dusapi.com" target="_blank" style="color:#07C160;font-weight:600;">前往 dusapi.com 获取 Key</a>
+        </div>
       </div>
       <div class="mb-3">
         <label class="cfg-label" for="api_key">API Key</label>
         <input type="password" class="form-control" id="api_key" name="api_key" value="{{ config.api_key_display }}">
-        <div class="cfg-hint">推荐使用 <a href="https://dusapi.com" target="_blank">Dusapi</a></div>
+        <div class="cfg-hint">推荐使用 <a href="https://dusapi.com" target="_blank" style="color:#07C160;font-weight:600;">DusAPI</a> · 兼容性更好，速度更快，使用更丝滑顺畅</div>
       </div>
       <div class="mb-3">
         <label class="cfg-label" for="base_url">Base URL</label>
@@ -296,7 +389,7 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
         <label class="cfg-label" for="group_welcome_random">随机欢迎概率</label>
         <div class="d-flex align-items-center gap-3">
           <input type="range" class="form-range flex-grow-1" id="group_welcome_random" name="group_welcome_random" min="0" max="1" step="0.01" value="{{ config.group_welcome_random }}">
-          <span id="group_welcome_random_number" style="min-width:48px;text-align:center;font-weight:600;">{{ config.group_welcome_random }}</span>
+          <span id="group_welcome_random_number" style="min-width:48px;text-align:center;font-weight:600;">{{ (config.group_welcome_random * 100) | int }}%</span>
         </div>
       </div>
       <div class="mb-3">
@@ -449,6 +542,69 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
     </div>
   </div>
 
+  <!-- ===== Tab: Account ===== -->
+  <div class="config-panel" id="tab-account">
+    <div class="cfg-card">
+      <div class="cfg-card-header"><i class="bi bi-person-gear"></i><h5>后台账号密码</h5><span class="desc">修改 Web 管理面板的登录账号</span></div>
+      <div class="mb-3">
+        <label class="cfg-label" for="acc-username">用户名</label>
+        <input type="text" class="form-control" id="acc-username" placeholder="请输入新用户名" autocomplete="off">
+      </div>
+      <div class="mb-3">
+        <label class="cfg-label" for="acc-password">新密码</label>
+        <input type="password" class="form-control" id="acc-password" placeholder="请输入新密码" autocomplete="new-password">
+      </div>
+      <div class="mb-4">
+        <label class="cfg-label" for="acc-password2">确认新密码</label>
+        <input type="password" class="form-control" id="acc-password2" placeholder="再次输入新密码" autocomplete="new-password">
+      </div>
+      <div id="acc-msg" style="display:none;font-size:13px;margin-bottom:12px;padding:8px 12px;border-radius:6px;"></div>
+      <button type="button" id="btn-save-account" class="btn btn-save" style="font-size:13.5px;padding:8px 24px;border-radius:6px;border:none;cursor:pointer;"><i class="bi bi-save"></i> 保存账号密码</button>
+      <div class="cfg-hint" style="margin-top:10px;">保存后下次登录时生效，当前会话不受影响。账密明文存储在 <code>admin.json</code> 中。</div>
+    </div>
+  </div>
+
+  <!-- ===== Tab: Email ===== -->
+  <div class="config-panel" id="tab-email">
+    <div class="cfg-card">
+      <div class="cfg-card-header"><i class="bi bi-envelope-at"></i><h5>报错邮箱配置</h5><span class="desc">机器人出错时自动发送告警邮件</span></div>
+      <!-- SMTP 提示 -->
+      <div style="display:flex;gap:10px;align-items:flex-start;background:#FFF8E6;border:1px solid #FFD666;border-radius:6px;padding:12px 14px;margin-bottom:20px;">
+        <i class="bi bi-info-circle-fill" style="color:#FFC300;font-size:16px;flex-shrink:0;margin-top:1px;"></i>
+        <div style="font-size:12.5px;color:#7A5800;line-height:1.7;">
+          使用前需要先开启邮箱的 SMTP 服务并获取授权码。<br>
+          不同邮箱提供商的开启方式不同，请自行搜索：<br>
+          <span style="font-weight:600;">「QQ邮箱 开启SMTP 授权码」</span>、
+          <span style="font-weight:600;">「163邮箱 开启SMTP 授权码」</span>、
+          <span style="font-weight:600;">「Gmail SMTP 应用专用密码」</span> 等关键词。
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-8 mb-3">
+          <label class="cfg-label" for="email-host">SMTP 服务器地址</label>
+          <input type="text" class="form-control" id="email-host" placeholder="例：smtp.qq.com">
+        </div>
+        <div class="col-4 mb-3">
+          <label class="cfg-label" for="email-port">端口</label>
+          <input type="number" class="form-control" id="email-port" placeholder="例：465">
+        </div>
+      </div>
+      <div class="mb-3">
+        <label class="cfg-label" for="email-user">发件人邮箱</label>
+        <input type="email" class="form-control" id="email-user" placeholder="例：yourname@qq.com">
+        <div class="cfg-hint">发件人同时也是收件人，报错邮件会发到这个邮箱</div>
+      </div>
+      <div class="mb-4">
+        <label class="cfg-label" for="email-pass">授权码 / 密码</label>
+        <input type="password" class="form-control" id="email-pass" placeholder="邮箱授权码，不是登录密码" autocomplete="new-password">
+        <div class="cfg-hint">QQ / 163 邮箱填授权码，Gmail 填应用专用密码，不是邮箱登录密码</div>
+      </div>
+      <div id="email-msg" style="display:none;font-size:13px;margin-bottom:12px;padding:8px 12px;border-radius:6px;"></div>
+      <button type="button" id="btn-save-email" class="btn btn-save" style="font-size:13.5px;padding:8px 24px;border-radius:6px;border:none;cursor:pointer;"><i class="bi bi-save"></i> 保存邮箱配置</button>
+      <div class="cfg-hint" style="margin-top:10px;">配置保存在 <code>email.txt</code> 中，保存后立即生效。</div>
+    </div>
+  </div>
+
   </form>
 </div>
 
@@ -500,6 +656,17 @@ $(function(){
     ]
   });
 
+  // ===== DusAPI 自动填写 base_url =====
+  $('#api_sdk').change(function(){
+    var sdk=$(this).val();
+    if(sdk==='DusAPI'){
+      $('#base_url').val('https://api.dusapi.com');
+      $('#dusapi-hint').show();
+    } else {
+      $('#dusapi-hint').hide();
+    }
+  });
+
   // ===== Sidebar Tab Switch =====
   $('.sidebar .nav-link').click(function(){
     $('.sidebar .nav-link').removeClass('active');
@@ -530,15 +697,7 @@ $(function(){
   // ===== Range Slider =====
   $('#group_welcome_random').on('input change',function(){
     var v=parseFloat($(this).val());
-    $('#group_welcome_random_number').val(v.toFixed(2));
-    $('#group_welcome_random_display').text(Math.round(v*100)+'%');
-  });
-  $('#group_welcome_random_number').on('input change',function(){
-    var v=parseFloat($(this).val());
-    if(isNaN(v))v=0; v=Math.min(1,Math.max(0,v));
-    $(this).val(v.toFixed(2));
-    $('#group_welcome_random').val(v);
-    $('#group_welcome_random_display').text(Math.round(v*100)+'%');
+    $('#group_welcome_random_number').text(Math.round(v*100)+'%');
   });
 
   // ===== Remove List Item =====
@@ -762,6 +921,92 @@ $(function(){
     e.stopPropagation();
     $logBody.empty();
     lastLogCount=0;
+  });
+
+  // ===== Status Panel =====
+  function refreshStatus(){
+    $.getJSON('/get_status', function(res){
+      if(!res || res.status !== 'success') return;
+      var d = res.data;
+      if(d.bot_running){
+        $('#status-dot').css('background', d.callback_is_die ? '#FA5151' : '#07C160');
+        $('#status-text').text(d.callback_is_die ? '运行异常（回调出错）' : '运行中');
+        $('#status-sub').text('微信账号：' + (d.wx_nickname || '获取中...'));
+        $('#status-uptime').text('运行时长：' + (d.uptime || '-'));
+        $('#sv-received').text(d.msg_received !== undefined ? d.msg_received : '-');
+        $('#sv-replied').text(d.msg_replied !== undefined ? d.msg_replied : '-');
+        $('#sv-listen').text(d.listen_mode || '-');
+        $('#sv-group').text(d.group_switch ? (d.group_count + ' 个') : '未启用');
+        $('#sv-schedule').text(d.scheduled_switch ? (d.scheduled_count + ' 个') : '未启用');
+        $('#sv-api').text(d.api_sdk || '-');
+        $('#dv-nickname').text(d.wx_nickname || '-');
+        $('#dv-model').text(d.model || '-');
+        $('#dv-start').text(d.start_time || '-');
+        $('#dv-version').text(d.version || '-');
+        $('#dv-lasttime').text(d.last_msg_time || '暂无');
+        $('#dv-lastsender').text(d.last_msg_sender || '暂无');
+      } else {
+        $('#status-dot').css('background', '#ccc');
+        $('#status-text').text('未运行');
+        $('#status-sub').text('点击"启动机器人"开始运行');
+        $('#status-uptime').text('');
+        ['received','replied','listen','group','schedule','api'].forEach(function(k){ $('#sv-'+k).text('-'); });
+        ['nickname','model','start','version','lasttime','lastsender'].forEach(function(k){ $('#dv-'+k).text('-'); });
+      }
+    });
+  }
+  refreshStatus();
+  setInterval(refreshStatus, 5000);
+
+  // ===== Account Panel =====
+  // 进入 tab 时加载当前用户名
+  $(document).on('click', '[data-tab="tab-account"]', function(){
+    $.getJSON('/get_admin_config', function(res){
+      if(res.status === 'success') $('#acc-username').val(res.username);
+    });
+  });
+  function showMsg(id, msg, ok){
+    var $el = $('#'+id);
+    $el.text(msg)
+       .css({'background': ok ? '#F0FBF5' : '#FFF0F0',
+             'border': '1px solid ' + (ok ? '#B7EBD0' : '#FECACA'),
+             'color': ok ? '#06AD56' : '#DC2626'})
+       .show();
+    setTimeout(function(){ $el.hide(); }, 3500);
+  }
+  $('#btn-save-account').click(function(){
+    var u = $('#acc-username').val().trim();
+    var p = $('#acc-password').val();
+    var p2 = $('#acc-password2').val();
+    if(!u || !p){ showMsg('acc-msg','用户名和密码不能为空',false); return; }
+    if(p !== p2){ showMsg('acc-msg','两次输入的密码不一致',false); return; }
+    $.ajax({ url:'/save_admin_config', type:'POST', contentType:'application/json',
+      data: JSON.stringify({username:u, password:p}),
+      success: function(res){ showMsg('acc-msg', res.message, res.status==='success'); if(res.status==='success'){ $('#acc-password').val(''); $('#acc-password2').val(''); } },
+      error: function(xhr){ showMsg('acc-msg','请求失败: '+xhr.responseText, false); }
+    });
+  });
+
+  // ===== Email Panel =====
+  $(document).on('click', '[data-tab="tab-email"]', function(){
+    $.getJSON('/get_email_config', function(res){
+      if(res.status === 'success'){
+        $('#email-host').val(res.host);
+        $('#email-port').val(res.port);
+        $('#email-user').val(res.user);
+        $('#email-pass').val(res.pass);
+      }
+    });
+  });
+  $('#btn-save-email').click(function(){
+    var d = { host:$('#email-host').val().trim(), port:$('#email-port').val().trim(),
+              user:$('#email-user').val().trim(), pass:$('#email-pass').val() };
+    if(!d.host||!d.port||!d.user||!d.pass){ showMsg('email-msg','所有字段均不能为空',false); return; }
+    $.ajax({ url:'/save_email_config', type:'POST', contentType:'application/json',
+      data: JSON.stringify(d),
+      success: function(res){ showMsg('email-msg', res.message, res.status==='success'); },
+      error: function(xhr){ showMsg('email-msg','请求失败: '+xhr.responseText, false); }
+    });
   });
 
   // ===== Log Polling =====

@@ -2,46 +2,32 @@
     "api_sdk_list": [
         "OpenAI SDK",
         "Dify",
-        "Coze"
+        "Coze",
+        "DusAPI"
     ],
-    "api_sdk": "Dify",
-    "api_key": "your_api_key",
-    "base_url": "https://api.dify.ai/v1/",
-    "model1": "deepseek-chat",
-    "model2": "deepseek-v3",
-    "prompt": "你是一个AI助手，如果用户发送的消息中包含你是谁等字眼，那就只需要回复一句话：我是DeepSeek-R1，一个AI助手。你的所有回复都不要有MarkDown格式，除非用户叫你修改或者创建MarkDown文本等的工作。特别注意：你的所有回复都不能超过10个字！！！不能超过10个字！！！",
-    "admin": "文件传输助手",
+    "api_sdk": "DusAPI",
+    "api_key": "your-api-key",
+    "base_url": "https://api.dusapi.com/",
+    "model1": "模型名称1",
+    "model2": "模型名称2",
+    "prompt": "你是一个ai回复助手，请根据用户的问题给出回答",
+    "admin": "管理员备注名",
     "AllListen_switch": false,
-    "listen_list": [
-        "示例监听1"
-    ],
-    "group": [
-        "示例群组1"
-    ],
-    "group_switch": true,
-    "group_reply_at": true,
-    "group_welcome": true,
+    "listen_list": [],
+    "group": [],
+    "group_switch": false,
+    "group_reply_at": false,
+    "group_welcome": false,
     "group_welcome_random": 1.0,
-    "group_welcome_msg": "欢迎新朋友! \n⚠入群请看群公告!!!",
+    "group_welcome_msg": "欢迎新朋友！请先查看群公告！",
     "new_friend_switch": false,
-    "new_friend_msg": ["你好"],
-    "chat_keyword_switch": true,
-    "group_keyword_switch": true,
-    "keyword_dict": {
-        "我是关键词": "我是关键词的回复"
-    },
-    "everyday_msg_switch": true,
-    "everyday_msg_dict": {
-        "文件传输助手": [
-            {
-                "time": "19:00",
-                "msgs": [
-                    "每天19:00给文件传输助手发送一条消息"
-                ]
-            }
-        ]
-    },
+    "new_friend_msg": [],
+    "chat_keyword_switch": false,
+    "group_keyword_switch": false,
+    "keyword_dict": {},
+    "scheduled_msg_switch": false,
+    "scheduled_msg_list": [],
     "everyday_start_stop_bot_switch": false,
-    "everyday_start_bot_time": "01:30",
-    "everyday_stop_bot_time": "06:30"
+    "everyday_start_bot_time": "08:00",
+    "everyday_stop_bot_time": "23:00"
 }

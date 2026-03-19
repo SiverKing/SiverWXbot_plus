@@ -2,7 +2,14 @@ from datetime import datetime
 import os
 import sys
 
-LOG_PATH = "./logs"
+def _base_dir():
+    """运行时基础目录：打包后为 exe 所在目录，开发时为当前目录"""
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.dirname(sys.executable)
+    return os.path.abspath(".")
+
+LOG_PATH = os.path.join(_base_dir(), "panel_logs")
+os.makedirs(LOG_PATH, exist_ok=True)
 # 日志颜色映射
 LOG_COLORS = {
     'INFO': 'text-primary',
@@ -54,12 +61,9 @@ def log(level="INFO", message=''):
     # 终端日志输出
     # print(f'[{timestamp}]: {message}')
     # 写入log到本地
+    now_day = datetime.now().strftime("%y%m%d")
     try:
-        now_day = datetime.now().strftime("%y%m%d")
-        with open(LOG_PATH+f'/log_{now_day}.txt', 'a', encoding='utf-8-sig') as f:
-            f.write(f'[{timestamp}]: {message}' + '\n') # 写入log到本地
-        # with open(LOG_PATH+f'/log_{now_day}.txt', 'a', encoding='utf-8') as f:
-            # f.write(f'[{timestamp}]: {message}' + '\n') # 写入log到本地
-    except:
-        os.makedirs(LOG_PATH)
-        print(f"文件夹 '{LOG_PATH}' 创建成功！")
+        with open(os.path.join(LOG_PATH, f'log_{now_day}.txt'), 'a', encoding='utf-8-sig') as f:
+            f.write(f'[{timestamp}]: {message}' + '\n')
+    except Exception as e:
+        print(f"写入日志文件失败: {e}")

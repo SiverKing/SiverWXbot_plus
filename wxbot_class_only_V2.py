@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-# Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox V2版本
-# 作者：https://siver.top
+# Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
+# 作者：https://www.siver.top
 
-version = "V4.2.0"
-version_log = "V4.2.0 UI重构、定时消息重构为完全自定义"
+version = "V4.3.1"
+version_log = "V4.3.1 - 配置文件整理 + 打包路径修复"
 
 # ============================================================
 # 标准库导入
 # ============================================================
 import os
 import re
+import sys
 import time
 import json
 import random
@@ -79,7 +80,9 @@ class WXBotConfig:
     """
 
     def __init__(self):
-        self.CONFIG_FILE = 'config.json'
+        _base = os.path.dirname(sys.executable) if hasattr(sys, '_MEIPASS') else os.path.abspath(".")
+        self.CONFIG_FILE = os.path.join(_base, 'config', 'config.json')
+        os.makedirs(os.path.join(_base, 'config'), exist_ok=True)
         self.config = {}
 
         # ---------- 全局监听开关 ----------
@@ -663,6 +666,71 @@ class CozeAPI:
             return "API返回错误，请稍后再试"
 
 
+class DusAPI:
+    """
+    DusAPI 兼容接口封装类
+    两种模型均使用 Anthropic 格式（x-api-key + /v1/messages），
+    根据模型名称自动选择响应解析方式：
+    - 包含 'claude' → 按 claude.py 解析（content[0]['text']）
+    - 包含 'gpt' 或其他 → 按 gpt.py 解析（遍历 content 找 type=='text'）
+    """
+
+    def __init__(self, config):
+        self.config = config
+        self.DS_NOW_MOD = config.model1
+        self.api_key = config.api_key
+        self.base_url = config.base_url.rstrip('/')
+
+    def chat(self, message, model=None, stream=False, prompt=None):
+        if model is None:
+            model = self.DS_NOW_MOD
+        if prompt is None:
+            prompt = self.config.prompt
+
+        headers = {
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+            'user-agent': 'siver-wxbot-panel/v0.0.1'
+        }
+        payload = {
+            "model": model,
+            "max_tokens": 1024,
+            "messages": [{"role": "user", "content": message}]
+        }
+        api_endpoint = f"{self.base_url}/v1/messages"
+
+        try:
+            response = requests.post(api_endpoint, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+            response.encoding = 'utf-8'
+            response_data = response.json()
+
+            if 'claude' in model.lower():
+                # 按 claude.py 规范解析
+                result = response_data['content'][0]['text']
+            else:
+                # 按 gpt.py 规范解析，遍历 content 找 type=='text'
+                result = None
+                for content_block in response_data['content']:
+                    if content_block.get('type') == 'text':
+                        result = content_block['text']
+                        break
+                if result is None:
+                    log(level="WARN", message="DusAPI 响应中未找到文本内容")
+                    return "AI 未返回有效内容"
+
+            log(message=f"DusAPI 返回成功：{result[:100]}...")
+            return result
+
+        except requests.exceptions.HTTPError as e:
+            log(level="ERROR", message=f"DusAPI HTTP 错误: {e}")
+            return "API返回错误，请稍后再试"
+        except Exception as e:
+            log(level="ERROR", message=f"DusAPI 调用失败: {e}")
+            return "API接口失效，请联系管理员"
+
+
 # ============================================================
 # 微信机器人主类
 # ============================================================
@@ -688,6 +756,12 @@ class WXBot:
         self.callback_is_die     = False        # 回调函数是否发生致命错误的标志
         self.msgs_path           = './wx_msgs/' # 消息本地存储路径（当前未启用）
 
+        # 运行统计数据（供状态面板采集）
+        self.msg_received_count  = 0            # 已接收消息数
+        self.msg_replied_count   = 0            # 已回复消息数
+        self.last_msg_time       = None         # 最近一条消息的时间字符串
+        self.last_msg_sender     = None         # 最近一条消息的发送者
+
     def _init_api(self):
         """根据配置中的 api_sdk 字段实例化对应的 AI 接口对象"""
         sdk = self.config.api_sdk
@@ -700,6 +774,9 @@ class WXBot:
         elif sdk == "Coze":
             log(message="使用Coze API")
             return CozeAPI(self.config)
+        elif sdk == "DusAPI":
+            log(message="使用DusAPI")
+            return DusAPI(self.config)
         else:
             log(level="ERROR", message="未配置API SDK, 默认使用OpenAI SDK")
             return OpenAIAPI(self.config)
@@ -920,6 +997,11 @@ class WXBot:
             log(message=text)
 
             if msg.attr == "friend":
+                # 统计已接收消息数
+                self.msg_received_count += 1
+                self.last_msg_time   = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                self.last_msg_sender = msg.sender
+
                 # 好友/群友消息：在全局模式下更新该会话的最新消息时间戳
                 if self.config.AllListen_switch:
                     for listen_chat in self.all_Mode_listen_list:
@@ -996,6 +1078,7 @@ class WXBot:
                     reply = "请稍后再试"
                 time.sleep(random.randint(1, 10))  # 随机延时，模拟人工回复
                 result = chat.SendMsg(msg=reply, at=message.sender)
+                self.msg_replied_count += 1
                 return result
 
             # 群聊关键词回复（不受 @ 限制）
@@ -1050,6 +1133,7 @@ class WXBot:
         else:
             time.sleep(random.randint(1, 10))  # 随机延时，模拟人工回复节奏
             result = chat.SendMsg(reply)
+        self.msg_replied_count += 1
         return result
 
     # ----------------------------------------------------------
@@ -1615,6 +1699,48 @@ class WXBot:
     # ----------------------------------------------------------
     # 机器人生命周期
     # ----------------------------------------------------------
+
+    def get_status(self):
+        """
+        暴露机器人运行状态数据，供 Web 状态面板采集。
+        :return: 包含运行参数和统计数据的字典
+        """
+        uptime_secs = int((datetime.now() - self.start_time).total_seconds())
+        hours, rem  = divmod(uptime_secs, 3600)
+        minutes, seconds = divmod(rem, 60)
+        uptime_str  = f"{hours}h {minutes}m {seconds}s"
+
+        wx_nickname = None
+        if self.wx:
+            try:
+                wx_nickname = self.wx.nickname
+            except Exception:
+                pass
+
+        scheduled_enabled = sum(
+            1 for t in self.config.scheduled_msg_list if t.get('enabled', True)
+        ) if self.config.scheduled_msg_list else 0
+
+        return {
+            "running":            self.run_flag,
+            "version":            self.ver,
+            "start_time":         self.start_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "uptime":             uptime_str,
+            "wx_nickname":        wx_nickname,
+            "api_sdk":            self.config.api_sdk,
+            "model":              self.config.model1,
+            "listen_mode":        "黑名单" if self.config.AllListen_switch else "白名单",
+            "listen_count":       len(self.config.listen_list),
+            "group_switch":       self.config.group_switch,
+            "group_count":        len(self.config.group),
+            "msg_received":       self.msg_received_count,
+            "msg_replied":        self.msg_replied_count,
+            "last_msg_time":      self.last_msg_time,
+            "last_msg_sender":    self.last_msg_sender,
+            "callback_is_die":    self.callback_is_die,
+            "scheduled_switch":   self.config.scheduled_msg_switch,
+            "scheduled_count":    scheduled_enabled,
+        }
 
     def stop_wxbot(self):
         """安全停止机器人：停止 wxautox 监听并退出主循环"""

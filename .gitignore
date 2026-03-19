@@ -4,6 +4,7 @@ test3.py
 config.json
 wx.png
 wxautox_activate.py
+/.gitignore
 
 .claude/
 .venv
@@ -19,6 +20,7 @@ __pycache__/
 /releases/
 logs/
 wxauto_logs/
+panel_logs/
 
 *.zip
 *.whl
