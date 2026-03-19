@@ -129,6 +129,9 @@ class WXBotConfig:
 
     def load_config(self):
         """从 config.json 加载配置到 self.config 字典"""
+        # 若配置文件不存在，先创建默认配置
+        if not os.path.exists(self.CONFIG_FILE):
+            self.create_new_config_file()
         try:
             with open(self.CONFIG_FILE, 'r', encoding='utf-8') as file:
                 self.config = json.load(file)
@@ -143,29 +146,37 @@ class WXBotConfig:
         """若配置文件不存在，则创建一份包含默认值的配置文件"""
         try:
             if not os.path.exists(self.CONFIG_FILE):
-                # 默认配置模板（新版配置格式）
                 base_config = {
+                    "api_sdk_list": ["OpenAI SDK", "Dify", "Coze"],
+                    "api_sdk": "OpenAI SDK",
                     "api_key": "your-api-key",
                     "base_url": "https://api.example.com/v1",
                     "model1": "模型名称1",
                     "model2": "模型名称2",
                     "prompt": "你是一个ai回复助手，请根据用户的问题给出回答",
-                    "管理员": "管理员",
-                    "全局监听开关": False,
-                    "用户列表": [],
+                    "admin": "管理员备注名",
+                    "AllListen_switch": False,
+                    "listen_list": [],
                     "group": [],
                     "group_switch": False,
-                    "群聊是否仅被@时回复": False,
-                    "群新人欢迎语开关": False,
-                    "群新人欢迎语": "欢迎新朋友！请先查看群公告！本消息由wxautox发送!",
-                    "自动通过好友开关": False,
-                    "通过好友打招呼语": ["你好", "我是wxauto", "有什么问题尽管问我", "", ""],
-                    "备忘录1": "",
-                    "备忘录2": "",
+                    "group_reply_at": False,
+                    "group_welcome": False,
+                    "group_welcome_random": 1.0,
+                    "group_welcome_msg": "欢迎新朋友！请先查看群公告！",
+                    "new_friend_switch": False,
+                    "new_friend_msg": [],
+                    "chat_keyword_switch": False,
+                    "group_keyword_switch": False,
+                    "keyword_dict": {},
+                    "scheduled_msg_switch": False,
+                    "scheduled_msg_list": [],
+                    "everyday_start_stop_bot_switch": False,
+                    "everyday_start_bot_time": "08:00",
+                    "everyday_stop_bot_time": "23:00",
                 }
                 with open(self.CONFIG_FILE, "w", encoding="utf-8") as f:
                     json.dump(base_config, f, ensure_ascii=False, indent=4)
-                log(message=f"已创建默认配置文件：\n{os.path.abspath(self.CONFIG_FILE)}\n请根据需求修改配置")
+                log(message=f"已创建默认配置文件：\n{os.path.abspath(self.CONFIG_FILE)}\n请根据需求修改配置后重启")
         except Exception as e:
             log(level="ERROR", message="创建默认配置文件失败，请检查配置文件！" + str(e))
             while True:

@@ -469,9 +469,37 @@ def main():
     log('INFO', '服务器启动中...')
     try:
         if not os.path.exists(CONFIG_FILE):
+            default_config = {
+                "api_sdk_list": ["OpenAI SDK", "Dify", "Coze"],
+                "api_sdk": "OpenAI SDK",
+                "api_key": "your-api-key",
+                "base_url": "https://api.example.com/v1",
+                "model1": "模型名称1",
+                "model2": "模型名称2",
+                "prompt": "你是一个ai回复助手，请根据用户的问题给出回答",
+                "admin": "管理员备注名",
+                "AllListen_switch": False,
+                "listen_list": [],
+                "group": [],
+                "group_switch": False,
+                "group_reply_at": False,
+                "group_welcome": False,
+                "group_welcome_random": 1.0,
+                "group_welcome_msg": "欢迎新朋友！请先查看群公告！",
+                "new_friend_switch": False,
+                "new_friend_msg": [],
+                "chat_keyword_switch": False,
+                "group_keyword_switch": False,
+                "keyword_dict": {},
+                "scheduled_msg_switch": False,
+                "scheduled_msg_list": [],
+                "everyday_start_stop_bot_switch": False,
+                "everyday_start_bot_time": "08:00",
+                "everyday_stop_bot_time": "23:00",
+            }
             with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-                json.dump({}, f)
-            log('WARNING', '配置文件不存在，已创建空配置文件')
+                json.dump(default_config, f, ensure_ascii=False, indent=4)
+            log('WARNING', '配置文件不存在，已创建默认配置文件')
         log('INFO', '服务5s后启动')
         # 动态选择端口
         free_port = find_free_port(10001, 11000)
