@@ -99,8 +99,8 @@
 ### 环境要求
 - Python `3.8` - `3.12`
 - Windows 操作系统
-- 微信 PC 版（`4.1.7` - `4.1.8` 版本）
-- wxautox4 授权（需购买）
+- Windows wx PC 版（`4.1.7` - `4.1.8` 版本）
+- wxautox4 授权（需购买 地址：https://www.siver.top/static/img/siver_wx.jpg）
 
 ### 安装步骤
 
