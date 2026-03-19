@@ -844,7 +844,7 @@ class WXBot:
         if not self.wx:
             log(message="本次未获取客户端，正在初始化微信客户端...")
             self.wx = WeChat()
-            self.wx.Show()  # 首次强制弹出主窗口以获取焦点
+            # self.wx.Show()  # 首次强制弹出主窗口以获取焦点
 
         # 绑定 @ 标识（格式："@机器人昵称"）
         self.config.AtMe = "@" + self.wx.nickname
