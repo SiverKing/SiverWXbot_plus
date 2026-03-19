@@ -163,7 +163,25 @@ def dashboard():
     config.setdefault('chat_keyword_switch', False)          # 私聊关键词开关
     config.setdefault('group_keyword_switch', False)         # 群组关键词开关
     config.setdefault('keyword_dict', {})                    # 关键词字典
-    config.setdefault('everyday_msg_switch', False)           # 每日定时消息开关
+    config.setdefault('scheduled_msg_switch', config.get('everyday_msg_switch', False))  # 定时消息开关
+    config.setdefault('scheduled_msg_list', [])              # 定时消息任务列表
+    # 旧配置迁移：everyday_msg_dict -> scheduled_msg_list
+    if not config.get('scheduled_msg_list') and config.get('everyday_msg_dict'):
+        import uuid
+        migrated = []
+        for target, tasks in config.get('everyday_msg_dict', {}).items():
+            for task in tasks:
+                migrated.append({
+                    'id': str(uuid.uuid4())[:8],
+                    'enabled': True,
+                    'target': target,
+                    'time': task.get('time', '08:00'),
+                    'repeat_type': 'daily',
+                    'weekdays': [],
+                    'dates': [],
+                    'msgs': task.get('msgs', []),
+                })
+        config['scheduled_msg_list'] = migrated
     config.setdefault('everyday_start_stop_bot_switch', False)
     config.setdefault('everyday_start_bot_time', "08:00")
     config.setdefault('everyday_stop_bot_time', "23:00")
@@ -186,7 +204,7 @@ def _coerce_bool_fields(merged_config):
         # —— 新增布尔字段 —— 
         'chat_keyword_switch',
         'group_keyword_switch',
-        'everyday_msg_switch',
+        'scheduled_msg_switch',
         'everyday_start_stop_bot_switch',   # 新增
     ]
     for field in boolean_fields:
@@ -198,7 +216,7 @@ def _coerce_bool_fields(merged_config):
                 merged_config[field] = bool(v)
 
 def _coerce_list_fields(merged_config):
-    list_fields = ['listen_list', 'group', 'new_friend_msg', 'api_sdk_list']
+    list_fields = ['listen_list', 'group', 'new_friend_msg', 'api_sdk_list', 'scheduled_msg_list']
     for field in list_fields:
         if field in merged_config and not isinstance(merged_config[field], list):
             if isinstance(merged_config[field], str):

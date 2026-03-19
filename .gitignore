@@ -5,6 +5,7 @@ config.json
 wx.png
 wxautox_activate.py
 
+.claude/
 .venv
 venv/
 venv2/

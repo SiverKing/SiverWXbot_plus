@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox V2版本
 # 作者：https://siver.top
 
-version = "V4.1.1"
-version_log = "V4.1.1 add:README"
+version = "V4.2.0"
+version_log = "V4.2.0 UI重构、定时消息重构为完全自定义"
 
 # ============================================================
 # 标准库导入
@@ -115,9 +115,9 @@ class WXBotConfig:
         self.group_keyword_switch = False   # 群聊关键词回复开关
         self.keyword_dict = {}              # 关键词 -> 回复内容 字典
 
-        # ---------- 每日定时消息配置 ----------
-        self.everyday_msg_switch = False    # 每日定时消息总开关
-        self.everyday_msg_dict = {}         # 定时消息配置字典
+        # ---------- 定时消息配置 ----------
+        self.scheduled_msg_switch = False    # 定时消息总开关
+        self.scheduled_msg_list = []         # 定时消息任务列表
 
         # 初始化时自动加载配置并同步到属性
         self.load_config()
@@ -220,9 +220,26 @@ class WXBotConfig:
         self.group_keyword_switch = self.config.get('group_keyword_switch')
         self.keyword_dict         = self.config.get('keyword_dict', {})
 
-        # 每日定时消息配置
-        self.everyday_msg_switch = self.config.get('everyday_msg_switch')
-        self.everyday_msg_dict   = self.config.get('everyday_msg_dict', {})
+        # 定时消息配置
+        self.scheduled_msg_switch = self.config.get('scheduled_msg_switch',
+                                                     self.config.get('everyday_msg_switch', False))
+        self.scheduled_msg_list   = self.config.get('scheduled_msg_list', [])
+
+        # 旧配置自动迁移：everyday_msg_dict -> scheduled_msg_list
+        if not self.scheduled_msg_list and self.config.get('everyday_msg_dict'):
+            import uuid
+            for target, tasks in self.config.get('everyday_msg_dict', {}).items():
+                for task in tasks:
+                    self.scheduled_msg_list.append({
+                        'id': str(uuid.uuid4())[:8],
+                        'enabled': True,
+                        'target': target,
+                        'time': task.get('time', '08:00'),
+                        'repeat_type': 'daily',
+                        'weekdays': [],
+                        'dates': [],
+                        'msgs': task.get('msgs', []),
+                    })
 
         log(message="全局配置更新完成")
 
@@ -438,7 +455,7 @@ class OpenAIAPI:
 
             log(message=f"备用方案：使用 Responses API, model={model}")
             # Responses API 的 input 只接受字符串，将 prompt 拼接到消息中
-            input_text = f"这是prompt：{prompt}\n\n这是消息：{message}" if prompt and prompt.strip() else message
+            input_text = f"这是prompt，请不要把这个当做用户输入：{prompt}\n\n这是用户消息，你需要参照prompt来回复用户消息：{message}" if prompt and prompt.strip() else message
 
             response = self.client.responses.create(
                 model=model,
@@ -775,19 +792,26 @@ class WXBot:
                 else:
                     log(level="ERROR", message=f"添加群组 {user} 监听失败, {result['message']}")
 
-        # 注册每日定时消息任务
-        if self.config.everyday_msg_switch:
+        # 注册定时消息任务（新版：支持多种重复类型）
+        if self.config.scheduled_msg_switch:
             log(message="定时消息注册...")
             try:
-                schedule.clear('everyday_msg')  # 清除旧的定时任务（按 tag 清理）
-                for user, tasks in self.config.everyday_msg_dict.items():
-                    for task in tasks:
-                        time_str = task.get('time')   # 发送时间（如 "08:00"）
-                        msgs     = task.get('msgs')   # 要发送的消息列表
-                        schedule.every().day.at(time_str).do(
-                            self.send_everyday_msg, user, msgs
-                        ).tag('everyday_msg')
-                        log(message=f"注册定时消息：每天{time_str} 给 {user} 发消息")
+                schedule.clear('scheduled_msg')  # 清除旧的定时任务（按 tag 清理）
+                for task in self.config.scheduled_msg_list:
+                    if not task.get('enabled', True):
+                        continue
+                    time_str    = task.get('time', '08:00')
+                    msgs        = task.get('msgs', [])
+                    target      = task.get('target', '')
+                    repeat_type = task.get('repeat_type', 'daily')
+                    task_id     = task.get('id', '')
+                    weekdays    = task.get('weekdays', [])
+                    dates       = task.get('dates', [])
+
+                    schedule.every().day.at(time_str).do(
+                        self.send_scheduled_msg, target, msgs, repeat_type, weekdays, dates, task_id
+                    ).tag('scheduled_msg')
+                    log(message=f"注册定时消息：{repeat_type} {time_str} 给 {target} 发消息")
                 log(message="定时消息注册完成")
             except Exception as e:
                 log(level="ERROR", message=f"定时消息注册失败：{e}")
@@ -798,14 +822,42 @@ class WXBot:
     # 定时消息发送
     # ----------------------------------------------------------
 
-    def send_everyday_msg(self, user, msgs):
+    def send_scheduled_msg(self, user, msgs, repeat_type, weekdays, dates, task_id):
         """
-        定时触发的消息发送函数，逐条发送消息并带随机延时。
+        定时触发的消息发送函数，根据 repeat_type 判断今天是否需要发送。
 
-        :param user: 接收消息的用户/群组昵称
-        :param msgs: 要发送的消息列表
+        :param user:        接收消息的用户/群组昵称
+        :param msgs:        要发送的消息列表
+        :param repeat_type: 重复类型 (once/daily/weekly/monthly/custom)
+        :param weekdays:    每周几发送 (1=周一 ... 7=周日)
+        :param dates:       自定义日期列表 (["2026-03-20", ...]) 或每月几号 ([1, 15, ...])
+        :param task_id:     任务ID，用于 once 类型执行后自动禁用
         """
-        log(message=f"{user} 定时消息时间到，正在发送...")
+        now = datetime.now()
+        should_send = False
+
+        if repeat_type == 'daily':
+            should_send = True
+        elif repeat_type == 'weekly':
+            # isoweekday(): 1=周一, 7=周日
+            should_send = now.isoweekday() in weekdays
+        elif repeat_type == 'monthly':
+            # dates 存储的是每月几号，如 [1, 15]
+            should_send = now.day in dates
+        elif repeat_type == 'custom':
+            # dates 存储的是具体日期字符串，如 ["2026-03-20"]
+            today_str = now.strftime('%Y-%m-%d')
+            should_send = today_str in dates
+        elif repeat_type == 'once':
+            today_str = now.strftime('%Y-%m-%d')
+            should_send = today_str in dates
+        else:
+            should_send = True
+
+        if not should_send:
+            return schedule.CancelJob if repeat_type == 'once' else None
+
+        log(message=f"{user} 定时消息时间到（{repeat_type}），正在发送...")
         for msg in msgs:
             log(message=f"正在向 {user} 发送定时消息：{msg}")
             try:
@@ -823,6 +875,17 @@ class WXBot:
                     self.wx.nickname + f" wxbot定时消息发送失败！",
                     f"{user} 定时消息发送失败：{e}",
                 )
+
+        # once 类型执行后自动禁用该任务
+        if repeat_type == 'once':
+            for task in self.config.scheduled_msg_list:
+                if task.get('id') == task_id:
+                    task['enabled'] = False
+                    break
+            self.config.config['scheduled_msg_list'] = self.config.scheduled_msg_list
+            self.config.save_config()
+            log(message=f"一次性定时任务 {task_id} 已执行完毕，自动禁用")
+            return schedule.CancelJob  # 取消该 schedule 任务
 
     # ----------------------------------------------------------
     # 消息回调与处理入口
@@ -1082,7 +1145,7 @@ class WXBot:
         send_msg += "当前关键词：" + ", ".join(self.config.keyword_dict.keys()) + "\n"
 
         # 定时消息状态
-        send_msg += "当前定时消息状态：" + ("开启\n" if self.config.everyday_msg_switch else "关闭\n")
+        send_msg += "当前定时消息状态：" + ("开启\n" if self.config.scheduled_msg_switch else "关闭\n")
 
         return chat.SendMsg(send_msg)
 
@@ -1634,7 +1697,7 @@ class WXBot:
                             log(level="ERROR", message=str(e) + "\n全局模式出错！！请检查程序！！")
 
                 # ---- 定时任务执行 ----
-                if self.config.everyday_msg_switch:
+                if self.config.scheduled_msg_switch:
                     schedule.run_pending()
 
             except Exception as e:
