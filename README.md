@@ -1,13 +1,13 @@
 # 🤖 Siver 微信机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.0.1-blue.svg)](https://github.com/yourusername/wxbot_plus)
+[![Version](https://img.shields.io/badge/version-V4.2.0-blue.svg)](https://github.com/yourusername/wxbot_plus)
 [![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
 
 > 一个功能完整、架构清晰的微信机器人框架，支持多 AI 平台接入、灵活的监听模式、丰富的管理命令和智能的消息处理流程。
 
 **作者**: [Siver](https://siver.top)
-**当前版本**: V4.0.1 - 适配 wxautox4 和微信 4.x 版本
+**当前版本**: V4.2.0 - 全新 UI + 自定义定时消息
 
 ---
 
@@ -45,8 +45,14 @@
 - **智能备注** - 自动设置备注（昵称_机器人备注）
 
 ### ⏰ 定时任务
-- **每日定时消息** - 支持每天指定时间发送消息
-- **灵活配置** - 可为不同用户设置不同的定时消息
+- **自定义定时消息** - 像手机闹钟一样完全自定义定时
+  - 单次发送 - 指定日期时间发送一次
+  - 每天发送 - 每天固定时间发送
+  - 每周发送 - 选择星期几发送
+  - 每月发送 - 选择每月几号发送
+  - 自定义日期 - 指定多个日期发送
+- **独立开关** - 每条定时任务可单独启用/禁用
+- **定时启停** - 设置机器人每日自动启动和停止时间
 
 ### 🛠️ 管理命令系统
 通过微信消息发送命令，实时管理机器人：
@@ -57,10 +63,11 @@
 - 系统管理：更新配置、查看状态、查看版本
 
 ### 🌐 Web 管理界面
-- **Flask Web 服务器** - 提供可视化管理界面
+- **全新 UI** - 侧边栏导航 + 分类标签页，配置一目了然
 - **用户认证** - 安全的登录系统
-- **实时日志** - 查看机器人运行日志
-- **配置管理** - 在线修改配置文件
+- **实时日志** - 底部可折叠日志面板，支持级别筛选（INFO/SUCCESS/WARNING/ERROR）
+- **配置管理** - 在线修改所有配置，保存即生效
+- **监听模式提示** - 黑名单/白名单模式醒目提示
 
 ### 📧 告警通知
 - **邮件告警** - 发生错误时自动发送邮件通知
@@ -71,9 +78,9 @@
 ## 📦 安装部署
 
 ### 环境要求
-- Python 3.8+
+- Python `3.8` - `3.12`
 - Windows 操作系统
-- 微信 PC 版（4.x 版本）
+- 微信 PC 版（`4.1.7` - `4.1.8` 版本）
 - wxautox4 授权（需购买）
 
 ### 安装步骤
@@ -90,7 +97,7 @@ pip install -r requirements.txt
 ```
 
 3. **配置 wxautox4 授权**
-   - 购买地址：https://github.com/cluic/wxauto
+   - 购买地址：https://www.siver.top/static/img/siver_wx.jpg
    - 按照官方文档激活授权
 
 4. **配置机器人**
@@ -103,10 +110,6 @@ pip install -r requirements.txt
 
 6. **启动机器人**
 ```bash
-# 方式 1：直接运行主程序
-python wxbot_class_only_V2.py
-
-# 方式 2：启动 Web 管理界面
 python web_server.py
 ```
 
@@ -142,12 +145,18 @@ python web_server.py
         "关键词2": "回复内容2"
     },
     "每日定时消息开关": true,
-    "每日定时消息": {
-        "用户昵称": {
+    "定时消息列表": [
+        {
+            "id": "abc123",
+            "enabled": true,
+            "target": "用户昵称",
             "time": "08:00",
+            "repeat_type": "weekly",
+            "weekdays": [1, 3, 5],
+            "dates": [],
             "msgs": ["早安", "今天也要加油哦"]
         }
-    }
+    ]
 }
 ```
 
@@ -173,6 +182,7 @@ python web_server.py
 | `群聊关键词回复开关` | boolean | 是否开启群聊关键词回复 |
 | `关键词回复` | object | 关键词→回复内容映射 |
 | `每日定时消息开关` | boolean | 是否开启定时消息 |
+| `定时消息列表` | array | 定时任务列表，支持 once/daily/weekly/monthly/custom |
 
 ### email.txt 配置文件
 
@@ -346,6 +356,19 @@ Dify 平台接口类，通过 HTTP 请求调用 Dify 对话工作流。
 
 ## 📝 开发日志
 
+### V4.2.0 (2026-03-19)
+- Web 管理界面全面重构：侧边栏导航 + 分类标签页
+- 日志面板改为底部可折叠面板，支持级别筛选
+- 定时消息功能重构：支持单次/每天/每周/每月/自定义日期
+- 监听模式增加醒目的黑名单/白名单提示
+
+### V4.1.1 (2026-03-18)
+- 优化 OpenAI 兼容接口调用，兼容 Dusapi
+- 添加 README 文档
+
+### V4.1.0
+- 后端微信控制结构优化，适配 4.0
+
 ### V4.0.1 (2026-03-12)
 - 适配新版本全局监听
 - 优化 OpenAI API 错误处理
@@ -361,11 +384,11 @@ Dify 平台接口类，通过 HTTP 请求调用 Dify 对话工作流。
 
 1. **wxautox4 授权**
    - 本项目使用 wxautox4（Plus 版），需要购买授权
-   - 购买地址：https://github.com/cluic/wxauto
+   - 购买地址：https://www.siver.top/static/img/siver_wx.jpg
    - 请勿用于转卖或发布到公共平台
 
 2. **微信版本**
-   - 建议使用微信 4.x 版本
+   - 建议使用微信 4.1.8 版本
    - 不同版本可能需要调整参数
 
 3. **API 配置**
@@ -383,17 +406,6 @@ Dify 平台接口类，通过 HTTP 请求调用 Dify 对话工作流。
    - 关闭不需要的功能可减少资源占用
    - 定期清理日志文件
 
----
-
-## 🤝 贡献指南
-
-欢迎提交 Issue 和 Pull Request！
-
-1. Fork 本项目
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启 Pull Request
 
 ---
 
@@ -401,13 +413,6 @@ Dify 平台接口类，通过 HTTP 请求调用 Dify 对话工作流。
 
 本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
 
----
-
-## 🔗 相关链接
-
-- **作者主页**: https://siver.top
-- **wxautox 官方**: https://github.com/cluic/wxauto
-- **wxautox 文档**: https://docs.wxauto.org
 
 ---
 
@@ -416,7 +421,7 @@ Dify 平台接口类，通过 HTTP 请求调用 Dify 对话工作流。
 如有问题或建议，欢迎通过以下方式联系：
 
 - 提交 Issue
-- 访问作者主页：https://siver.top
+- 联系作者：https://www.siver.top/static/img/siver_wx.jpg
 
 ---
 
