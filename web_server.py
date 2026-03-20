@@ -250,7 +250,8 @@ def _coerce_bool_fields(merged_config):
         'group_reply_at',
         'group_welcome',
         'new_friend_switch',
-        # —— 新增布尔字段 —— 
+        'new_friend_reply_switch',
+        # —— 新增布尔字段 ——
         'chat_keyword_switch',
         'group_keyword_switch',
         'scheduled_msg_switch',
@@ -631,6 +632,7 @@ def main():
                 "group_welcome_random": 1.0,
                 "group_welcome_msg": "欢迎新朋友！请先查看群公告！",
                 "new_friend_switch": False,
+                "new_friend_reply_switch": False,
                 "new_friend_msg": [],
                 "chat_keyword_switch": False,
                 "group_keyword_switch": False,

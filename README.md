@@ -1,13 +1,15 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.3.2-blue.svg)](https://github.com/yourusername/wxbot_plus)
+[![Version](https://img.shields.io/badge/version-V4.3.3-blue.svg)](https://github.com/yourusername/wxbot_plus)
 [![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
 
 > 一个功能完整、架构清晰的WX机器人框架，支持多 AI 平台接入、灵活的监听模式、丰富的管理命令和智能的消息处理流程。
 
 **作者**: [Siver](https://siver.top)
-**当前版本**: V4.3.2 - API 接口列表化重构 + 文件传输助手管理员支持
+**当前版本**：V4.3.3 - 好友管理新增自动通过与自动回复独立开关
+
+📖 **[查看完整使用文档](https://github.com/SiverKing/SiverWXbot_plus/blob/main/docs/docs.md)**
 
 ---
 
@@ -411,6 +413,9 @@ WX机器人主类，整合所有功能的核心控制类。
 ---
 
 ## 📝 开发日志
+
+### V4.3.3 (2026-03-20)
+- 好友管理新增"自动通过新好友申请"与"新好友自动回复"两个独立开关，可分别控制是否自动通过好友请求和是否发送打招呼消息
 
 ### V4.3.2 (2026-03-20)
 - API 接口配置重构为列表形式（`api_configs`），支持添加/删除多个接口，面板上点选切换当前使用

@@ -429,10 +429,14 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
   <!-- ===== Tab: Friend ===== -->
   <div class="config-panel" id="tab-friend">
     <div class="cfg-card">
-      <div class="cfg-card-header"><i class="bi bi-person-plus"></i><h5>好友管理</h5><span class="desc">新好友自动回复设置</span></div>
+      <div class="cfg-card-header"><i class="bi bi-person-plus"></i><h5>好友管理</h5><span class="desc">新好友自动通过与自动回复设置</span></div>
       <div class="switch-row">
         <input class="form-check-input" type="checkbox" id="new_friend_switch" name="new_friend_switch" {% if config.new_friend_switch %}checked{% endif %}>
-        <label for="new_friend_switch">新好友自动回复</label>
+        <label for="new_friend_switch">自动通过新好友申请</label>
+      </div>
+      <div class="switch-row">
+        <input class="form-check-input" type="checkbox" id="new_friend_reply_switch" name="new_friend_reply_switch" {% if config.new_friend_reply_switch %}checked{% endif %}>
+        <label for="new_friend_reply_switch">新好友自动回复</label>
       </div>
       <div id="new_friend_msg_container">
         {% for msg in config.new_friend_msg %}
@@ -896,6 +900,7 @@ $(function(){
       group_reply_at:$('#group_reply_at').is(':checked'),
       group_welcome:$('#group_welcome').is(':checked'),
       new_friend_switch:$('#new_friend_switch').is(':checked'),
+      new_friend_reply_switch:$('#new_friend_reply_switch').is(':checked'),
       chat_keyword_switch:$('#chat_keyword_switch').is(':checked'),
       group_keyword_switch:$('#group_keyword_switch').is(':checked'),
       admin:$('#admin').val(),

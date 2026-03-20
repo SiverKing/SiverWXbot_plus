@@ -1,5 +1,8 @@
 注意事项
 
+文档链接：https://github.com/SiverKing/SiverWXbot_plus/blob/main/docs/docs.md
+备用链接：https://blog.siverking.online/index.php/2026/03/20/12/
+
 1.  启动机器人时不得有微信小窗口(只保留主窗口),同时确保主窗口没有最小化
 2.  电脑自动休眠 黑屏都设为从不
 3.  如需离线邮件提醒，请在配置面板修改设置邮件

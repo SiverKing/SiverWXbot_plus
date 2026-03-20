@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.3.2"
-version_log = "V4.3.2 - 整改模型配置选择、优化管理员指令"
+version = "V4.3.3"
+version_log = "V4.3.3 - 添加docs，修复新好友同意"
 
 # ============================================================
 # 标准库导入
@@ -111,8 +111,9 @@ class WXBotConfig:
         self.group_welcome_msg = "欢迎新朋友！请先查看群公告！本消息由wxautox发送!"
 
         # ---------- 新好友配置 ----------
-        self.new_frined_switch = False  # 自动通过新好友开关
-        self.new_frien_msg = []         # 通过后自动发送的打招呼消息列表
+        self.new_frined_switch = False        # 自动通过新好友开关
+        self.new_frien_reply_switch = False   # 新好友自动回复开关
+        self.new_frien_msg = []               # 通过后自动发送的打招呼消息列表
 
         # ---------- 关键词回复配置 ----------
         self.chat_keyword_switch = False    # 私聊关键词回复开关
@@ -167,6 +168,7 @@ class WXBotConfig:
                     "group_welcome_random": 1.0,
                     "group_welcome_msg": "欢迎新朋友！请先查看群公告！",
                     "new_friend_switch": False,
+                    "new_friend_reply_switch": False,
                     "new_friend_msg": [],
                     "chat_keyword_switch": False,
                     "group_keyword_switch": False,
@@ -257,8 +259,9 @@ class WXBotConfig:
         self.group_welcome_msg    = self.config.get('group_welcome_msg', '')
 
         # 新好友配置
-        self.new_frined_switch = self.config.get('new_friend_switch')
-        self.new_frien_msg     = self.config.get('new_friend_msg', [])
+        self.new_frined_switch       = self.config.get('new_friend_switch')
+        self.new_frien_reply_switch  = self.config.get('new_friend_reply_switch', False)
+        self.new_frien_msg           = self.config.get('new_friend_msg', [])
 
         # 关键词配置
         self.chat_keyword_switch  = self.config.get('chat_keyword_switch')
@@ -727,7 +730,10 @@ class DusAPI:
         payload = {
             "model": model,
             "max_tokens": 1024,
-            "messages": [{"role": "user", "content": message}]
+            "messages": [
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": message}
+                ]
         }
         api_endpoint = f"{self.base_url}/v1/messages"
 
@@ -1245,6 +1251,10 @@ class WXBot:
             result = self.send_command_list(chat)
         elif content == "/状态":
             result = self._build_status_msg(chat, message)
+        elif content.startswith("/接口测试"):
+            message_re = message
+            message_re.content = re.sub("/接口测试", "", message.content).strip()
+            result = self.wx_send_ai(chat, message_re)
         else:
             # 未匹配到任何指令
             # self 消息（文件传输助手场景下机器人自身回复的同步）不调用 AI，避免误触发关键词或 AI 回复
@@ -1449,6 +1459,7 @@ class WXBot:
         commands = (
             '指令列表[发送中括号里内容]：\n'
             '[/状态]\n'
+            '[/接口测试]'
             '[/当前用户] (返回当前监听用户列表)\n'
             '[/添加用户***] （将用户***添加进监听列表）\n'
             '[/删除用户***]\n'
@@ -1548,7 +1559,9 @@ class WXBot:
 
     def Pass_New_Friends(self):
         """
-        检测并批量通过新好友请求，通过后自动发送打招呼消息。
+        检测并批量通过新好友请求，通过后按需自动发送打招呼消息。
+        - new_friend_switch：自动通过新好友申请
+        - new_friend_reply_switch：通过后自动回复消息
         消息中若包含图片路径则以文件形式发送，否则以文字发送。
         """
         NewFriends = self.wx.GetNewFriends(acceptable=True)
@@ -1556,17 +1569,18 @@ class WXBot:
         if len(NewFriends) != 0:
             log(message="以下是新朋友：\n" + str(NewFriends))
             for new in NewFriends:
-                new_name = new.name + '_机器人备注'
+                new_name = datetime.now().strftime('%Y%m%d%H%M%S') + '_机器人备注'
                 new.accept(remark=new_name)  # 接受好友请求并设置备注
-                log(message="已通过" + new.name + "的好友请求")
+                log(message="已通过" + new_name + "的好友请求")
                 self.wx.SwitchToChat()       # 通过请求后切换回聊天页面
                 time.sleep(5)
-                for msg in self.config.new_frien_msg:
-                    if self.is_image_path(msg):
-                        self.wx.SendFiles(who=new_name, filepath=msg)
-                    else:
-                        self.wx.SendMsg(who=new_name, msg=msg)
-                    time.sleep(random.randint(1, 3))  # 随机延时，模拟人工操作
+                if self.config.new_frien_reply_switch:
+                    for msg in self.config.new_frien_msg:
+                        if self.is_image_path(msg):
+                            self.wx.SendFiles(who=new_name, filepath=msg)
+                        else:
+                            self.wx.SendMsg(who=new_name, msg=msg)
+                        time.sleep(random.randint(1, 3))  # 随机延时，模拟人工操作
                 # 发送完毕后跳转到文件传输助手，再切换到通讯录准备处理下一个
                 self.wx.ChatWith(who='文件传输助手')
                 time.sleep(1)
