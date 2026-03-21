@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.3.3"
-version_log = "V4.3.3 - 添加docs，修复新好友同意"
+version = "V4.5.0"
+version_log = "V4.5.0 - 增加对话记忆功能"
 
 # ============================================================
 # 标准库导入
@@ -14,6 +14,7 @@ import sys
 import time
 import json
 import random
+import threading
 import traceback
 from datetime import datetime, timedelta
 
@@ -124,6 +125,11 @@ class WXBotConfig:
         self.scheduled_msg_switch = False    # 定时消息总开关
         self.scheduled_msg_list = []         # 定时消息任务列表
 
+        # ---------- 对话记忆配置 ----------
+        self.memory_switch        = True     # 记忆开关（默认开启）
+        self.memory_max_count     = 500      # 单窗口最多存储条数
+        self.memory_context_count = 100      # AI 请求时带入条数
+
         # 初始化时自动加载配置并同步到属性
         self.load_config()
         self.update_global_config()
@@ -157,7 +163,7 @@ class WXBotConfig:
                         {"sdk": "DusAPI", "key": "your-api-key", "url": "https://api.dusapi.com", "model": "claude-sonnet-4-6"},
                     ],
                     "api_index": 0,
-                    "prompt": "你是一个ai回复助手，请根据用户的问题给出回答",
+                    "prompt": "你是一个ai回复助手，请根据用户的问题给出回答,回复尽量保持在30字以内",
                     "admin": "文件传输助手",
                     "AllListen_switch": False,
                     "listen_list": [],
@@ -178,6 +184,9 @@ class WXBotConfig:
                     "everyday_start_stop_bot_switch": False,
                     "everyday_start_bot_time": "08:00",
                     "everyday_stop_bot_time": "23:00",
+                    "memory_switch": True,
+                    "memory_max_count": 500,
+                    "memory_context_count": 100,
                 }
                 with open(self.CONFIG_FILE, "w", encoding="utf-8") as f:
                     json.dump(base_config, f, ensure_ascii=False, indent=4)
@@ -289,6 +298,11 @@ class WXBotConfig:
                         'msgs': task.get('msgs', []),
                     })
 
+        # 对话记忆配置
+        self.memory_switch        = self.config.get('memory_switch', True)
+        self.memory_max_count     = int(self.config.get('memory_max_count', 500))
+        self.memory_context_count = int(self.config.get('memory_context_count', 100))
+
         log(message="全局配置更新完成")
 
     def set_config(self, id, new_content):
@@ -379,6 +393,75 @@ class WXBotConfig:
 
 
 # ============================================================
+# 对话记忆管理类
+# ============================================================
+
+class MemoryManager:
+    """
+    对话记忆管理类
+    按窗口分文件存储收发消息，并在 AI 请求时提供历史上下文。
+    存储路径：{base_path}/{wx_id}/{chat_name}/{chat_name}_memory.json
+    """
+
+    def __init__(self, wx_id, base_path):
+        self.wx_id     = wx_id
+        self.base_path = base_path  # 根目录：{base_dir}/memory/
+        self._locks    = {}         # chat_name -> threading.Lock()
+
+    def _get_lock(self, chat_name):
+        if chat_name not in self._locks:
+            self._locks[chat_name] = threading.Lock()
+        return self._locks[chat_name]
+
+    def _get_memory_path(self, chat_name):
+        """返回记忆文件路径，并确保目录存在"""
+        dir_path = os.path.join(self.base_path, self.wx_id, chat_name)
+        os.makedirs(dir_path, exist_ok=True)
+        return os.path.join(dir_path, f"{chat_name}_memory.json")
+
+    def save_message(self, chat_name, sender, content, msg_type, msg_attr, max_count):
+        """写入一条消息到记忆文件，超出 max_count 时删除最旧的"""
+        path  = self._get_memory_path(chat_name)
+        entry = {
+            "time":    datetime.now().strftime("%Y/%m/%d %H:%M:%S"),
+            "type":    str(msg_type),
+            "attr":    str(msg_attr),
+            "sender":  str(sender),
+            "content": str(content),
+        }
+        with self._get_lock(chat_name):
+            if os.path.exists(path):
+                try:
+                    with open(path, 'r', encoding='utf-8') as f:
+                        messages = json.load(f)
+                    if not isinstance(messages, list):
+                        messages = []
+                except Exception:
+                    messages = []
+            else:
+                messages = []
+            messages.append(entry)
+            if len(messages) > max_count:
+                messages = messages[-max_count:]
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(messages, f, ensure_ascii=False, indent=2)
+
+    def get_messages(self, chat_name, count):
+        """读取最近 count 条记忆，返回 list"""
+        path = self._get_memory_path(chat_name)
+        if not os.path.exists(path):
+            return []
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                messages = json.load(f)
+            if isinstance(messages, list):
+                return messages[-count:]
+        except Exception:
+            pass
+        return []
+
+
+# ============================================================
 # AI 接口类
 # ============================================================
 
@@ -403,7 +486,7 @@ class OpenAIAPI:
             }
         )
 
-    def chat(self, message, model=None, stream=False, prompt=None):
+    def chat(self, message, model=None, stream=False, prompt=None, history=None):
         """
         调用 OpenAI 兼容接口获取 AI 回复。
 
@@ -411,6 +494,7 @@ class OpenAIAPI:
         :param model:   指定模型，为 None 时使用当前默认模型
         :param stream:  是否使用流式输出
         :param prompt:  系统提示词，为 None 时使用配置中的 prompt
+        :param history: 历史消息列表（MemoryManager.get_messages 返回值）
         :return:        AI 回复的文本字符串
         """
         if model is None:
@@ -418,13 +502,19 @@ class OpenAIAPI:
         if prompt is None:
             prompt = self.config.prompt
 
+        messages = [{"role": "system", "content": prompt}]
+        if history:
+            for h in history:
+                role = "assistant" if h.get('attr') == 'self' else "user"
+                t = h.get('time', '')
+                content = f"[{t}] {h.get('content', '')}" if t else h.get('content', '')
+                messages.append({"role": role, "content": content})
+        messages.append({"role": "user", "content": message})
+
         try:
             response = self.client.chat.completions.create(
                 model=model,
-                messages=[
-                    {"role": "system", "content": prompt},
-                    {"role": "user",   "content": message},
-                ],
+                messages=messages,
                 stream=stream,
             )
         except Exception as e:
@@ -539,16 +629,24 @@ class DifyAPI:
         self.api_key = "Bearer " + config.api_key   # Dify 使用 Bearer Token 鉴权
         self.base_url = config.base_url
 
-    def chat(self, message, model=None, stream=True, prompt=None):
+    def chat(self, message, model=None, stream=True, prompt=None, history=None):
         """
         调用 Dify 对话接口，返回 AI 回复文本。
 
         :param message: 用户输入内容
+        :param history: 历史消息列表（Dify 不支持多轮消息，拼接为上下文前缀）
         :return:        AI 回复字符串
         """
+        query = message
+        if history:
+            ctx = "\n".join([
+                f"[{h.get('time', '')}] {'助手' if h.get('attr') == 'self' else h.get('sender', '用户')}: {h.get('content', '')}"
+                for h in history
+            ])
+            query = f"[历史对话]\n{ctx}\n[当前消息]\n{message}"
         # 以阻塞模式请求 Dify 接口
         response = self.run_dify_conversation(
-            query=message,
+            query=query,
             response_mode="blocking",
         )
 
@@ -669,21 +767,34 @@ class CozeAPI:
             base_url=self.base_url,
         )
 
-    def chat(self, message, model=None, stream=True, prompt=None):
+    def chat(self, message, model=None, stream=True, prompt=None, history=None):
         """
         调用扣子流式接口获取 AI 回复，并拼接完整的回答文本。
 
         :param message: 用户输入内容
+        :param history: 历史消息列表
         :return:        AI 回复字符串
         """
+        additional_messages = []
+        if history:
+            for h in history:
+                t = h.get('time', '')
+                raw = h.get('content', '')
+                content = f"[{t}] {raw}" if t else raw
+                if h.get('attr') == 'self':
+                    try:
+                        additional_messages.append(CozeMessage.build_assistant_answer(content))
+                    except Exception:
+                        additional_messages.append(CozeMessage.build_user_question_text(f"[助手]: {content}"))
+                else:
+                    additional_messages.append(CozeMessage.build_user_question_text(content))
+        additional_messages.append(CozeMessage.build_user_question_text(message))
         chunk_message = ""
         try:
             for event in self.coze.chat.stream(
                 bot_id=self.bot_id,
                 user_id=self.user_id + str(time.time()),  # 用时间戳保证 user_id 唯一
-                additional_messages=[
-                    CozeMessage.build_user_question_text(message),
-                ],
+                additional_messages=additional_messages,
             ):
                 # 逐块拼接流式回答内容
                 if event.event == ChatEventType.CONVERSATION_MESSAGE_DELTA:
@@ -715,7 +826,7 @@ class DusAPI:
         self.api_key = config.api_key
         self.base_url = config.base_url.rstrip('/')
 
-    def chat(self, message, model=None, stream=False, prompt=None):
+    def chat(self, message, model=None, stream=False, prompt=None, history=None):
         if model is None:
             model = self.DS_NOW_MOD
         if prompt is None:
@@ -727,45 +838,60 @@ class DusAPI:
             "content-type": "application/json",
             'user-agent': 'siver-wxbot-panel/v0.0.1'
         }
+        messages = [{"role": "system", "content": prompt}]
+        if history:
+            for h in history:
+                role = "assistant" if h.get('attr') == 'self' else "user"
+                t = h.get('time', '')
+                content = f"[{t}] {h.get('content', '')}" if t else h.get('content', '')
+                messages.append({"role": role, "content": content})
+        messages.append({"role": "user", "content": message})
         payload = {
             "model": model,
             "max_tokens": 1024,
-            "messages": [
-                {"role": "system", "content": prompt},
-                {"role": "user", "content": message}
-                ]
+            "messages": messages,
         }
         api_endpoint = f"{self.base_url}/v1/messages"
+        # 梯度重试间隔（秒）：第1次失败后等2s，第2次4s，第3次8s，第4次16s，第5次32s
+        retry_delays = [2, 4, 8, 16, 32]
+        max_retries  = 5
+        last_error   = None
 
-        try:
-            response = requests.post(api_endpoint, headers=headers, json=payload, timeout=30)
-            response.raise_for_status()
-            response.encoding = 'utf-8'
-            response_data = response.json()
+        for attempt in range(max_retries + 1):
+            try:
+                response = requests.post(api_endpoint, headers=headers, json=payload, timeout=30)
+                response.raise_for_status()
+                response.encoding = 'utf-8'
+                response_data = response.json()
 
-            if 'claude' in model.lower():
-                # 按 claude.py 规范解析
-                result = response_data['content'][0]['text']
-            else:
-                # 按 gpt.py 规范解析，遍历 content 找 type=='text'
-                result = None
-                for content_block in response_data['content']:
-                    if content_block.get('type') == 'text':
-                        result = content_block['text']
-                        break
-                if result is None:
-                    log(level="WARN", message="DusAPI 响应中未找到文本内容")
-                    return "AI 未返回有效内容"
+                if 'claude' in model.lower():
+                    result = response_data['content'][0]['text']
+                else:
+                    result = None
+                    for content_block in response_data['content']:
+                        if content_block.get('type') == 'text':
+                            result = content_block['text']
+                            break
+                    if result is None:
+                        log(level="WARN", message="DusAPI 响应中未找到文本内容")
+                        return "AI 未返回有效内容"
 
-            log(message=f"DusAPI 返回成功：{result[:100]}...")
-            return result
+                if attempt > 0:
+                    log(message=f"DusAPI 第 {attempt} 次重试成功：{result[:100]}...")
+                else:
+                    log(message=f"DusAPI 返回成功：{result[:100]}...")
+                return result
 
-        except requests.exceptions.HTTPError as e:
-            log(level="ERROR", message=f"DusAPI HTTP 错误: {e}")
-            return "API返回错误，请稍后再试"
-        except Exception as e:
-            log(level="ERROR", message=f"DusAPI 调用失败: {e}")
-            return "API接口失效，请联系管理员"
+            except Exception as e:
+                last_error = e
+                if attempt < max_retries:
+                    delay = retry_delays[attempt]
+                    log(level="WARNING", message=f"DusAPI 第 {attempt + 1} 次失败（{type(e).__name__}），{delay}s 后重试...")
+                    time.sleep(delay)
+                else:
+                    log(level="ERROR", message=f"DusAPI 已重试 {max_retries} 次，最终失败: {last_error}")
+
+        return "API接口失效，请联系管理员"
 
 
 # ============================================================
@@ -788,6 +914,7 @@ class WXBot:
         self.api = self._init_api()
 
         self.wx                  = None         # WeChat 客户端对象（延迟初始化）
+        self.memory_manager      = None         # 记忆管理器（init_wx_listeners 时创建）
         self.all_Mode_listen_list = []           # 全局模式下的动态监听列表，元素格式：[昵称, 最新消息时间戳]
         self.start_time          = datetime.now()
         self.callback_is_die     = False        # 回调函数是否发生致命错误的标志
@@ -886,6 +1013,17 @@ class WXBot:
         # 绑定 @ 标识（格式："@机器人昵称"）
         self.config.AtMe = "@" + self.wx.nickname
         log(message='绑定@：' + self.config.AtMe)
+
+        # 初始化记忆管理器
+        try:
+            my_info = self.wx.GetMyInfo()
+            wx_id   = my_info.get('id', 'unknown')
+        except Exception:
+            wx_id = 'unknown'
+        _base       = os.path.dirname(sys.executable) if hasattr(sys, '_MEIPASS') else os.path.abspath(".")
+        memory_base = os.path.join(_base, 'memory')
+        self.memory_manager = MemoryManager(wx_id, memory_base)
+        log(message=f"记忆管理器已初始化，微信号: {wx_id}")
 
         # 启动 wxautox 消息监听器
         log(message='启动wxautox监听器...')
@@ -1077,6 +1215,19 @@ class WXBot:
                             text + '\n' + result['message'],
                         )
 
+            # 写入对话记忆
+            if self.config.memory_switch and self.memory_manager:
+                try:
+                    self.memory_manager.save_message(
+                        chat_name=chat.who,
+                        sender=msg.sender,
+                        content=msg.content,
+                        msg_type=msg.type,
+                        msg_attr=msg.attr,
+                        max_count=self.config.memory_max_count,
+                    )
+                except Exception as e:
+                    log(level="WARNING", message=f"写入记忆失败: {e}")
         except Exception as e:
             # 回调函数出现未捕获异常时标记 callback_is_die，由主循环检测并处理
             self.callback_is_die = True
@@ -1122,7 +1273,12 @@ class WXBot:
                 content_without_at = re.sub(self.config.AtMe, "", message.content).strip()
                 log(message=f"群组 {chat.who} 消息：" + content_without_at)
                 try:
-                    reply = self.api.chat(content_without_at, prompt=self.config.prompt)
+                    history = []
+                    if self.config.memory_switch and self.memory_manager:
+                        history = self.memory_manager.get_messages(
+                            chat.who, self.config.memory_context_count
+                        )
+                    reply = self.api.chat(content_without_at, prompt=self.config.prompt, history=history)
                 except Exception as e:
                     print(traceback.format_exc())
                     log(level="ERROR", message=str(e) + "\n群组中调用AI回复错误！！")
@@ -1169,8 +1325,13 @@ class WXBot:
                         log(message=f"私聊 {chat.who} 关键字消息：" + message.content)
                         reply = self.config.keyword_dict[keyword]
             if not is_keyword:
-                # 未命中关键词，调用 AI 接口
-                reply = self.api.chat(message.content, prompt=self.config.prompt)
+                # 未命中关键词，调用 AI 接口（带入历史记忆）
+                history = []
+                if self.config.memory_switch and self.memory_manager:
+                    history = self.memory_manager.get_messages(
+                        chat.who, self.config.memory_context_count
+                    )
+                reply = self.api.chat(message.content, prompt=self.config.prompt, history=history)
         except Exception as e:
             print(traceback.format_exc())
             log(level="ERROR", message=str(e) + "\nAPI返回错误，请稍后再试")
@@ -1763,6 +1924,19 @@ class WXBot:
                 for msg in msgs:
                     # 仅处理 friend 类型的私聊消息，排除群聊
                     if msg.attr == 'friend' and chat_type == 'friend':
+                        # 全局模式首次消息：写入记忆（此处不经过 message_handle_callback）
+                        if self.config.memory_switch and self.memory_manager:
+                            try:
+                                self.memory_manager.save_message(
+                                    chat_name=chat,
+                                    sender=msg.sender,
+                                    content=msg.content,
+                                    msg_type=msg.type,
+                                    msg_attr=msg.attr,
+                                    max_count=self.config.memory_max_count,
+                                )
+                            except Exception as e:
+                                log(level="WARNING", message=f"写入记忆失败: {e}")
                         if not self.is_chat_listened(chat):
                             self.add_chat_to_listen(chat)
                         else:

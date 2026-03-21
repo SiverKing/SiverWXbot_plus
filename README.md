@@ -1,13 +1,13 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.3.3-blue.svg)](https://github.com/yourusername/wxbot_plus)
+[![Version](https://img.shields.io/badge/version-V4.5.0-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
 [![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
 
-> 一个功能完整、架构清晰的WX机器人框架，支持多 AI 平台接入、灵活的监听模式、丰富的管理命令和智能的消息处理流程。
+> 一个功能完整、架构清晰的WX机器人框架，支持多 AI 平台接入、对话记忆、灵活的监听模式、丰富的管理命令和智能的消息处理流程。
 
 **作者**: [Siver](https://siver.top)
-**当前版本**：V4.3.3 - 好友管理新增自动通过与自动回复独立开关
+**当前版本**：V4.5.0
 
 📖 **[查看完整使用文档](https://github.com/SiverKing/SiverWXbot_plus/blob/main/docs/docs.md)**
 
@@ -15,10 +15,16 @@
 
 ## ✨ 核心特性
 
+### 🧠 对话记忆（新）
+- **全窗口记忆存储** - 机器人运行时将所有收发消息按聊天窗口独立存档
+- **AI 上下文携带** - 调用 AI 时自动带入最近 N 条历史消息，实现连续对话
+- **灵活配置** - 最大存储条数（50~2000）、AI 带入条数均可单独配置
+- **记忆管理面板** - 在 Web 面板中可视化查看/删除各窗口的记忆记录，气泡式消息展示
+
 ### 🎯 多 AI 平台支持
 - **DusAPI** ⭐ 推荐 - 兼容 Claude、GPT 等全系模型，国内稳定低延迟，一个 Key 搞定所有需求
   - 官网：[dusapi.com](https://dusapi.com)
-  - 兼容性最好，速度最快，使用最丝滑顺畅
+  - **自动重试**：自动失败重试机制
 - **OpenAI SDK** - 兼容所有 OpenAI 格式的 API（DeepSeek、通义千问等）
   - 支持流式和非流式输出
   - 支持思维链内容（reasoning_content）
@@ -68,11 +74,11 @@
 
 ### 🌐 Web 管理界面
 - **状态面板** - 首页实时展示运行状态、消息统计、在线时长等关键指标，5 秒自动刷新
+- **记忆管理** - 三栏式记忆查看器（wx号→窗口→消息气泡），支持删除
 - **全新 UI** - 侧边栏导航 + 分类标签页，配置一目了然
 - **用户认证** - 账密从代码分离到 `admin.json`，修改无需改代码
 - **实时日志** - 底部可折叠日志面板，支持级别筛选（INFO/SUCCESS/WARNING/ERROR）
 - **配置管理** - 在线修改所有配置，保存即生效
-- **监听模式提示** - 黑名单/白名单模式醒目提示
 
 ### 📧 告警通知
 - **邮件告警** - 发生错误时自动发送邮件通知
@@ -90,8 +96,9 @@
 | 模型覆盖 | ✅ Claude + GPT 全系 | ⚠️ 仅 OpenAI |
 | 一个 Key | ✅ 搞定所有模型 | ❌ 各平台单独申请 |
 | 兼容性 | ✅ 最优 | ⚠️ 部分接口差异 |
+| 自动重试 | ✅ 梯度重试，更稳定 | ⚠️ 依赖 SDK 默认行为 |
 
-👉 前往 [dusapi.com](https://dusapi.com) 注册获取 Key，支持 Claude Opus 4.6、Claude Sonnet 4.6、GPT-5.4、GPT-5.4 Pro、GPT-5.3 Codex等主流模型。
+👉 前往 [dusapi.com](https://dusapi.com) 注册获取 Key，支持 Claude Opus 4.6、Claude Sonnet 4.6、GPT-5、GPT-5 Pro 等主流模型。
 
 ---
 
@@ -101,7 +108,7 @@
 - Python `3.8` - `3.12`
 - Windows 操作系统
 - Windows wx PC 版（`4.1.7` - `4.1.8` 版本）
-- wxautox4 授权（ 需购买 地址：https://www.siver.top/static/img/siver_wx.jpg ）
+- wxautox4 授权（需购买，地址：[点我进入](https://www.siver.top/static/img/siver_wx.jpg)）
 
 ### 安装步骤
 
@@ -181,7 +188,10 @@ python web_server.py
     ],
     "everyday_start_stop_bot_switch": false,
     "everyday_start_bot_time": "08:00",
-    "everyday_stop_bot_time": "23:00"
+    "everyday_stop_bot_time": "23:00",
+    "memory_switch": true,
+    "memory_max_count": 500,
+    "memory_context_count": 100
 }
 ```
 
@@ -211,6 +221,9 @@ python web_server.py
 | `everyday_start_stop_bot_switch` | boolean | 是否开启每日定时启停机器人 |
 | `everyday_start_bot_time` | string | 每日自动启动机器人的时间（格式 `HH:MM`） |
 | `everyday_stop_bot_time` | string | 每日自动停止机器人的时间（格式 `HH:MM`） |
+| `memory_switch` | boolean | 是否开启对话记忆功能，默认 `true` |
+| `memory_max_count` | integer | 单窗口最多存储的消息条数（50~2000），默认 `500` |
+| `memory_context_count` | integer | AI 请求时带入的历史消息条数（50~上限），默认 `100` |
 
 ### admin.json 账密文件
 
@@ -318,6 +331,10 @@ wxbot_plus/
 │   ├── config.json            # 机器人配置
 │   ├── admin.json             # Web 管理账密
 │   └── email.txt              # 邮件告警配置
+├── memory/                    # 对话记忆目录（自动创建）
+│   └── {wx_id}/               # 按wx号分目录
+│       └── {chat_name}/       # 按聊天窗口分目录
+│           └── {chat_name}_memory.json
 ├── panel_logs/                # 运行日志目录（自动创建）
 ├── templates/                 # Web 界面模板
 └── wxauto_logs/               # wxautox 日志目录
@@ -330,34 +347,43 @@ wxbot_plus/
 ### WXBotConfig
 配置管理类，负责配置文件的加载、保存和动态管理。
 
+### MemoryManager
+对话记忆管理类，按聊天窗口分文件存储历史消息，线程安全写入。
+
+**特性**：
+- 每个聊天窗口独立存储为 JSON 文件
+- 写入带线程锁，并发安全
+- 超出最大条数时自动删除最旧的消息
+- `get_messages(chat, n)` 读取最近 n 条，供 AI 接口使用
+
 ### OpenAIAPI
 OpenAI 兼容接口类，支持所有 OpenAI 格式的 API。
 
 **特性**：
 - 自动降级到 Responses API 备用方案
 - 支持流式和非流式输出
-- 详细的错误处理和重试机制
+- 支持历史记忆上下文（history 参数）
 
 ### DusAPI
 DusAPI 兼容接口封装类，使用 Anthropic 格式（`x-api-key` + `/v1/messages`）统一调用 Claude、GPT 等全系模型。
 
 **特性**：
 - 根据模型名称自动选择响应解析方式：含 `claude` 按 Claude 格式解析，其他按 GPT 格式解析
-- 国内稳定低延迟，一个 Key 搞定所有模型
-- 统一接口，无需关心底层模型差异
+- **梯度重试机制**：失败后自动重试最多 5 次，间隔 2s→4s→8s→16s→32s 梯度增长
+- 支持历史记忆上下文（history 参数）
 
 ### DifyAPI
-Dify 平台接口类，通过 HTTP 请求调用 Dify 对话工作流。
+Dify 平台接口类，通过 HTTP 请求调用 Dify 对话工作流。支持将历史对话拼接为上下文前缀传入。
 
 ### CozeAPI
-扣子平台接口类，使用官方 cozepy SDK 进行流式对话。
+扣子平台接口类，使用官方 cozepy SDK 进行流式对话。支持历史消息作为 additional_messages 传入。
 
 ### WXBot
 WX机器人主类，整合所有功能的核心控制类。
 
 **核心方法**：
-- `init_wx_listeners()` - 初始化WX监听器
-- `message_handle_callback()` - 消息回调处理
+- `init_wx_listeners()` - 初始化WX监听器，同时初始化 MemoryManager
+- `message_handle_callback()` - 消息回调处理，写入记忆
 - `process_message()` - 消息分发逻辑
 - `process_command()` - 管理命令处理
 - `main()` - 机器人主循环
@@ -365,6 +391,41 @@ WX机器人主类，整合所有功能的核心控制类。
 ---
 
 ## 🚀 高级功能
+
+### 对话记忆详解
+
+开启后，机器人运行期间所有收发消息均写入记忆文件：
+
+```
+memory/
+└── wxid_xxxxxx/           ← 你的wx号
+    ├── 张三/
+    │   └── 张三_memory.json
+    └── 某某群/
+        └── 某某群_memory.json
+```
+
+**记忆 JSON 格式**：
+```json
+[
+  {
+    "time": "2024/01/01 12:00:00",
+    "type": "text",
+    "attr": "friend",
+    "sender": "张三",
+    "content": "你好"
+  },
+  {
+    "time": "2024/01/01 12:00:05",
+    "type": "text",
+    "attr": "self",
+    "sender": "我",
+    "content": "你好！有什么可以帮你的？"
+  }
+]
+```
+
+**注意**：开启记忆后每次 AI 请求都会携带最近 N 条历史，会增加 token 消耗。推荐配置：`memory_max_count=500`，`memory_context_count=100`。
 
 ### 监听模式详解
 
@@ -382,15 +443,16 @@ WX机器人主类，整合所有功能的核心控制类。
 
 ```
 接收消息
+  ├─ 写入对话记忆（memory_switch 开启时）
   ├─ attr=friend → 黑/白名单过滤
   │                  ↓
   │               群聊消息？
-  │                  ├─ 是 → 检测 @ → 去除 @ 标识 → 调用 AI
+  │                  ├─ 是 → 检测 @ → 去除 @ 标识 → 带入记忆 → 调用 AI
   │                  └─ 否 → 管理员命令？
   │                            ├─ 是 → 执行命令
   │                            └─ 否 → 关键词回复？
   │                                      ├─ 是 → 返回关键词回复
-  │                                      └─ 否 → 调用 AI 回复
+  │                                      └─ 否 → 带入记忆 → 调用 AI 回复
   ├─ attr=self  → 窗口是管理员（文件传输助手）？
   │                  ├─ 是 → 执行命令（不调用 AI，防止回复循环）
   │                  └─ 否 → 忽略
@@ -399,7 +461,7 @@ WX机器人主类，整合所有功能的核心控制类。
 
 ### 文件传输助手作为管理员
 
-没有第二个微信账号时，可将 `admin` 设置为 `文件传输助手`，在手机上用当前微信账号向「文件传输助手」发送指令，消息会同步到机器人所在的 PC 并被识别执行。
+没有第二个wx账号时，可将 `admin` 设置为 `文件传输助手`，在手机上用当前wx账号向「文件传输助手」发送指令，消息会同步到机器人所在的 PC 并被识别执行。
 
 面板「管理员」页有详细说明。
 
@@ -409,10 +471,21 @@ WX机器人主类，整合所有功能的核心控制类。
 - **回调异常检测**：监听器回调异常时自动停止
 - **邮件告警**：发生错误时自动发送邮件通知
 - **超时会话管理**：自动移除超时会话，释放资源
+- **DusAPI 梯度重试**：网络抖动或接口临时故障时自动重试，最多 5 次，间隔梯度增长
 
 ---
 
 ## 📝 开发日志
+
+### V4.5.0 (2026-03-21)
+- 新增**对话记忆功能**：机器人运行时按窗口将所有消息写入 JSON 文件，AI 回复时自动携带最近 N 条历史上下文，实现连续对话能力
+  - 支持四种 AI 接口（DusAPI/OpenAI SDK/Dify/Coze）的记忆传入
+  - Dify 将历史拼接为对话前缀，Coze 以 additional_messages 形式传入
+  - 全局监听模式（黑名单）的首次消息也正确写入记忆
+  - 历史消息携带时间戳，AI 可感知消息发送顺序
+- 新增 Web 面板**记忆管理**页：三栏布局（wx号→窗口→消息气泡），支持逐窗口/逐wx号删除
+- DusAPI 新增**梯度重试机制**：失败后自动重试最多 5 次，间隔 2s→4s→8s→16s→32s
+- 修复日志面板轮询 bug：服务端 50 条缓冲区满时日志不再停止更新，改为基于内容标识的增量更新
 
 ### V4.3.3 (2026-03-20)
 - 好友管理新增"自动通过新好友申请"与"新好友自动回复"两个独立开关，可分别控制是否自动通过好友请求和是否发送打招呼消息
@@ -453,23 +526,26 @@ WX机器人主类，整合所有功能的核心控制类。
    - 注意 API 调用频率限制
    - 建议配置备用 API
 
-4. **安全建议**
-   - 不要将 `config/` 目录（含 `config.json`、`admin.json`、`email.txt`）提交到公共仓库
-   - 定期更换 API 密钥
-   - 修改 `config/admin.json` 中的默认密码（默认：`123456`），或在面板「账号密码」页修改
+4. **记忆功能**
+   - 开启记忆后每次 AI 请求携带历史，**会增加 token 消耗**
+   - 推荐存储 500 条，AI 带入 100 条，按需调整
+   - 记忆文件存储在 `memory/` 目录，勿提交到公共仓库（含聊天内容）
 
-5. **性能优化**
+5. **安全建议**
+   - 不要将 `config/` 和 `memory/` 目录提交到公共仓库
+   - 定期更换 API 密钥
+   - 修改 `config/admin.json` 中的默认密码（默认：`123456`）
+
+6. **性能优化**
    - 白名单模式性能优于黑名单模式
    - 关闭不需要的功能可减少资源占用
-   - 定期清理日志文件
-
+   - 定期清理日志文件和记忆文件
 
 ---
 
 ## 📄 许可证
 
 本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
-
 
 ---
 

@@ -234,7 +234,9 @@ def dashboard():
     config.setdefault('everyday_start_stop_bot_switch', False)
     config.setdefault('everyday_start_bot_time', "08:00")
     config.setdefault('everyday_stop_bot_time', "23:00")
-
+    config.setdefault('memory_switch', True)
+    config.setdefault('memory_max_count', 500)
+    config.setdefault('memory_context_count', 100)
 
     return render_template('dashboard.html', config=config, logs=log_messages[-50:])
 
@@ -256,6 +258,7 @@ def _coerce_bool_fields(merged_config):
         'group_keyword_switch',
         'scheduled_msg_switch',
         'everyday_start_stop_bot_switch',   # 新增
+        'memory_switch',                    # 记忆开关
     ]
     for field in boolean_fields:
         if field in merged_config:
@@ -518,6 +521,78 @@ def save_email_config():
         log('ERROR', f'保存邮件配置失败: {e}')
         return jsonify({'status': 'error', 'message': str(e)})
 
+import shutil
+
+MEMORY_BASE = os.path.join(base_dir(), 'memory')
+
+@app.route('/memory/list')
+@login_required
+def memory_list():
+    """返回所有微信号目录"""
+    try:
+        if not os.path.exists(MEMORY_BASE):
+            return jsonify({'status': 'success', 'wx_ids': []})
+        wx_ids = [d for d in os.listdir(MEMORY_BASE)
+                  if os.path.isdir(os.path.join(MEMORY_BASE, d))]
+        return jsonify({'status': 'success', 'wx_ids': wx_ids})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/memory/chats/<wx_id>')
+@login_required
+def memory_chats(wx_id):
+    """返回指定微信号下所有窗口名"""
+    try:
+        wx_path = os.path.join(MEMORY_BASE, wx_id)
+        if not os.path.exists(wx_path):
+            return jsonify({'status': 'success', 'chats': []})
+        chats = [d for d in os.listdir(wx_path)
+                 if os.path.isdir(os.path.join(wx_path, d))]
+        return jsonify({'status': 'success', 'chats': chats})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/memory/data/<wx_id>/<chat_name>')
+@login_required
+def memory_data(wx_id, chat_name):
+    """返回指定窗口的记忆数据（JSON 列表）"""
+    try:
+        file_path = os.path.join(MEMORY_BASE, wx_id, chat_name, f"{chat_name}_memory.json")
+        if not os.path.exists(file_path):
+            return jsonify({'status': 'success', 'messages': []})
+        with open(file_path, 'r', encoding='utf-8') as f:
+            messages = json.load(f)
+        return jsonify({'status': 'success', 'messages': messages if isinstance(messages, list) else []})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/memory/delete_wx/<wx_id>', methods=['DELETE'])
+@login_required
+def memory_delete_wx(wx_id):
+    """删除指定微信号的所有记忆"""
+    try:
+        wx_path = os.path.join(MEMORY_BASE, wx_id)
+        if os.path.exists(wx_path):
+            shutil.rmtree(wx_path)
+        log('SUCCESS', f'已删除微信号 {wx_id} 的所有记忆')
+        return jsonify({'status': 'success', 'message': '已删除'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/memory/delete_chat/<wx_id>/<chat_name>', methods=['DELETE'])
+@login_required
+def memory_delete_chat(wx_id, chat_name):
+    """删除指定窗口的记忆文件"""
+    try:
+        chat_path = os.path.join(MEMORY_BASE, wx_id, chat_name)
+        if os.path.exists(chat_path):
+            shutil.rmtree(chat_path)
+        log('SUCCESS', f'已删除 {wx_id}/{chat_name} 的记忆')
+        return jsonify({'status': 'success', 'message': '已删除'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+
 def time_start_stop():
     """定时启停"""
     def is_target_time(target_hour, target_minute):
@@ -621,7 +696,7 @@ def main():
                     {"sdk": "DusAPI", "key": "your-api-key", "url": "https://api.dusapi.com", "model": "claude-sonnet-4-6"},
                 ],
                 "api_index": 0,
-                "prompt": "你是一个ai回复助手，请根据用户的问题给出回答",
+                "prompt": "你是一个ai回复助手，请根据用户的问题给出回答,回复尽量保持在30字以内",
                 "admin": "文件传输助手",
                 "AllListen_switch": False,
                 "listen_list": [],
@@ -642,6 +717,9 @@ def main():
                 "everyday_start_stop_bot_switch": False,
                 "everyday_start_bot_time": "08:00",
                 "everyday_stop_bot_time": "23:00",
+                "memory_switch": True,
+                "memory_max_count": 500,
+                "memory_context_count": 100,
             }
             with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
                 json.dump(default_config, f, ensure_ascii=False, indent=4)

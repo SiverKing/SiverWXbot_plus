@@ -151,6 +151,32 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
   .log-panel { left: 0; }
 }
 
+/* ===== Memory Panel ===== */
+.memory-layout { display: flex; gap: 0; height: 560px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.memory-list-panel { width: 200px; min-width: 160px; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--muted-bg); }
+.memory-list-panel .panel-title { padding: 10px 14px; font-size: 12.5px; font-weight: 700; color: var(--muted); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.memory-list-panel .panel-title button { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; padding: 0 2px; }
+.memory-list-panel .panel-title button:hover { color: var(--primary); }
+.memory-list-inner { flex: 1; overflow-y: auto; }
+.memory-list-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; font-size: 13px; color: var(--card-fg); cursor: pointer; border-bottom: 1px solid var(--border); gap: 6px; transition: background .12s; }
+.memory-list-item:hover { background: rgba(7,193,96,.06); }
+.memory-list-item.selected { background: rgba(7,193,96,.12); color: var(--primary); font-weight: 600; }
+.memory-list-item .item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.memory-list-item .btn-del-mem { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 12px; padding: 2px 4px; flex-shrink: 0; opacity: 0; transition: opacity .15s; }
+.memory-list-item:hover .btn-del-mem { opacity: 1; }
+.memory-list-item .btn-del-mem:hover { color: var(--danger); }
+.memory-chat-area { flex: 1; overflow-y: auto; padding: 14px 16px; background: #f0f0f0; display: flex; flex-direction: column; gap: 10px; }
+.msg-bubble-wrap { display: flex; flex-direction: column; max-width: 72%; gap: 3px; }
+.msg-bubble-wrap.left { align-self: flex-start; align-items: flex-start; }
+.msg-bubble-wrap.right { align-self: flex-end; align-items: flex-end; }
+.msg-bubble-wrap.center { align-self: center; align-items: center; max-width: 90%; }
+.msg-sender { font-size: 11px; color: var(--muted); padding: 0 4px; }
+.msg-bubble { padding: 8px 12px; border-radius: 8px; font-size: 13px; line-height: 1.55; word-break: break-word; }
+.msg-bubble.left { background: #fff; color: var(--card-fg); border-top-left-radius: 2px; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.msg-bubble.right { background: #95EC69; color: #191919; border-top-right-radius: 2px; }
+.msg-bubble.center { background: rgba(0,0,0,.12); color: #555; font-size: 11.5px; padding: 4px 10px; border-radius: 10px; }
+.msg-time { font-size: 10.5px; color: var(--muted); padding: 0 4px; }
+
 /* ===== Status Panel ===== */
 .stat-card { background: var(--muted-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 14px; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
 .stat-icon { font-size: 22px; color: var(--primary); }
@@ -166,6 +192,24 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
 <div class="topbar">
   <div class="brand"><i class="bi bi-robot"></i> SiverWXBot 管理面板</div>
   <div class="user-area">
+    <a href="https://github.com/SiverKing/SiverWXbot_plus/blob/main/docs/docs.md" target="_blank" rel="noopener"
+       style="display:inline-flex;align-items:center;gap:5px;color:rgba(255,255,255,.75);font-size:13px;text-decoration:none;border:1px solid rgba(255,255,255,.2);padding:4px 12px;border-radius:6px;transition:all .2s;"
+       onmouseover="this.style.background='rgba(255,255,255,.1)';this.style.color='#fff';"
+       onmouseout="this.style.background='';this.style.color='rgba(255,255,255,.75)';">
+      <i class="bi bi-file-text"></i> 使用文档
+    </a>
+    <a href="https://blog.siverking.online/index.php/2026/03/20/12/" target="_blank" rel="noopener"
+       style="display:inline-flex;align-items:center;gap:5px;color:rgba(255,255,255,.75);font-size:13px;text-decoration:none;border:1px solid rgba(255,255,255,.2);padding:4px 12px;border-radius:6px;transition:all .2s;"
+       onmouseover="this.style.background='rgba(255,255,255,.1)';this.style.color='#fff';"
+       onmouseout="this.style.background='';this.style.color='rgba(255,255,255,.75)';">
+      <i class="bi bi-file-text"></i> 备用文档
+    </a>
+    <a href="https://github.com/SiverKing/SiverWXbot_plus" target="_blank" rel="noopener"
+       style="display:inline-flex;align-items:center;gap:5px;color:rgba(255,255,255,.75);font-size:13px;text-decoration:none;border:1px solid rgba(255,255,255,.2);padding:4px 12px;border-radius:6px;transition:all .2s;"
+       onmouseover="this.style.background='rgba(255,255,255,.1)';this.style.color='#fff';"
+       onmouseout="this.style.background='';this.style.color='rgba(255,255,255,.75)';">
+      <i class="bi bi-star-fill" style="color:#FFC300;font-size:12px;"></i> Github Star
+    </a>
     <span>{{ session.username }}</span>
     <a href="/logout"><i class="bi bi-box-arrow-right"></i> 退出</a>
   </div>
@@ -186,6 +230,8 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
   <div class="nav-item"><a class="nav-link" data-tab="tab-keyword"><i class="bi bi-key"></i> 关键词回复</a></div>
   <div class="nav-item"><a class="nav-link" data-tab="tab-schedule"><i class="bi bi-alarm"></i> 定时消息</a></div>
   <div class="nav-item"><a class="nav-link" data-tab="tab-startstop"><i class="bi bi-clock-history"></i> 定时启停</a></div>
+  <div class="nav-divider"></div>
+  <div class="nav-item"><a class="nav-link" data-tab="tab-memory"><i class="bi bi-journal-text"></i> 记忆管理</a></div>
   <div class="nav-divider"></div>
   <div class="nav-item"><a class="nav-link" data-tab="tab-account"><i class="bi bi-person-gear"></i> 账号密码</a></div>
   <div class="nav-item"><a class="nav-link" data-tab="tab-email"><i class="bi bi-envelope-at"></i> 报错邮箱</a></div>
@@ -625,6 +671,54 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
     </div>
   </div>
 
+  <!-- ===== Tab: Memory ===== -->
+  <div class="config-panel" id="tab-memory">
+    <!-- 配置卡片 -->
+    <div class="cfg-card">
+      <div class="cfg-card-header"><i class="bi bi-journal-text"></i><h5>对话记忆配置</h5><span class="desc">记忆功能会增加 token 消耗</span></div>
+      <div class="switch-row">
+        <input class="form-check-input" type="checkbox" id="memory_switch" {% if config.get('memory_switch', True) %}checked{% endif %}>
+        <label class="form-check-label" for="memory_switch">启用对话记忆</label>
+        <span class="switch-desc">开启后机器人运行时的所有消息将写入记忆文件，AI 回复时携带历史上下文</span>
+      </div>
+      <div class="cfg-hint" style="margin-bottom:16px;">⚠️ 提示：推荐存储 500 条，AI 带入 100 条。数值越大 token 消耗越多，请根据实际需求调整。</div>
+      <div class="row g-3">
+        <div class="col-12 col-md-6">
+          <label class="cfg-label" for="memory_max_count">最大存储条数（50 ~ 2000）</label>
+          <input type="number" class="form-control" id="memory_max_count" min="50" max="2000"
+            value="{{ config.get('memory_max_count', 500) }}" placeholder="500">
+          <div class="cfg-hint">每个对话窗口最多保留的消息条数，超出后删除最旧的</div>
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="cfg-label" for="memory_context_count">AI 带入条数（50 ~ 存储上限）</label>
+          <input type="number" class="form-control" id="memory_context_count" min="50" max="2000"
+            value="{{ config.get('memory_context_count', 100) }}" placeholder="100">
+          <div class="cfg-hint">AI 回复时从记忆中读取最近 N 条作为上下文传入</div>
+        </div>
+      </div>
+    </div>
+    <!-- 记忆查看卡片 -->
+    <div class="cfg-card">
+      <div class="cfg-card-header"><i class="bi bi-chat-square-dots"></i><h5>记忆查看</h5><span class="desc">按需加载，切换时自动清空</span></div>
+      <div class="memory-layout">
+        <!-- 左栏：微信号列表 -->
+        <div class="memory-list-panel" id="memory-wx-panel">
+          <div class="panel-title">微信号 <button type="button" id="btn-refresh-memory" title="刷新"><i class="bi bi-arrow-clockwise"></i></button></div>
+          <div class="memory-list-inner" id="memory-wx-list"></div>
+        </div>
+        <!-- 中栏：窗口列表 -->
+        <div class="memory-list-panel" id="memory-chat-panel" style="display:none">
+          <div class="panel-title">对话窗口</div>
+          <div class="memory-list-inner" id="memory-chat-list"></div>
+        </div>
+        <!-- 右栏：消息记录 -->
+        <div class="memory-chat-area" id="memory-msg-area" style="display:none">
+          <div id="memory-msg-container"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   </form>
 </div>
 
@@ -913,7 +1007,10 @@ $(function(){
       scheduled_msg_list:[],
       everyday_start_stop_bot_switch:$('#everyday_start_stop_bot_switch').is(':checked'),
       everyday_start_bot_time:$('#everyday_start_bot_time').val(),
-      everyday_stop_bot_time:$('#everyday_stop_bot_time').val()
+      everyday_stop_bot_time:$('#everyday_stop_bot_time').val(),
+      memory_switch:$('#memory_switch').is(':checked'),
+      memory_max_count:parseInt($('#memory_max_count').val())||500,
+      memory_context_count:parseInt($('#memory_context_count').val())||100
     };
     $('input[name="listen_list"]').each(function(){ if($(this).val()) configData.listen_list.push($(this).val()); });
     $('input[name="group"]').each(function(){ if($(this).val()) configData.group.push($(this).val()); });
@@ -1097,28 +1194,193 @@ $(function(){
     });
   });
 
+  // ===== Memory Panel =====
+  var _memWxId = null, _memChatName = null;
+
+  // 渲染一条消息气泡
+  function _renderMemoryMsg(m){
+    var attr    = m.attr || '';
+    var content = $('<span>').text(m.content).html();
+    var t       = m.time || '';
+    if(attr === 'self'){
+      return '<div class="msg-bubble-wrap right">' +
+        '<div class="msg-bubble right">'+content+'</div>' +
+        '<div class="msg-time">'+t+'</div></div>';
+    } else if(attr === 'system' || attr === 'time'){
+      return '<div class="msg-bubble-wrap center">' +
+        '<div class="msg-bubble center">'+content+'</div></div>';
+    } else {
+      return '<div class="msg-bubble-wrap left">' +
+        '<div class="msg-sender">'+($('<span>').text(m.sender||'').html())+'</div>' +
+        '<div class="msg-bubble left">'+content+'</div>' +
+        '<div class="msg-time">'+t+'</div></div>';
+    }
+  }
+
+  // 加载并渲染消息列表
+  function loadMemoryMessages(wxid, chat){
+    var $c = $('#memory-msg-container');
+    $c.html('<div style="text-align:center;color:var(--muted);font-size:13px;padding:20px;">加载中...</div>');
+    $.getJSON('/memory/data/'+encodeURIComponent(wxid)+'/'+encodeURIComponent(chat))
+      .done(function(res){
+        $c.empty();
+        if(res.status !== 'success' || !res.messages.length){
+          $c.html('<div style="text-align:center;color:var(--muted);font-size:13px;padding:20px;">暂无消息记录</div>');
+          return;
+        }
+        var html = '';
+        res.messages.forEach(function(m){ html += _renderMemoryMsg(m); });
+        $c.html(html);
+        var $area = $('#memory-msg-area')[0];
+        if($area) $area.scrollTop = $area.scrollHeight;
+      })
+      .fail(function(xhr){
+        $c.html('<div style="text-align:center;color:var(--danger);font-size:13px;padding:20px;">加载失败: '+xhr.status+'</div>');
+      });
+  }
+
+  // 加载窗口列表；若 autoSelect 有值则自动选中对应窗口并加载消息
+  function loadMemoryChatList(wxid, autoSelect){
+    $.getJSON('/memory/chats/'+encodeURIComponent(wxid))
+      .done(function(res){
+        var $list = $('#memory-chat-list').empty();
+        if(res.status !== 'success' || !res.chats.length){
+          $list.html('<div style="padding:12px;font-size:12.5px;color:var(--muted);">暂无对话窗口</div>');
+          return;
+        }
+        res.chats.forEach(function(chat){
+          var $item = $('<div class="memory-list-item">' +
+            '<span class="item-name" title="'+$('<span>').text(chat).html()+'">'+$('<span>').text(chat).html()+'</span>' +
+            '<button type="button" class="btn-del-mem" title="删除"><i class="bi bi-trash"></i></button>' +
+            '</div>');
+          // 如果是自动恢复选中的那一项，立即标记 selected
+          if(chat === autoSelect) $item.addClass('selected');
+          $item.on('click', function(e){
+            if($(e.target).closest('.btn-del-mem').length) return;
+            $('.memory-list-item','#memory-chat-list').removeClass('selected');
+            $item.addClass('selected');
+            _memChatName = chat;
+            $('#memory-msg-area').show().css('display','flex');
+            loadMemoryMessages(wxid, chat);
+          });
+          $item.find('.btn-del-mem').on('click', function(){
+            if(!confirm('确定删除窗口「'+chat+'」的记忆？')) return;
+            $.ajax({ url:'/memory/delete_chat/'+encodeURIComponent(wxid)+'/'+encodeURIComponent(chat), type:'DELETE' })
+              .done(function(r){
+                if(r.status==='success'){
+                  if(_memChatName===chat){ _memChatName=null; $('#memory-msg-area').hide(); $('#memory-msg-container').empty(); }
+                  loadMemoryChatList(wxid);
+                } else { alert(r.message||'删除失败'); }
+              });
+          });
+          $list.append($item);
+        });
+        // 自动恢复：若之前有选中的窗口，立即加载其消息
+        if(autoSelect && res.chats.indexOf(autoSelect) !== -1){
+          $('#memory-msg-area').show().css('display','flex');
+          loadMemoryMessages(wxid, autoSelect);
+        }
+      })
+      .fail(function(xhr){
+        $('#memory-chat-list').html('<div style="padding:12px;font-size:12.5px;color:var(--danger);">加载失败: '+xhr.status+'</div>');
+      });
+  }
+
+  // 加载微信号列表；若 autoWx 有值则自动选中并恢复子级选中状态
+  function loadMemoryWxList(autoWx, autoChat){
+    $.getJSON('/memory/list')
+      .done(function(res){
+        var $list = $('#memory-wx-list').empty();
+        if(res.status !== 'success' || !res.wx_ids.length){
+          $list.html('<div style="padding:12px;font-size:12.5px;color:var(--muted);">暂无记忆数据</div>');
+          return;
+        }
+        res.wx_ids.forEach(function(wxid){
+          var $item = $('<div class="memory-list-item">' +
+            '<span class="item-name" title="'+$('<span>').text(wxid).html()+'">'+$('<span>').text(wxid).html()+'</span>' +
+            '<button type="button" class="btn-del-mem" title="删除"><i class="bi bi-trash"></i></button>' +
+            '</div>');
+          if(wxid === autoWx) $item.addClass('selected');
+          $item.on('click', function(e){
+            if($(e.target).closest('.btn-del-mem').length) return;
+            $('.memory-list-item','#memory-wx-list').removeClass('selected');
+            $item.addClass('selected');
+            _memWxId = wxid; _memChatName = null;
+            $('#memory-chat-panel').show();
+            $('#memory-msg-area').hide();
+            $('#memory-msg-container').empty();
+            loadMemoryChatList(wxid);
+          });
+          $item.find('.btn-del-mem').on('click', function(){
+            if(!confirm('确定删除微信号「'+wxid+'」的所有记忆？')) return;
+            $.ajax({ url:'/memory/delete_wx/'+encodeURIComponent(wxid), type:'DELETE' })
+              .done(function(r){
+                if(r.status==='success'){
+                  if(_memWxId===wxid){ _memWxId=null; _memChatName=null; $('#memory-chat-panel').hide(); $('#memory-msg-area').hide(); $('#memory-msg-container').empty(); }
+                  loadMemoryWxList();
+                } else { alert(r.message||'删除失败'); }
+              });
+          });
+          $list.append($item);
+        });
+        // 自动恢复选中状态，并级联加载子列表
+        if(autoWx && res.wx_ids.indexOf(autoWx) !== -1){
+          $('#memory-chat-panel').show();
+          loadMemoryChatList(autoWx, autoChat||undefined);
+        }
+      })
+      .fail(function(xhr){
+        $('#memory-wx-list').html('<div style="padding:12px;font-size:12.5px;color:var(--danger);">加载失败: '+xhr.status+'</div>');
+      });
+  }
+
+  // 进入记忆标签时加载列表
+  $(document).on('click', '[data-tab="tab-memory"]', function(){
+    loadMemoryWxList();
+  });
+  // 刷新按钮：保留当前选中的微信号和窗口，刷新后自动恢复并更新消息
+  $(document).on('click', '#btn-refresh-memory', function(){
+    loadMemoryWxList(_memWxId||undefined, _memChatName||undefined);
+  });
+
   // ===== Log Polling =====
-  var lastLogCount=$logBody.find('.log-entry').length;
+  // 用最后一条日志的 time+message 做标识，避免服务端 50 条上限导致 count 比较失效
+  var lastLogKey = (function(){
+    var last = $logBody.find('.log-entry').last();
+    return last.length ? (last.find('.log-time').text() + last.find('.log-msg').text()) : '';
+  })();
   setInterval(function(){
     $.getJSON('/get_logs',function(data){
-      if(!data.logs) return;
+      if(!data.logs || !data.logs.length) return;
       var levelMap={INFO:'log-info',SUCCESS:'log-success',WARNING:'log-warning',ERROR:'log-error',DEBUG:'log-debug'};
-      if(data.logs.length>lastLogCount){
-        var newLogs=data.logs.slice(lastLogCount);
-        newLogs.forEach(function(log){
-          var lvl=(log.level||'INFO').toUpperCase();
-          var cls=levelMap[lvl]||'log-info';
-          var entry='<div class="log-entry" data-level="'+lvl+'">'+
-            '<span class="log-time">'+log.time+'</span>'+
-            '<span class="log-badge '+cls+'">'+lvl+'</span>'+
-            '<span class="log-msg">'+log.message+'</span></div>';
-          $logBody.append(entry);
-        });
-        lastLogCount=data.logs.length;
-        filterLogs();
-        if($logPanel.hasClass('expanded')){
-          $logBody.scrollTop($logBody[0].scrollHeight);
+      var lastLog = data.logs[data.logs.length - 1];
+      var newKey = (lastLog.time || '') + (lastLog.message || '');
+      if(newKey === lastLogKey) return;  // 内容无变化，跳过
+
+      // 找到新日志的起始索引
+      var startIdx = 0;
+      if(lastLogKey){
+        for(var i = data.logs.length - 1; i >= 0; i--){
+          var k = (data.logs[i].time || '') + (data.logs[i].message || '');
+          if(k === lastLogKey){ startIdx = i + 1; break; }
         }
+        // startIdx===0 且 lastLogKey 有值，说明缓冲区翻滚，清空后全量渲染
+        if(startIdx === 0) $logBody.empty();
+      }
+      for(var i = startIdx; i < data.logs.length; i++){
+        var log = data.logs[i];
+        var lvl = (log.level||'INFO').toUpperCase();
+        var cls = levelMap[lvl]||'log-info';
+        var entry='<div class="log-entry" data-level="'+lvl+'">'+
+          '<span class="log-time">'+log.time+'</span>'+
+          '<span class="log-badge '+cls+'">'+lvl+'</span>'+
+          '<span class="log-msg">'+log.message+'</span></div>';
+        $logBody.append(entry);
+      }
+      lastLogKey = newKey;
+      filterLogs();
+      if($logPanel.hasClass('expanded')){
+        $logBody.scrollTop($logBody[0].scrollHeight);
       }
     });
   },3000);
