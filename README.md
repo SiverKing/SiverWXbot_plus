@@ -1,6 +1,6 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.5.1-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
+[![Version](https://img.shields.io/badge/version-V4.5.2-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
 [![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
 
@@ -471,41 +471,6 @@ memory/
 - **邮件告警**：发生错误时自动发送邮件通知
 - **超时会话管理**：自动移除超时会话，释放资源
 - **DusAPI 梯度重试**：网络抖动或接口临时故障时自动重试，最多 5 次，间隔梯度增长
-
----
-
-## 📝 开发日志
-
-### V4.5.0 (2026-03-21)
-- 新增**对话记忆功能**：机器人运行时按窗口将所有消息写入 JSON 文件，AI 回复时自动携带最近 N 条历史上下文，实现连续对话能力
-  - 支持四种 AI 接口（DusAPI/OpenAI SDK/Dify/Coze）的记忆传入
-  - Dify 将历史拼接为对话前缀，Coze 以 additional_messages 形式传入
-  - 全局监听模式（黑名单）的首次消息也正确写入记忆
-  - 历史消息携带时间戳，AI 可感知消息发送顺序
-- 新增 Web 面板**记忆管理**页：三栏布局（wx号→窗口→消息气泡），支持逐窗口/逐wx号删除
-- DusAPI 新增**梯度重试机制**：失败后自动重试最多 5 次，间隔 2s→4s→8s→16s→32s
-- 修复日志面板轮询 bug：服务端 50 条缓冲区满时日志不再停止更新，改为基于内容标识的增量更新
-
-### V4.3.3 (2026-03-20)
-- 好友管理新增"自动通过新好友申请"与"新好友自动回复"两个独立开关，可分别控制是否自动通过好友请求和是否发送打招呼消息
-
-### V4.3.2 (2026-03-20)
-- API 接口配置重构为列表形式（`api_configs`），支持添加/删除多个接口，面板上点选切换当前使用
-- 新增管理员指令：`/查看接口列表`、`/选择接口 N`，移除旧的 `/切换模型1`/`/切换模型2`
-- 新增文件传输助手作为管理员支持：手机向文件传输助手发指令，PC 端自动识别执行
-- 修复 self 消息回复循环 bug，管理员指令回复防循环处理
-- 默认管理员改为 `文件传输助手`
-
-### V4.3.1 (2026-03-20)
-- 配置文件统一整理到 `config/` 目录，日志目录重命名为 `panel_logs/`
-- 修复打包为 exe 后路径错误导致配置文件无法创建的问题
-- 新增面板内修改后台账号密码功能
-- 新增面板内修改报错邮箱配置功能
-
-### V4.3.0 (2026-03-19)
-- 新增 Web 状态面板：首页实时展示运行状态、消息统计、运行时长、监听模式等，5 秒自动刷新
-- 新增 DusAPI 支持：兼容 Claude、GPT 全系模型，国内稳定低延迟
-- Web 管理账密从硬编码抽离到 `admin.json`
 
 ---
 

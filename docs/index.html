@@ -412,6 +412,7 @@ body {
 <!-- Footer -->
 <footer class="site-footer">
   <p>© 2025 SiverWXBot · Made by <a href="https://siver.top" target="_blank">Siver</a></p>
+  <p style="margin-top: 6px; font-size: 12px; opacity: 0.45;" id="footer-version"></p>
   <p style="margin-top: 8px;">
     <a href="https://github.com/SiverKing/SiverWXbot_plus" target="_blank">
       <i class="bi bi-github"></i> GitHub
@@ -419,5 +420,10 @@ body {
   </p>
 </footer>
 
+<script>
+fetch('version.json').then(r => r.json()).then(d => {
+  document.getElementById('footer-version').textContent = d.version_log || d.version || '';
+}).catch(() => {});
+</script>
 </body>
 </html>

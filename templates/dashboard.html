@@ -730,6 +730,15 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
         <label class="form-check-label" for="memory_switch">启用对话记忆</label>
         <span class="switch-desc">开启后机器人运行时的所有消息将写入记忆文件，AI 回复时携带历史上下文</span>
       </div>
+      <!-- DusAPI 记忆兼容提示 -->
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:8px;background:linear-gradient(135deg,#f0fdf4 0%,#dcfce7 100%);border:1px solid #bbf7d0;margin-bottom:16px;">
+        <i class="bi bi-stars" style="font-size:20px;color:#07C160;flex-shrink:0;"></i>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:700;color:#166534;margin-bottom:2px;">推荐使用 DusAPI · 与记忆功能完全兼容</div>
+          <div style="font-size:12px;color:#4b7a57;line-height:1.5;">DusAPI 原生支持多轮对话上下文，与本项目记忆功能完全兼容。其他接口可能对历史消息格式支持不一，可能导致记忆功能效果不佳。</div>
+        </div>
+        <a href="https://dusapi.com" target="_blank" style="flex-shrink:0;background:#07C160;color:#fff;border-radius:6px;padding:6px 14px;font-size:12.5px;font-weight:600;text-decoration:none;white-space:nowrap;transition:opacity .2s;" onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">前往 →</a>
+      </div>
       <div class="cfg-hint" style="margin-bottom:16px;">⚠️ 提示：推荐存储 500 条，AI 带入 100 条。数值越大 token 消耗越多，请根据实际需求调整。</div>
       <div class="row g-3">
         <div class="col-12 col-md-6">

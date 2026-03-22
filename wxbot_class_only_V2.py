@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.5.1"
-version_log = "V4.5.1 - 增加更新检查、文档站点"
+version = "V4.5.2"
+version_log = "V4.5.2 - 性能优化"
 
 # ============================================================
 # 标准库导入
@@ -836,7 +836,7 @@ class DusAPI:
             "x-api-key": self.api_key,
             "anthropic-version": "2023-06-01",
             "content-type": "application/json",
-            'user-agent': 'siver-wxbot-panel/v0.0.1'
+            'user-agent': f'siver-wxbot-panel/{version}'
         }
         messages = [{"role": "system", "content": prompt}]
         if history:

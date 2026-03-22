@@ -347,6 +347,7 @@ body {
     <span>SiverWXBot</span>
   </a>
   <div class="nav-actions">
+    <span id="nav-version" style="font-size:12px;color:rgba(255,255,255,0.35);font-weight:500;letter-spacing:0.03em;"></span>
     <a href="https://github.com/SiverKing/SiverWXbot_plus" class="btn-github" target="_blank">
       <i class="bi bi-star"></i>
       <span>Star</span>
@@ -657,6 +658,11 @@ lightbox.addEventListener('click', closeLightbox);
 lightboxImg.addEventListener('click', e => e.stopPropagation());
 document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+
+fetch('version.json').then(r => r.json()).then(d => {
+  const el = document.getElementById('nav-version');
+  if (el) el.textContent = d.version || '';
+}).catch(() => {});
 </script>
 
 </body>
