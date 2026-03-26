@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.5.2"
-version_log = "V4.5.2 - 性能优化"
+version = "V4.6.0"
+version_log = "重要更新，强烈建议所有用户更新！！V4.6.0 - 新wx UI适配、性能优化、自动阻止锁屏/睡眠"
 
 # ============================================================
 # 标准库导入
@@ -38,7 +38,7 @@ from cozepy import (
 
 # ============================================================
 # wxautox 相关导入（Plus版，需向作者购买授权）
-# 购买地址：https://www.siver.top/static/img/siver_wx.jpg
+# 购买地址：https://www.siverking.online/static/img/siver_wx.jpg
 # ============================================================
 from wxautox4 import WeChat
 from wxautox4.msgs import *
@@ -68,7 +68,7 @@ from logger import log
 # ============================================================
 WxParam.MESSAGE_HASH = True         # 启用消息哈希，辅助消息去重判断
 WxParam.FORCE_MESSAGE_XBIAS = True  # 每次启动强制重新获取 X 偏移量
-
+WxParam.CHAT_WINDOW_SIZE = (1500, 6000)
 
 # ============================================================
 # 配置管理类
@@ -1017,9 +1017,9 @@ class WXBot:
         # 初始化记忆管理器
         try:
             my_info = self.wx.GetMyInfo()
-            wx_id   = my_info.get('id', 'unknown')
+            wx_id   = my_info.get('id', f'{self.wx.nickname}')
         except Exception:
-            wx_id = 'unknown'
+            wx_id = f'{self.wx.nickname}'
         _base       = os.path.dirname(sys.executable) if hasattr(sys, '_MEIPASS') else os.path.abspath(".")
         memory_base = os.path.join(_base, 'memory')
         self.memory_manager = MemoryManager(wx_id, memory_base)
@@ -1406,7 +1406,7 @@ class WXBot:
             result = chat.SendMsg(content + ' 完成\n')
         elif content == "/当前版本":
             result = chat.SendMsg(
-                content + 'wxbot_' + self.ver + '\n' + self.ver_log + '\n作者:https://siver.top'
+                content + 'wxbot_' + self.ver + '\n' + self.ver_log + '\n作者:https://www.siver.top'
             )
         elif content in ("/指令", "指令"):
             result = self.send_command_list(chat)
@@ -1641,7 +1641,7 @@ class WXBot:
             '[/更改AI设定为***] （更改AI设定，***为AI设定）\n'
             '[/更新配置] （若在程序运行时修改过配置，请发送此指令以更新配置）\n'
             '[/当前版本] (返回当前版本)\n'
-            '作者:https://siver.top  若有非法传播请告知'
+            '作者:https://www.siver.top  若有非法传播请告知'
         )
         return chat.SendMsg(commands)
 
@@ -2028,11 +2028,11 @@ class WXBot:
             log(message="wxautox已激活")
         else:
             log(level="ERROR", message="wxautox未激活，请购买激活后再运行程序！！")
-            log(level="ERROR", message="购买激活地址：https://www.siver.top/static/img/siver_wx.jpg")
+            log(level="ERROR", message="购买激活地址：https://www.siverking.online/static/img/siver_wx.jpg")
             log(level="ERROR", message="wxautox未激活，请购买激活后再运行程序！！")
-            log(level="ERROR", message="购买激活地址：https://www.siver.top/static/img/siver_wx.jpg")
+            log(level="ERROR", message="购买激活地址：https://www.siverking.online/static/img/siver_wx.jpg")
             log(level="ERROR", message="wxautox未激活，请购买激活后再运行程序！！")
-            log(level="ERROR", message="购买激活地址：https://www.siver.top/static/img/siver_wx.jpg")
+            log(level="ERROR", message="购买激活地址：https://www.siverking.online/static/img/siver_wx.jpg")
             return False
 
         # 初始化微信监听器
@@ -2040,7 +2040,7 @@ class WXBot:
             self.init_wx_listeners()
             log(message=f"UI面板状态更新完成")
 
-            wait_time      = 1   # 主循环每 1 秒轮询一次
+            wait_time      = 3   # 主循环每 1 秒轮询一次
             check_interval = 10  # 每 10 次循环执行一次离线检测
             check_counter      = 0
             check_new_counter  = 0

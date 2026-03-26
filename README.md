@@ -1,6 +1,6 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.5.2-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
+[![Version](https://img.shields.io/badge/version-V4.6.0-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
 [![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
 
@@ -107,7 +107,7 @@
 - Python `3.8` - `3.12`
 - Windows 操作系统
 - Windows wx PC 版（`4.1.7` - `4.1.8` 版本）
-- wxautox4 授权（需购买，地址：[点我进入](https://www.siver.top/static/img/siver_wx.jpg)）
+- wxautox4 授权（需购买，地址：[点我进入](https://www.siverking.online/static/img/siver_wx.jpg)）
 
 ### 安装步骤
 
@@ -125,7 +125,7 @@ pip install -r requirements.txt
 ```
 
 3. **配置 wxautox4 授权**
-   - 购买地址：https://www.siver.top/static/img/siver_wx.jpg
+   - 购买地址：https://www.siverking.online/static/img/siver_wx.jpg
    - 按照官方文档激活授权
 
 4. **配置机器人**
@@ -478,7 +478,7 @@ memory/
 
 1. **wxautox4 授权**
    - 本项目使用 wxautox4（Plus 版），需要购买授权
-   - 购买地址：https://www.siver.top/static/img/siver_wx.jpg
+   - 购买地址：https://www.siverking.online/static/img/siver_wx.jpg
    - 请勿用于转卖或发布到公共平台
 
 2. **WX版本**
@@ -518,7 +518,7 @@ memory/
 如有问题或建议，欢迎通过以下方式联系：
 
 - 提交 Issue
-- 联系作者：https://www.siver.top/static/img/siver_wx.jpg
+- 联系作者：https://www.siverking.online/static/img/siver_wx.jpg
 
 ---
 

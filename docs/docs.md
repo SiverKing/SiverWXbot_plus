@@ -1,6 +1,6 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.5.2-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
+[![Version](https://img.shields.io/badge/version-V4.6.0-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
 [![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
 
@@ -38,7 +38,7 @@
 - Python `3.8` - `3.12`
 - Windows 操作系统
 - Windows wx PC 版（`4.1.7` - `4.1.8.28` 版本）
-- wxautox4 授权（需购买，购买地址：https://www.siver.top/static/img/siver_wx.jpg ）
+- wxautox4 授权（需购买，购买地址：https://www.siverking.online/static/img/siver_wx.jpg ）
 
 **安装步骤：**
 
@@ -267,7 +267,7 @@ python web_server.py
 ## 注意事项
 
 1. 启动机器人时不得有wx小窗口（只保留主窗口），同时确保主窗口没有最小化。
-2. 电脑自动休眠、黑屏都设为**从不**。
+2. 电脑自动休眠 黑屏都设为**从不**（一般情况程序会自动阻止不用手动调整）。
 3. 如需离线邮件提醒，请在配置面板修改设置邮件。
 4. 关闭wx自动更新。
 5. 适配 Windows wx `4.1.7` - `4.1.8.28`。
@@ -330,7 +330,7 @@ python web_server.py
 
 ### Q: 如何获取授权、激活？
 
-**A:** [联系作者](https://www.siver.top/static/img/siver_wx.jpg)
+**A:** [联系作者](https://www.siverking.online/static/img/siver_wx.jpg)
 
 ### Q: 运行提示防火墙？
 

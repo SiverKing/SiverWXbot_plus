@@ -301,6 +301,46 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
       </div>
     </div>
 
+    <!-- wxautox4 激活状态卡片（JS 控制位置：未激活插到运行状态前面，已激活插到后面） -->
+    <div class="cfg-card" id="activate-card" style="display:none;">
+      <div class="cfg-card-header">
+        <i class="bi bi-shield-check"></i>
+        <h5>wxautox4 授权状态</h5>
+        <button type="button" id="btn-check-activate" style="margin-left:auto;padding:4px 14px;border:1px solid var(--border);border-radius:6px;font-size:12.5px;font-weight:600;cursor:pointer;background:var(--card);color:var(--card-fg);transition:all .2s;" onmouseover="this.style.background='var(--muted-bg)'" onmouseout="this.style.background='var(--card)'">重新检测</button>
+      </div>
+      <!-- 检查中 -->
+      <div id="activate-checking" style="display:none;color:var(--muted);font-size:13px;padding:4px 0;">
+        <i class="bi bi-hourglass-split"></i> 正在检测授权...
+      </div>
+      <!-- 已激活 -->
+      <div id="activate-ok" style="display:none;align-items:center;gap:10px;padding:12px 16px;border-radius:8px;background:#f0fdf4;border:1px solid #bbf7d0;">
+        <i class="bi bi-shield-fill-check" style="color:#07C160;font-size:18px;flex-shrink:0;"></i>
+        <div>
+          <div style="font-weight:600;font-size:13.5px;color:#166534;">wxautox4 已激活</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px;">内核库授权正常，机器人可正常使用</div>
+        </div>
+      </div>
+      <!-- 未激活 -->
+      <div id="activate-fail" style="display:none;">
+        <div style="display:flex;align-items:flex-start;gap:10px;padding:14px 16px;border-radius:8px;background:#fff1f1;border:1px solid #fca5a5;margin-bottom:14px;">
+          <i class="bi bi-shield-exclamation" style="color:#ef4444;font-size:18px;flex-shrink:0;margin-top:1px;"></i>
+          <div>
+            <div style="font-weight:700;font-size:13.5px;color:#991b1b;">wxautox4 未激活！</div>
+            <div style="font-size:12.5px;color:#7f1d1d;margin-top:4px;">内核库未授权，机器人将无法正常工作。  若已有激活码也请点击获取授权来获取激活器</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+          <a href="https://www.siverking.online/static/img/siver_wx.jpg" target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;background:#576B95;color:#fff;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;transition:opacity .2s;" onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+            <i class="bi bi-key"></i> 获取激活码授权
+          </a>
+        </div>
+      </div>
+      <!-- 检测失败 -->
+      <div id="activate-error" style="display:none;color:var(--muted);font-size:13px;padding:4px 0;">
+        <i class="bi bi-wifi-off"></i> 检测失败，请检查 wxautox4 是否已安装
+      </div>
+    </div>
+
     <div class="cfg-card" id="status-main-card">
       <div class="cfg-card-header"><i class="bi bi-speedometer2"></i><h5>运行状态</h5><span class="desc" id="status-refresh-hint">每5秒自动刷新</span></div>
       <!-- 运行状态大卡 -->
@@ -818,6 +858,60 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
 <script src="https://s4.zstatic.net/npm/summernote@0.8.18/dist/summernote-lite.min.js"></script>
 <script src="https://s4.zstatic.net/npm/summernote@0.8.18/dist/lang/summernote-zh-CN.min.js"></script>
 <script>
+// ===== svModal：自定义弹窗工具（替代浏览器 alert/confirm） =====
+var svModal = (function(){
+  function _show(opts) {
+    var $overlay = $('#sv-modal-overlay');
+    $('#sv-modal-icon').html(opts.icon || '');
+    $('#sv-modal-title').text(opts.title || '');
+    $('#sv-modal-body').html(opts.body || '');
+    var $btns = $('#sv-modal-btns').empty();
+    (opts.buttons || []).forEach(function(btn){
+      var baseStyle = 'padding:8px 22px;border-radius:7px;font-weight:600;font-size:13.5px;cursor:pointer;border:none;transition:opacity .15s;';
+      var $b = $('<button>').attr('style', baseStyle).css(btn.css || {background:'#576B95',color:'#fff'}).text(btn.text);
+      $b.on('click', function(){ _close(); if(btn.action) btn.action(); });
+      $btns.append($b);
+    });
+    $overlay.css('display','flex');
+  }
+  function _close(){ $('#sv-modal-overlay').hide(); }
+  return {
+    alert: function(msg, title){ _show({
+      icon: '<i class="bi bi-info-circle-fill" style="color:var(--primary);font-size:36px;"></i>',
+      title: title||'提示', body: msg,
+      buttons: [{text:'确定', css:{background:'var(--primary)',color:'#fff'}}]
+    }); },
+    success: function(msg, title){ _show({
+      icon: '<i class="bi bi-check-circle-fill" style="color:#07C160;font-size:36px;"></i>',
+      title: title||'成功', body: msg,
+      buttons: [{text:'确定', css:{background:'#07C160',color:'#fff'}}]
+    }); },
+    error: function(msg, title){ _show({
+      icon: '<i class="bi bi-x-circle-fill" style="color:#FA5151;font-size:36px;"></i>',
+      title: title||'错误', body: msg,
+      buttons: [{text:'关闭', css:{background:'#f2f2f2',color:'#333',border:'1px solid #ddd'}}]
+    }); },
+    confirm: function(msg, onOk, title, okText, cancelText){ _show({
+      icon: '<i class="bi bi-question-circle-fill" style="color:#FFC300;font-size:36px;"></i>',
+      title: title||'确认', body: msg,
+      buttons: [
+        {text: cancelText||'取消', css:{background:'#f2f2f2',color:'#333',border:'1px solid #ddd'}},
+        {text: okText||'确定', css:{background:'var(--primary)',color:'#fff'}, action: onOk}
+      ]
+    }); },
+    warnActivate: function(onContinue){ _show({
+      icon: '<i class="bi bi-shield-exclamation" style="color:#FA5151;font-size:36px;"></i>',
+      title: 'wxautox4 未激活',
+      body: '程序依赖的内核库 <b>wxautox4</b> 尚未激活，<br>可能导致机器人无法正常使用。<br><br>建议先获取激活码完成授权后再启动。<br><br>若已有激活码也请点击获取授权来获取激活器',
+      buttons: [
+        {text:'取消', css:{background:'#f2f2f2',color:'#333',border:'1px solid #ddd'}},
+        {text:'获取激活码授权', css:{background:'#576B95',color:'#fff'}, action: function(){ window.open('https://www.siverking.online/static/img/siver_wx.jpg','_blank'); }},
+        {text:'继续启动', css:{background:'#FA5151',color:'#fff'}, action: onContinue}
+      ]
+    }); }
+  };
+})();
+
 $(function(){
   // ===== Summernote Init =====
   $('#prompt, #group_welcome_msg').summernote({
@@ -849,7 +943,7 @@ $(function(){
 
   // ===== 接口配置：删除（至少保留 2 个）=====
   $(document).on('click', '.btn-remove-api-config', function(){
-    if($('.api-config-item').length <= 2){ alert('至少保留 2 个接口配置'); return; }
+    if($('.api-config-item').length <= 2){ svModal.alert('至少保留 2 个接口配置'); return; }
     $(this).closest('.api-config-item').remove();
     renumberApiConfigs();
   });
@@ -1104,25 +1198,40 @@ $(function(){
     $.ajax({
       url:'/save_config', type:'POST', contentType:'application/json',
       data:JSON.stringify(configData),
-      success:function(res){ if(res.status==='success'){if(callback) callback(res); else alert('配置保存成功');} else {alert('保存失败: '+(res.message||''));} },
-      error:function(xhr){ alert('保存配置出错: '+xhr.responseText); }
+      success:function(res){ if(res.status==='success'){if(callback) callback(res); else svModal.success('配置保存成功');} else {svModal.error('保存失败: '+(res.message||''));} },
+      error:function(xhr){ svModal.error('保存配置出错: '+xhr.responseText); }
     });
   }
 
   // ===== Button Handlers =====
   $('#btnSave').click(function(){ saveConfig(); });
   $('#btnLoad').click(function(){
-    if(confirm('加载配置将覆盖当前未保存的修改，确定？')){
-      location.reload();
-    }
+    svModal.confirm('加载配置将覆盖当前未保存的修改，确定？', function(){ location.reload(); }, '加载配置', '确定加载', '取消');
   });
+
+  function _doStartBot(){
+    $.post('/start_bot', function(res){
+      if(res.status === 'success') svModal.success(res.message||'启动命令已发送', '已发送');
+      else svModal.error(res.message||'启动失败');
+    }).fail(function(xhr){ svModal.error('启动失败: '+xhr.responseText); });
+  }
+
   $('#btnStart').click(function(){
     saveConfig(function(){
-      $.post('/start_bot',function(res){ alert(res.message||'启动命令已发送'); }).fail(function(xhr){alert('启动失败: '+xhr.responseText);});
+      if(_activateStatus === false){
+        svModal.warnActivate(function(){ _doStartBot(); });
+      } else {
+        _doStartBot();
+      }
     });
   });
   $('#btnStop').click(function(){
-    $.post('/stop_bot',function(res){ alert(res.message||'已停止'); }).fail(function(xhr){alert('停止失败: '+xhr.responseText);});
+    svModal.confirm('确定要停止机器人吗？', function(){
+      $.post('/stop_bot', function(res){
+        if(res.status === 'success') svModal.success(res.message||'机器人已停止', '已停止');
+        else svModal.error(res.message||'停止失败');
+      }).fail(function(xhr){ svModal.error('停止失败: '+xhr.responseText); });
+    }, '停止机器人', '确定停止', '取消');
   });
 
   // ===== Log Panel =====
@@ -1268,11 +1377,16 @@ $(function(){
         $('#dv-lastsender').text(d.last_msg_sender || '暂无');
       } else {
         $('#status-dot').css('background', '#ccc');
-        $('#status-text').text('未运行');
-        $('#status-sub').text('点击"启动机器人"开始运行');
+        // 只在首次加载（数据还是初始 "-"）时才显示"未运行"占位，否则保留上次数据
+        var hasData = $('#sv-received').text() !== '-';
+        if (hasData) {
+          $('#status-text').text('已停止（上次运行数据）');
+          $('#status-sub').text('点击"启动机器人"重新运行');
+        } else {
+          $('#status-text').text('未运行');
+          $('#status-sub').text('点击"启动机器人"开始运行');
+        }
         $('#status-uptime').text('');
-        ['received','replied','listen','group','schedule','api'].forEach(function(k){ $('#sv-'+k).text('-'); });
-        ['nickname','model','start','version','lasttime','lastsender'].forEach(function(k){ $('#dv-'+k).text('-'); });
       }
     });
   }
@@ -1401,14 +1515,15 @@ $(function(){
             loadMemoryMessages(wxid, chat);
           });
           $item.find('.btn-del-mem').on('click', function(){
-            if(!confirm('确定删除窗口「'+chat+'」的记忆？')) return;
-            $.ajax({ url:'/memory/delete_chat/'+encodeURIComponent(wxid)+'/'+encodeURIComponent(chat), type:'DELETE' })
-              .done(function(r){
-                if(r.status==='success'){
-                  if(_memChatName===chat){ _memChatName=null; $('#memory-msg-area').hide(); $('#memory-msg-container').empty(); }
-                  loadMemoryChatList(wxid);
-                } else { alert(r.message||'删除失败'); }
-              });
+            svModal.confirm('确定删除窗口「'+chat+'」的记忆？', function(){
+              $.ajax({ url:'/memory/delete_chat/'+encodeURIComponent(wxid)+'/'+encodeURIComponent(chat), type:'DELETE' })
+                .done(function(r){
+                  if(r.status==='success'){
+                    if(_memChatName===chat){ _memChatName=null; $('#memory-msg-area').hide(); $('#memory-msg-container').empty(); }
+                    loadMemoryChatList(wxid);
+                  } else { svModal.error(r.message||'删除失败'); }
+                });
+            }, '删除确认');
           });
           $list.append($item);
         });
@@ -1449,14 +1564,15 @@ $(function(){
             loadMemoryChatList(wxid);
           });
           $item.find('.btn-del-mem').on('click', function(){
-            if(!confirm('确定删除微信号「'+wxid+'」的所有记忆？')) return;
-            $.ajax({ url:'/memory/delete_wx/'+encodeURIComponent(wxid), type:'DELETE' })
-              .done(function(r){
-                if(r.status==='success'){
-                  if(_memWxId===wxid){ _memWxId=null; _memChatName=null; $('#memory-chat-panel').hide(); $('#memory-msg-area').hide(); $('#memory-msg-container').empty(); }
-                  loadMemoryWxList();
-                } else { alert(r.message||'删除失败'); }
-              });
+            svModal.confirm('确定删除微信号「'+wxid+'」的所有记忆？', function(){
+              $.ajax({ url:'/memory/delete_wx/'+encodeURIComponent(wxid), type:'DELETE' })
+                .done(function(r){
+                  if(r.status==='success'){
+                    if(_memWxId===wxid){ _memWxId=null; _memChatName=null; $('#memory-chat-panel').hide(); $('#memory-msg-area').hide(); $('#memory-msg-container').empty(); }
+                    loadMemoryWxList();
+                  } else { svModal.error(r.message||'删除失败'); }
+                });
+            }, '删除确认');
           });
           $list.append($item);
         });
@@ -1521,7 +1637,60 @@ $(function(){
       }
     });
   },3000);
+
+  // ===== checkActivate =====
+  var _activateStatus = null; // null=未知, true=已激活, false=未激活
+
+  function checkActivate(manual) {
+    if (manual) $('#btn-check-activate').prop('disabled', true).text('检测中...');
+    $('#activate-card').show();
+    $('#activate-checking').show();
+    $('#activate-ok, #activate-fail, #activate-error').hide();
+    $.ajax({
+      url: '/check_activate',
+      method: 'GET',
+      dataType: 'json',
+      timeout: 8000,
+      success: function(res) {
+        $('#activate-checking').hide();
+        if (res.status !== 'success') { $('#activate-error').show(); return; }
+        _activateStatus = res.data.activated;
+        if (_activateStatus) {
+          $('#activate-ok').css('display', 'flex');
+          $('#activate-card').insertAfter('#status-main-card');
+        } else {
+          $('#activate-fail').show();
+          $('#activate-card').insertBefore('#status-main-card');
+        }
+      },
+      error: function() {
+        $('#activate-checking').hide();
+        $('#activate-error').show();
+        _activateStatus = null;
+      },
+      complete: function() {
+        if (manual) $('#btn-check-activate').prop('disabled', false).text('重新检测');
+      }
+    });
+  }
+
+  $('#btn-check-activate').on('click', function() { checkActivate(true); });
+  checkActivate(false);
+
 });
 </script>
+
+<!-- ===== 自定义弹窗 ===== -->
+<div id="sv-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.48);z-index:9999;align-items:center;justify-content:center;">
+  <div id="sv-modal-box" style="background:var(--card);border-radius:14px;padding:30px 28px 22px;max-width:430px;width:92%;box-shadow:0 12px 48px rgba(0,0,0,.28);position:relative;animation:svModalIn .18s ease;">
+    <div id="sv-modal-icon" style="text-align:center;font-size:38px;margin-bottom:12px;"></div>
+    <div id="sv-modal-title" style="font-size:15.5px;font-weight:700;color:var(--card-fg);margin-bottom:8px;text-align:center;"></div>
+    <div id="sv-modal-body" style="font-size:13.5px;color:var(--muted);line-height:1.7;text-align:center;margin-bottom:22px;"></div>
+    <div id="sv-modal-btns" style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;"></div>
+  </div>
+</div>
+<style>
+@keyframes svModalIn { from { opacity:0; transform:scale(.94) translateY(8px); } to { opacity:1; transform:scale(1) translateY(0); } }
+</style>
 </body>
 </html>

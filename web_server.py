@@ -22,6 +22,8 @@ import webbrowser
 import time
 import socket
 import email_send
+import ctypes
+import atexit
 
 # fix_paths.py
 import sys
@@ -388,6 +390,34 @@ def save_config_route():
 bot = None
 bot_thread = None
 
+# ============================================================
+# 防锁屏 / 防睡眠工具函数（Windows SetThreadExecutionState）
+# ============================================================
+_ES_CONTINUOUS       = 0x80000000
+_ES_SYSTEM_REQUIRED  = 0x00000001
+_ES_DISPLAY_REQUIRED = 0x00000002
+
+def _prevent_sleep():
+    """阻止 Windows 自动锁屏、黑屏、睡眠，机器人运行期间保持系统唤醒状态"""
+    try:
+        ctypes.windll.kernel32.SetThreadExecutionState(
+            _ES_CONTINUOUS | _ES_SYSTEM_REQUIRED | _ES_DISPLAY_REQUIRED
+        )
+        log('INFO', '【防锁屏】已阻止 Windows 自动锁屏/黑屏/睡眠，避免影响微信自动化操作')
+    except Exception as e:
+        log('WARNING', f'【防锁屏】设置防睡眠状态失败: {e}')
+
+def _restore_sleep():
+    """恢复 Windows 原有的锁屏、黑屏、睡眠策略"""
+    try:
+        ctypes.windll.kernel32.SetThreadExecutionState(_ES_CONTINUOUS)
+        log('INFO', '【防锁屏】已恢复 Windows 原有锁屏/黑屏/睡眠策略')
+    except Exception as e:
+        log('WARNING', f'【防锁屏】恢复睡眠策略失败: {e}')
+
+# 服务器进程异常退出时兜底恢复
+atexit.register(_restore_sleep)
+
 @app.route('/start_bot', methods=['POST'])
 @login_required
 def start_bot():
@@ -400,12 +430,16 @@ def start_bot():
     def run_bot():
         pythoncom.CoInitialize()
         global bot
-        bot = WXBot()
-        bot.run()
-        pythoncom.CoUninitialize()
+        try:
+            bot = WXBot()
+            bot.run()
+        finally:
+            pythoncom.CoUninitialize()
+            _restore_sleep()
     try:
         bot_thread = threading.Thread(target=run_bot, daemon=True)
         bot_thread.start()
+        _prevent_sleep()
     except Exception as e:
         log('ERROR', f'启动机器人失败: {str(e)}')
     return jsonify({'status': 'success', 'message': '机器人启动命令已发送'})
@@ -420,6 +454,7 @@ def stop_bot():
             log('SUCCESS', '机器人已停止')
             bot_thread = None
             bot = None
+            _restore_sleep()
             return jsonify({'status': 'success', 'message': '机器人已停止'})
         else:
             log('ERROR', '停止机器人失败')
@@ -427,6 +462,16 @@ def stop_bot():
     else:
         log('WARNING', '状态：机器人未运行')
         return jsonify({'status': 'error', 'message': '机器人未运行'})
+
+@app.route('/check_activate')
+@login_required
+def check_activate():
+    try:
+        from wxautox4.utils.useful import check_license
+        activated = check_license()
+        return jsonify({'status': 'success', 'data': {'activated': bool(activated)}})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
 
 @app.route('/check_update')
 @login_required

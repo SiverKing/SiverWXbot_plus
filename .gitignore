@@ -18,6 +18,7 @@ dist/
 源码/
 __pycache__/
 /releases/
+/config/
 logs/
 wxauto_logs/
 panel_logs/
