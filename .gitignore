@@ -30,4 +30,5 @@ memory/
 *.spec
 *.ui
 *.log
+*.png
 

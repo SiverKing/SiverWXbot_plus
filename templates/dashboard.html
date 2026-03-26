@@ -316,7 +316,7 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
       <div id="activate-ok" style="display:none;align-items:center;gap:10px;padding:12px 16px;border-radius:8px;background:#f0fdf4;border:1px solid #bbf7d0;">
         <i class="bi bi-shield-fill-check" style="color:#07C160;font-size:18px;flex-shrink:0;"></i>
         <div>
-          <div style="font-weight:600;font-size:13.5px;color:#166534;">wxautox4 已激活</div>
+          <div style="font-weight:600;font-size:13.5px;color:#166534;">本设备 wxautox4 已激活</div>
           <div style="font-size:12px;color:var(--muted);margin-top:2px;">内核库授权正常，机器人可正常使用</div>
         </div>
       </div>
@@ -325,7 +325,7 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
         <div style="display:flex;align-items:flex-start;gap:10px;padding:14px 16px;border-radius:8px;background:#fff1f1;border:1px solid #fca5a5;margin-bottom:14px;">
           <i class="bi bi-shield-exclamation" style="color:#ef4444;font-size:18px;flex-shrink:0;margin-top:1px;"></i>
           <div>
-            <div style="font-weight:700;font-size:13.5px;color:#991b1b;">wxautox4 未激活！</div>
+            <div style="font-weight:700;font-size:13.5px;color:#991b1b;">本设备 wxautox4 未激活！</div>
             <div style="font-size:12.5px;color:#7f1d1d;margin-top:4px;">内核库未授权，机器人将无法正常工作。  若已有激活码也请点击获取授权来获取激活器</div>
           </div>
         </div>
@@ -899,9 +899,19 @@ var svModal = (function(){
         {text: okText||'确定', css:{background:'var(--primary)',color:'#fff'}, action: onOk}
       ]
     }); },
+    warnUpdate: function(newVer, onContinue){ _show({
+      icon: '<i class="bi bi-arrow-up-circle-fill" style="color:#FFC300;font-size:36px;"></i>',
+      title: '发现新版本',
+      body: '检测到新版本可用：<b>' + newVer + '</b><br><br>建议更新后再使用，继续使用旧版本可能存在问题。',
+      buttons: [
+        {text:'取消', css:{background:'#f2f2f2',color:'#333',border:'1px solid #ddd'}},
+        {text:'去更新', css:{background:'#576B95',color:'#fff'}, action: function(){ $('#update-card')[0].scrollIntoView({behavior:'smooth'}); }},
+        {text:'继续启动', css:{background:'#FFC300',color:'#fff'}, action: onContinue}
+      ]
+    }); },
     warnActivate: function(onContinue){ _show({
       icon: '<i class="bi bi-shield-exclamation" style="color:#FA5151;font-size:36px;"></i>',
-      title: 'wxautox4 未激活',
+      title: '本设备 wxautox4 未激活',
       body: '程序依赖的内核库 <b>wxautox4</b> 尚未激活，<br>可能导致机器人无法正常使用。<br><br>建议先获取激活码完成授权后再启动。<br><br>若已有激活码也请点击获取授权来获取激活器',
       buttons: [
         {text:'取消', css:{background:'#f2f2f2',color:'#333',border:'1px solid #ddd'}},
@@ -1218,7 +1228,15 @@ $(function(){
 
   $('#btnStart').click(function(){
     saveConfig(function(){
-      if(_activateStatus === false){
+      var newVer = $('#update-new-ver').text();
+      if(_activateStatus === false && _hasUpdate){
+        // 两个问题都有：先提示更新，继续后再提示激活
+        svModal.warnUpdate(newVer, function(){
+          svModal.warnActivate(function(){ _doStartBot(); });
+        });
+      } else if(_hasUpdate){
+        svModal.warnUpdate(newVer, function(){ _doStartBot(); });
+      } else if(_activateStatus === false){
         svModal.warnActivate(function(){ _doStartBot(); });
       } else {
         _doStartBot();
@@ -1280,6 +1298,7 @@ $(function(){
   var retryCount = 0;
   var MAX_RETRY = 3;
   var RETRY_INTERVALS = [10, 20, 30];
+  var _hasUpdate = false; // 检测到新版本时置 true
 
   function checkUpdate(manual) {
     if (manual) {
@@ -1310,10 +1329,12 @@ $(function(){
         var current = (res.data.local_version || '').trim();
 
         if (latest && current && latest !== current) {
+          _hasUpdate = true;
           $('#update-new-ver').text(log);
           $('#update-available').show();
           $('#update-card').insertBefore('#status-main-card');
         } else {
+          _hasUpdate = false;
           $('#update-current-ver').text('当前版本：' + current);
           $('#update-latest').css('display', 'flex');
           $('#update-card').insertAfter('#status-main-card');
