@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.6.2"
-version_log = "重要更新！强烈建议所有用户更新！！V4.6.2 - 适配最新wx版本4 1 8 67、key显示优化"
+version = "V4.6.3"
+version_log = "重要更新！强烈建议所有用户更新！！V4.6.3 - 可自定义模拟人工随机延时、定时消息目标支持多个群发、面板图标显示优化、bug修复"
 
 # ============================================================
 # 标准库导入
@@ -130,6 +130,11 @@ class WXBotConfig:
         self.memory_max_count     = 500      # 单窗口最多存储条数
         self.memory_context_count = 100      # AI 请求时带入条数
 
+        # ---------- 发送延迟配置 ----------
+        self.reply_delay_switch = True  # 模拟人工操作延迟开关（默认开启）
+        self.reply_delay_min    = 1     # 最小延迟秒数
+        self.reply_delay_max    = 5     # 最大延迟秒数
+
         # 初始化时自动加载配置并同步到属性
         self.load_config()
         self.update_global_config()
@@ -187,6 +192,9 @@ class WXBotConfig:
                     "memory_switch": True,
                     "memory_max_count": 500,
                     "memory_context_count": 100,
+                    "reply_delay_switch": True,
+                    "reply_delay_min": 1,
+                    "reply_delay_max": 5,
                 }
                 with open(self.CONFIG_FILE, "w", encoding="utf-8") as f:
                     json.dump(base_config, f, ensure_ascii=False, indent=4)
@@ -290,7 +298,7 @@ class WXBotConfig:
                     self.scheduled_msg_list.append({
                         'id': str(uuid.uuid4())[:8],
                         'enabled': True,
-                        'target': target,
+                        'targets': [target],
                         'time': task.get('time', '08:00'),
                         'repeat_type': 'daily',
                         'weekdays': [],
@@ -298,10 +306,34 @@ class WXBotConfig:
                         'msgs': task.get('msgs', []),
                     })
 
+        # 旧配置自动迁移：target(str) -> targets(list)
+        _target_migrated = False
+        for task in self.scheduled_msg_list:
+            if 'targets' not in task:
+                old = task.pop('target', '')
+                task['targets'] = [old] if old else []
+                _target_migrated = True
+        if _target_migrated:
+            self.config['scheduled_msg_list'] = self.scheduled_msg_list
+            self.save_config()
+            log(message="已自动迁移定时消息发送目标格式 target -> targets 并写回配置文件")
+
         # 对话记忆配置
         self.memory_switch        = self.config.get('memory_switch', True)
         self.memory_max_count     = int(self.config.get('memory_max_count', 500))
         self.memory_context_count = int(self.config.get('memory_context_count', 100))
+
+        # 发送延迟配置（若旧配置文件中不存在则自动补写默认值）
+        _delay_defaults = {'reply_delay_switch': True, 'reply_delay_min': 1, 'reply_delay_max': 5}
+        _needs_save = any(k not in self.config for k in _delay_defaults)
+        for k, v in _delay_defaults.items():
+            self.config.setdefault(k, v)
+        if _needs_save:
+            self.save_config()
+            log(message="已自动补充发送延迟配置默认值并写回配置文件")
+        self.reply_delay_switch = bool(self.config.get('reply_delay_switch', True))
+        self.reply_delay_min    = max(1, int(self.config.get('reply_delay_min', 1)))
+        self.reply_delay_max    = max(1, int(self.config.get('reply_delay_max', 5)))
 
         log(message="全局配置更新完成")
 
@@ -381,6 +413,14 @@ class WXBotConfig:
     def split_long_text(text, chunk_size=2000):
         """将超长文本按指定长度切分为列表，用于分段发送"""
         return [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
+
+    def human_delay(self):
+        """模拟人工操作随机延迟。reply_delay_switch 关闭时直接跳过。"""
+        if not self.reply_delay_switch:
+            return
+        lo = min(self.reply_delay_min, self.reply_delay_max)
+        hi = max(self.reply_delay_min, self.reply_delay_max)
+        time.sleep(random.randint(lo, hi))
 
     @staticmethod
     def get_run_time(start_time):
@@ -1065,16 +1105,16 @@ class WXBot:
                         continue
                     time_str    = task.get('time', '08:00')
                     msgs        = task.get('msgs', [])
-                    target      = task.get('target', '')
+                    targets     = task.get('targets', [])
                     repeat_type = task.get('repeat_type', 'daily')
                     task_id     = task.get('id', '')
                     weekdays    = task.get('weekdays', [])
                     dates       = task.get('dates', [])
 
                     schedule.every().day.at(time_str).do(
-                        self.send_scheduled_msg, target, msgs, repeat_type, weekdays, dates, task_id
+                        self.send_scheduled_msg, targets, msgs, repeat_type, weekdays, dates, task_id
                     ).tag('scheduled_msg')
-                    log(message=f"注册定时消息：{repeat_type} {time_str} 给 {target} 发消息")
+                    log(message=f"注册定时消息：{repeat_type} {time_str} 给 {targets} 发消息")
                 log(message="定时消息注册完成")
             except Exception as e:
                 log(level="ERROR", message=f"定时消息注册失败：{e}")
@@ -1085,11 +1125,11 @@ class WXBot:
     # 定时消息发送
     # ----------------------------------------------------------
 
-    def send_scheduled_msg(self, user, msgs, repeat_type, weekdays, dates, task_id):
+    def send_scheduled_msg(self, targets, msgs, repeat_type, weekdays, dates, task_id):
         """
         定时触发的消息发送函数，根据 repeat_type 判断今天是否需要发送。
 
-        :param user:        接收消息的用户/群组昵称
+        :param targets:     接收消息的用户/群组昵称列表（支持多目标群发）
         :param msgs:        要发送的消息列表
         :param repeat_type: 重复类型 (once/daily/weekly/monthly/custom)
         :param weekdays:    每周几发送 (1=周一 ... 7=周日)
@@ -1120,24 +1160,28 @@ class WXBot:
         if not should_send:
             return schedule.CancelJob if repeat_type == 'once' else None
 
-        log(message=f"{user} 定时消息时间到（{repeat_type}），正在发送...")
-        for msg in msgs:
-            log(message=f"正在向 {user} 发送定时消息：{msg}")
-            try:
-                result = self.wx.SendMsg(msg=msg, who=user)
-                time.sleep(random.randint(1, 3))  # 每条消息间随机延时，模拟人工操作
-                if not result:
-                    log(level="ERROR", message=f"定时消息发送失败：{result['message']}")
+        log(message=f"定时消息时间到（{repeat_type}），目标：{targets}，正在发送...")
+        for user in targets:
+            for msg in msgs:
+                log(message=f"正在向 {user} 发送定时消息：{msg}")
+                try:
+                    if self.is_image_path(msg):
+                        result = self.wx.SendFiles(who=user, filepath=msg)
+                    else:
+                        result = self.wx.SendMsg(msg=msg, who=user)
+                    self.config.human_delay()  # 模拟人工操作延迟（可在面板配置）
+                    if not result:
+                        log(level="ERROR", message=f"定时消息发送失败：{result['message']}")
+                        self.is_err(
+                            self.wx.nickname + f" wxbot定时消息发送失败！",
+                            f"{user} 定时消息发送失败：{result['message']}",
+                        )
+                except Exception as e:
+                    log(level="ERROR", message=f"定时消息发送失败：{e}")
                     self.is_err(
                         self.wx.nickname + f" wxbot定时消息发送失败！",
-                        f"{user} 定时消息发送失败：{result['message']}",
+                        f"{user} 定时消息发送失败：{e}",
                     )
-            except Exception as e:
-                log(level="ERROR", message=f"定时消息发送失败：{e}")
-                self.is_err(
-                    self.wx.nickname + f" wxbot定时消息发送失败！",
-                    f"{user} 定时消息发送失败：{e}",
-                )
 
         # once 类型执行后自动禁用该任务
         if repeat_type == 'once':
@@ -1283,7 +1327,7 @@ class WXBot:
                     print(traceback.format_exc())
                     log(level="ERROR", message=str(e) + "\n群组中调用AI回复错误！！")
                     reply = "请稍后再试"
-                time.sleep(random.randint(1, 10))  # 随机延时，模拟人工回复
+                self.config.human_delay()  # 模拟人工操作延迟（可在面板配置）
                 result = chat.SendMsg(msg=reply, at=message.sender)
                 self.msg_replied_count += 1
                 return result
@@ -1343,7 +1387,7 @@ class WXBot:
             for segment in segments:
                 result = chat.SendMsg(segment)
         else:
-            time.sleep(random.randint(1, 10))  # 随机延时，模拟人工回复节奏
+            self.config.human_delay()  # 模拟人工操作延迟（可在面板配置）
             result = chat.SendMsg(reply)
         self.msg_replied_count += 1
         return result
@@ -1741,7 +1785,7 @@ class WXBot:
                             self.wx.SendFiles(who=new_name, filepath=msg)
                         else:
                             self.wx.SendMsg(who=new_name, msg=msg)
-                        time.sleep(random.randint(1, 3))  # 随机延时，模拟人工操作
+                        self.config.human_delay()  # 模拟人工操作延迟（可在面板配置）
                 # 发送完毕后跳转到文件传输助手，再切换到通讯录准备处理下一个
                 self.wx.ChatWith(who='文件传输助手')
                 time.sleep(1)

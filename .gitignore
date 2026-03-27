@@ -5,6 +5,7 @@ config.json
 wx.png
 wxautox_activate.py
 /.gitignore
+CLAUDE.md
 
 .claude/
 .venv
@@ -15,7 +16,6 @@ UI2/
 UI3/
 build/
 dist/
-源码/
 __pycache__/
 /releases/
 /config/
@@ -23,6 +23,7 @@ logs/
 wxauto_logs/
 panel_logs/
 memory/
+backup/
 
 *.zip
 *.whl

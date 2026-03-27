@@ -1,6 +1,6 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.6.2-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
+[![Version](https://img.shields.io/badge/version-V4.6.3-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
 [![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
 
@@ -39,7 +39,7 @@
 - **关键词回复** - 支持私聊和群聊关键词自动回复
 - **AI 智能回复** - 接入多种 AI 平台，提供智能对话
 - **超长文本分段** - 自动将超过 2000 字的消息分段发送
-- **随机延时** - 模拟人工回复节奏（1-10 秒）
+- **随机延时** - 模拟人工回复节奏，延迟范围可在面板自定义（默认 1~5 秒，最大 600 秒，可关闭）
 - **消息去重** - 防止重复处理同一条消息
 
 ### 👥 群聊功能
@@ -50,7 +50,7 @@
 
 ### 🤝 新好友管理
 - **自动通过好友请求** - 批量处理新好友申请
-- **自动打招呼** - 通过后自动发送欢迎消息
+- **自动打招呼** - 通过后自动发送欢迎消息，支持发送图片（填写图片绝对路径即可）
 - **智能备注** - 自动设置备注（昵称_机器人备注）
 
 ### ⏰ 定时任务
@@ -60,6 +60,8 @@
   - 每周发送 - 选择星期几发送
   - 每月发送 - 选择每月几号发送
   - 自定义日期 - 指定多个日期发送
+- **多目标群发** - 每个定时任务支持配置多个发送目标，同一批消息依次发给每个目标
+- **支持发送图片** - 消息内容填写图片绝对路径即可自动发送图片
 - **独立开关** - 每条定时任务可单独启用/禁用
 - **定时启停** - 设置机器人每日自动启动和停止时间
 
@@ -165,7 +167,8 @@ python web_server.py
     "group_welcome_random": 1.0,
     "group_welcome_msg": "欢迎新朋友！",
     "new_friend_switch": true,
-    "new_friend_msg": ["你好", "我是机器人"],
+    "new_friend_reply_switch": false,
+    "new_friend_msg": ["你好，我是机器人", "C:\\图片\\welcome.png"],
     "chat_keyword_switch": true,
     "group_keyword_switch": true,
     "keyword_dict": {
@@ -177,12 +180,12 @@ python web_server.py
         {
             "id": "abc123",
             "enabled": true,
-            "target": "用户昵称",
+            "targets": ["用户昵称", "群聊名称"],
             "time": "08:00",
             "repeat_type": "weekly",
             "weekdays": [1, 3, 5],
             "dates": [],
-            "msgs": ["早安", "今天也要加油哦"]
+            "msgs": ["早安！", "C:\\图片\\morning.png"]
         }
     ],
     "everyday_start_stop_bot_switch": false,
@@ -190,39 +193,61 @@ python web_server.py
     "everyday_stop_bot_time": "23:00",
     "memory_switch": true,
     "memory_max_count": 500,
-    "memory_context_count": 100
+    "memory_context_count": 100,
+    "reply_delay_switch": true,
+    "reply_delay_min": 1,
+    "reply_delay_max": 5
 }
 ```
 
 ### 配置项说明
 
-| 配置项 | 类型 | 说明 |
-|--------|------|------|
-| `api_configs` | array | AI 接口配置列表，每项含 `sdk`/`key`/`url`/`model` 四个字段 |
-| `api_index` | integer | 当前使用的接口索引（0-based），通过管理命令或面板切换 |
-| `prompt` | string | AI 系统提示词 |
-| `admin` | string | 管理员昵称，可发送管理命令 |
-| `AllListen_switch` | boolean | `false`=白名单模式，`true`=黑名单模式 |
-| `listen_list` | array | 白名单/黑名单用户列表 |
-| `group` | array | 监听的群聊列表 |
-| `group_switch` | boolean | 群机器人总开关 |
-| `group_reply_at` | boolean | 是否仅在被 @ 时回复群消息 |
-| `group_welcome` | boolean | 是否开启群新人欢迎语 |
-| `group_welcome_random` | float | 欢迎语触发概率（0.0-1.0） |
-| `group_welcome_msg` | string | 群新人欢迎语内容 |
-| `new_friend_switch` | boolean | 是否自动通过新好友请求 |
-| `new_friend_msg` | array | 通过好友后自动发送的打招呼消息列表 |
-| `chat_keyword_switch` | boolean | 是否开启私聊关键词回复 |
-| `group_keyword_switch` | boolean | 是否开启群聊关键词回复 |
-| `keyword_dict` | object | 关键词→回复内容映射 |
-| `scheduled_msg_switch` | boolean | 是否开启定时消息 |
-| `scheduled_msg_list` | array | 定时任务列表，支持 once/daily/weekly/monthly/custom |
-| `everyday_start_stop_bot_switch` | boolean | 是否开启每日定时启停机器人 |
-| `everyday_start_bot_time` | string | 每日自动启动机器人的时间（格式 `HH:MM`） |
-| `everyday_stop_bot_time` | string | 每日自动停止机器人的时间（格式 `HH:MM`） |
-| `memory_switch` | boolean | 是否开启对话记忆功能，默认 `true` |
-| `memory_max_count` | integer | 单窗口最多存储的消息条数（50~2000），默认 `500` |
-| `memory_context_count` | integer | AI 请求时带入的历史消息条数（50~上限），默认 `100` |
+| 配置项 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| `api_configs` | array | — | AI 接口配置列表，每项含 `sdk`/`key`/`url`/`model` 四个字段 |
+| `api_index` | integer | `0` | 当前使用的接口索引（0-based），通过管理命令或面板切换 |
+| `prompt` | string | — | AI 系统提示词 |
+| `admin` | string | `"文件传输助手"` | 管理员昵称，可发送管理命令 |
+| `AllListen_switch` | boolean | `false` | `false`=白名单模式，`true`=黑名单模式 |
+| `listen_list` | array | `[]` | 白名单/黑名单用户列表 |
+| `group` | array | `[]` | 监听的群聊列表 |
+| `group_switch` | boolean | `false` | 群机器人总开关 |
+| `group_reply_at` | boolean | `false` | 是否仅在被 @ 时回复群消息 |
+| `group_welcome` | boolean | `false` | 是否开启群新人欢迎语 |
+| `group_welcome_random` | float | `1.0` | 欢迎语触发概率（0.0-1.0） |
+| `group_welcome_msg` | string | — | 群新人欢迎语内容 |
+| `new_friend_switch` | boolean | `false` | 是否自动通过新好友请求 |
+| `new_friend_reply_switch` | boolean | `false` | 通过新好友后是否自动发打招呼消息 |
+| `new_friend_msg` | array | `[]` | 打招呼消息列表，支持文字或图片绝对路径（自动识别） |
+| `chat_keyword_switch` | boolean | `false` | 是否开启私聊关键词回复 |
+| `group_keyword_switch` | boolean | `false` | 是否开启群聊关键词回复 |
+| `keyword_dict` | object | `{}` | 关键词→回复内容映射 |
+| `scheduled_msg_switch` | boolean | `false` | 是否开启定时消息 |
+| `scheduled_msg_list` | array | `[]` | 定时任务列表，详见下方说明 |
+| `everyday_start_stop_bot_switch` | boolean | `false` | 是否开启每日定时启停机器人 |
+| `everyday_start_bot_time` | string | `"08:00"` | 每日自动启动时间（格式 `HH:MM`） |
+| `everyday_stop_bot_time` | string | `"23:00"` | 每日自动停止时间（格式 `HH:MM`） |
+| `memory_switch` | boolean | `true` | 是否开启对话记忆功能 |
+| `memory_max_count` | integer | `500` | 单窗口最多存储的消息条数（50~2000） |
+| `memory_context_count` | integer | `100` | AI 请求时带入的历史消息条数（50~上限） |
+| `reply_delay_switch` | boolean | `true` | 是否启用发送延迟（模拟人工操作），关闭后立即发送 |
+| `reply_delay_min` | integer | `1` | 发送延迟最小秒数（1~600） |
+| `reply_delay_max` | integer | `5` | 发送延迟最大秒数（1~600），实际延迟为 min~max 间的随机整数 |
+
+### 定时任务（scheduled_msg_list）字段说明
+
+每个定时任务对象包含以下字段：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | string | 任务唯一 ID（自动生成） |
+| `enabled` | boolean | 是否启用该任务 |
+| `targets` | array | 发送目标列表，支持多个用户/群聊名称（**群发**） |
+| `time` | string | 发送时间，格式 `HH:MM` |
+| `repeat_type` | string | 重复类型：`once`/`daily`/`weekly`/`monthly`/`custom` |
+| `weekdays` | array | `weekly` 时使用，填写星期几（1=周一…7=周日） |
+| `dates` | array | `monthly` 时填每月几号；`once`/`custom` 时填日期字符串（如 `"2026-03-20"`） |
+| `msgs` | array | 消息内容列表，支持**文字**或**图片绝对路径**（自动识别） |
 
 ### admin.json 账密文件
 
