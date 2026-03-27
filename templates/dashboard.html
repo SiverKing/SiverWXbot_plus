@@ -4,8 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SiverWXBot 管理面板</title>
+<link rel="icon" href="https://wxbot.siverking.online/favicon.ico" type="image/x-icon">
 <link href="https://s4.zstatic.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-<link href="https://s4.zstatic.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+<link href="/static/bootstrap-icons.css" rel="stylesheet">
 <link href="https://s4.zstatic.net/npm/summernote@0.8.18/dist/summernote-lite.min.css" rel="stylesheet">
 <style>
 :root {
@@ -233,6 +234,7 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
   <div class="nav-divider"></div>
   <div class="nav-item"><a class="nav-link" data-tab="tab-memory"><i class="bi bi-journal-text"></i> 记忆管理</a></div>
   <div class="nav-divider"></div>
+  <div class="nav-item"><a class="nav-link" data-tab="tab-other"><i class="bi bi-sliders"></i> 其他配置</a></div>
   <div class="nav-item"><a class="nav-link" data-tab="tab-account"><i class="bi bi-person-gear"></i> 账号密码</a></div>
   <div class="nav-item"><a class="nav-link" data-tab="tab-email"><i class="bi bi-envelope-at"></i> 报错邮箱</a></div>
 </nav>
@@ -333,6 +335,9 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
           <a href="https://www.siverking.online/static/img/siver_wx.jpg" target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;background:#576B95;color:#fff;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;transition:opacity .2s;" onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
             <i class="bi bi-key"></i> 获取激活码授权
           </a>
+          <button type="button" onclick="showActivateDialog()" style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;background:#07C160;color:#fff;border-radius:6px;font-size:13px;font-weight:600;border:none;cursor:pointer;transition:opacity .2s;" onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+            <i class="bi bi-key-fill"></i> 已有激活码？点我激活
+          </button>
         </div>
       </div>
       <!-- 检测失败 -->
@@ -574,10 +579,11 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
         <input class="form-check-input" type="checkbox" id="new_friend_reply_switch" name="new_friend_reply_switch" {% if config.new_friend_reply_switch %}checked{% endif %}>
         <label for="new_friend_reply_switch">新好友自动回复</label>
       </div>
+      <div class="cfg-hint" style="margin-bottom:8px;"><i class="bi bi-image" style="color:var(--primary);"></i> 填写文字内容将发送文字，填写图片完整路径（如 <code>C:\图片\welcome.png</code>）将自动发送图片</div>
       <div id="new_friend_msg_container">
         {% for msg in config.new_friend_msg %}
         <div class="list-item">
-          <input type="text" class="form-control" name="new_friend_msg" value="{{ msg }}">
+          <input type="text" class="form-control" name="new_friend_msg" value="{{ msg }}" placeholder="文字内容 或 图片完整路径">
           <button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>
         </div>
         {% endfor %}
@@ -630,8 +636,17 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
             <button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>
           </div>
           <div class="mb-2">
-            <label class="cfg-label">发送目标</label>
-            <input type="text" class="form-control" name="scheduled_target" value="{{ item.target }}" placeholder="联系人或群名">
+            <label class="cfg-label">发送目标 <span style="font-size:11px;color:var(--primary);font-weight:400;">（可添加多个，同一批消息将依次发给每个目标，用于群发）</span></label>
+            <div class="scheduled-target-list">
+              {% set _targets = item.get('targets', [item.target] if item.get('target') else []) %}
+              {% for t in _targets %}
+              <div class="list-item" style="margin-bottom:6px;">
+                <input type="text" class="form-control" name="scheduled_target" value="{{ t }}" placeholder="联系人或群名">
+                <button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>
+              </div>
+              {% endfor %}
+            </div>
+            <button type="button" class="btn-add btn-add-scheduled-target" style="margin-top:6px;"><i class="bi bi-plus-circle"></i> 添加目标</button>
           </div>
           <div class="mb-2">
             <label class="cfg-label">发送时间</label>
@@ -661,10 +676,11 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
             <input type="{% if item.repeat_type == 'once' %}date{% else %}text{% endif %}" class="form-control date-input" value="{{ item.dates | join(',') }}" placeholder="2026-03-20">
           </div>
           <label class="cfg-label">消息内容</label>
+          <div class="cfg-hint" style="margin-bottom:8px;"><i class="bi bi-image" style="color:var(--primary);"></i> 填写文字内容将发送文字，填写图片完整路径（如 <code>C:\图片\hello.png</code>）将自动发送图片</div>
           <div class="scheduled-msg-list">
             {% for msg in item.msgs %}
             <div class="list-item">
-              <input type="text" class="form-control" name="scheduled_msg" value="{{ msg }}">
+              <input type="text" class="form-control" name="scheduled_msg" value="{{ msg }}" placeholder="文字内容 或 图片完整路径">
               <button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>
             </div>
             {% endfor %}
@@ -694,6 +710,35 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
           <label class="cfg-label" for="everyday_stop_bot_time">每日停止时间</label>
           <input type="time" class="form-control" id="everyday_stop_bot_time" name="everyday_stop_bot_time" value="{{ config.everyday_stop_bot_time }}">
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Tab: Other ===== -->
+  <div class="config-panel" id="tab-other">
+    <div class="cfg-card">
+      <div class="cfg-card-header"><i class="bi bi-sliders"></i><h5>其他配置</h5><span class="desc">发送延迟等高级设置</span></div>
+      <div class="switch-row">
+        <input class="form-check-input" type="checkbox" id="reply_delay_switch" {% if config.get('reply_delay_switch', True) %}checked{% endif %}>
+        <label for="reply_delay_switch">启用发送延迟（模拟人工操作）</label>
+        <span class="switch-desc">关闭后机器人将立即回复，不等待</span>
+      </div>
+      <div id="reply-delay-settings" style="{% if not config.get('reply_delay_switch', True) %}display:none;{% endif %}">
+        <div class="row g-3">
+          <div class="col-6">
+            <label class="cfg-label" for="reply_delay_min">最小延迟（秒，1 ~ 600）</label>
+            <input type="number" class="form-control" id="reply_delay_min" min="1" max="600"
+              value="{{ config.get('reply_delay_min', 1) }}" placeholder="1">
+            <div class="cfg-hint">每次发送前等待的最短时间</div>
+          </div>
+          <div class="col-6">
+            <label class="cfg-label" for="reply_delay_max">最大延迟（秒，1 ~ 600）</label>
+            <input type="number" class="form-control" id="reply_delay_max" min="1" max="600"
+              value="{{ config.get('reply_delay_max', 5) }}" placeholder="5">
+            <div class="cfg-hint">每次发送前等待的最长时间</div>
+          </div>
+        </div>
+        <div class="cfg-hint" style="margin-top:8px;">实际延迟为最小值到最大值之间的随机整数秒 · 若最小值大于最大值则自动互换</div>
       </div>
     </div>
   </div>
@@ -913,10 +958,11 @@ var svModal = (function(){
     warnActivate: function(onContinue){ _show({
       icon: '<i class="bi bi-shield-exclamation" style="color:#FA5151;font-size:36px;"></i>',
       title: '本设备 wxautox4 未激活',
-      body: '程序依赖的内核库 <b>wxautox4</b> 尚未激活，<br>可能导致机器人无法正常使用。<br><br>建议先获取激活码完成授权后再启动。<br><br>若已有激活码也请点击获取授权来获取激活器',
+      body: '程序依赖的内核库 <b>wxautox4</b> 尚未激活，<br>可能导致机器人无法正常使用。<br><br>建议先完成授权后再启动。',
       buttons: [
         {text:'取消', css:{background:'#f2f2f2',color:'#333',border:'1px solid #ddd'}},
         {text:'获取激活码授权', css:{background:'#576B95',color:'#fff'}, action: function(){ window.open('https://www.siverking.online/static/img/siver_wx.jpg','_blank'); }},
+        {text:'已有激活码？点我激活', css:{background:'#07C160',color:'#fff'}, action: function(){ showActivateDialog(); }},
         {text:'继续启动', css:{background:'#FA5151',color:'#fff'}, action: onContinue}
       ]
     }); }
@@ -1056,6 +1102,11 @@ $(function(){
     $('#group_welcome_random_number').text(Math.round(v*100)+'%');
   });
 
+  // ===== 发送延迟开关联动 =====
+  $('#reply_delay_switch').on('change', function(){
+    $('#reply-delay-settings').toggle(this.checked);
+  });
+
   // ===== Remove List Item =====
   $(document).on('click','.btn-remove-item',function(){
     $(this).closest('.list-item, .keyword-item, .scheduled-msg-item').remove();
@@ -1084,10 +1135,19 @@ $(function(){
   });
 
   // ===== Add Scheduled Msg in Task =====
+  $(document).on('click','.btn-add-scheduled-target',function(){
+    $(this).prev('.scheduled-target-list').append(
+      '<div class="list-item" style="margin-bottom:6px;">'+
+        '<input type="text" class="form-control" name="scheduled_target" placeholder="联系人或群名">'+
+        '<button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>'+
+      '</div>'
+    );
+  });
+
   $(document).on('click','.btn-add-scheduled-msg',function(){
     $(this).prev('.scheduled-msg-list').append(
       '<div class="list-item">'+
-      '<input type="text" class="form-control" name="scheduled_msg">'+
+      '<input type="text" class="form-control" name="scheduled_msg" placeholder="文字内容 或 图片完整路径">'+
       '<button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>'+
       '</div>'
     );
@@ -1121,8 +1181,14 @@ $(function(){
         '</div>'+
         '<button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>'+
       '</div>'+
-      '<div class="mb-2"><label class="cfg-label">发送目标</label>'+
-        '<input type="text" class="form-control" name="scheduled_target" placeholder="联系人或群名"></div>'+
+      '<div class="mb-2"><label class="cfg-label">发送目标 <span style="font-size:11px;color:var(--primary);font-weight:400;">（可添加多个，同一批消息将依次发给每个目标，用于群发）</span></label>'+
+        '<div class="scheduled-target-list">'+
+          '<div class="list-item" style="margin-bottom:6px;">'+
+            '<input type="text" class="form-control" name="scheduled_target" placeholder="联系人或群名">'+
+            '<button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>'+
+          '</div>'+
+        '</div>'+
+        '<button type="button" class="btn-add btn-add-scheduled-target" style="margin-top:6px;"><i class="bi bi-plus-circle"></i> 添加目标</button></div>'+
       '<div class="mb-2"><label class="cfg-label">发送时间</label>'+
         '<input type="time" class="form-control" name="scheduled_time"></div>'+
       '<div class="mb-2"><label class="cfg-label">重复类型</label>'+
@@ -1145,9 +1211,10 @@ $(function(){
       '<div class="mb-2 scheduled-date" style="display:none">'+
         '<input type="date" class="form-control date-input"></div>'+
       '<label class="cfg-label">消息内容</label>'+
+      '<div class="cfg-hint" style="margin-bottom:8px;"><i class="bi bi-image" style="color:var(--primary);"></i> 填写文字内容将发送文字，填写图片完整路径（如 <code>C:\\图片\\hello.png</code>）将自动发送图片</div>'+
       '<div class="scheduled-msg-list">'+
         '<div class="list-item">'+
-          '<input type="text" class="form-control" name="scheduled_msg">'+
+          '<input type="text" class="form-control" name="scheduled_msg" placeholder="文字内容 或 图片完整路径">'+
           '<button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>'+
         '</div>'+
       '</div>'+
@@ -1200,7 +1267,10 @@ $(function(){
       everyday_stop_bot_time:$('#everyday_stop_bot_time').val(),
       memory_switch:$('#memory_switch').is(':checked'),
       memory_max_count:parseInt($('#memory_max_count').val())||500,
-      memory_context_count:parseInt($('#memory_context_count').val())||100
+      memory_context_count:parseInt($('#memory_context_count').val())||100,
+      reply_delay_switch:$('#reply_delay_switch').is(':checked'),
+      reply_delay_min:Math.max(1,parseInt($('#reply_delay_min').val())||1),
+      reply_delay_max:Math.max(1,parseInt($('#reply_delay_max').val())||5)
     };
     $('input[name="listen_list"]').each(function(){ if($(this).val()) configData.listen_list.push($(this).val()); });
     $('input[name="group"]').each(function(){ if($(this).val()) configData.group.push($(this).val()); });
@@ -1215,7 +1285,7 @@ $(function(){
       configData.scheduled_msg_list.push({
         id:$t.data('task-id'),
         enabled:$t.find('.scheduled-enabled').is(':checked'),
-        target:$t.find('input[name="scheduled_target"]').val(),
+        targets:(function(){ var a=[]; $t.find('input[name="scheduled_target"]').each(function(){ if($(this).val().trim()) a.push($(this).val().trim()); }); return a; })(),
         time:$t.find('input[name="scheduled_time"]').val(),
         repeat_type:$t.find('.scheduled-repeat-type').val(),
         weekdays:weekdays,
@@ -1697,7 +1767,7 @@ $(function(){
   // ===== checkActivate =====
   var _activateStatus = null; // null=未知, true=已激活, false=未激活
 
-  function checkActivate(manual) {
+  window.checkActivate = function(manual) {
     if (manual) $('#btn-check-activate').prop('disabled', true).text('检测中...');
     $('#activate-card').show();
     $('#activate-checking').show();
@@ -1748,5 +1818,63 @@ $(function(){
 <style>
 @keyframes svModalIn { from { opacity:0; transform:scale(.94) translateY(8px); } to { opacity:1; transform:scale(1) translateY(0); } }
 </style>
+
+<!-- ===== 激活码输入弹窗 ===== -->
+<div id="activate-dialog-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.48);z-index:10000;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border-radius:14px;padding:30px 28px 24px;max-width:400px;width:92%;box-shadow:0 12px 48px rgba(0,0,0,.28);animation:svModalIn .18s ease;">
+    <div style="text-align:center;font-size:38px;margin-bottom:12px;"><i class="bi bi-key-fill" style="color:#07C160;"></i></div>
+    <div style="font-size:15.5px;font-weight:700;color:var(--card-fg);margin-bottom:6px;text-align:center;">输入激活码</div>
+    <div style="font-size:13px;color:var(--muted);text-align:center;margin-bottom:18px;">请输入您购买的 wxautox4 激活码</div>
+    <input id="activate-code-input" type="text" placeholder="请输入激活码" style="width:100%;padding:10px 12px;border-radius:7px;border:1px solid var(--border);font-size:14px;color:var(--card-fg);background:var(--card);box-sizing:border-box;margin-bottom:16px;outline:none;" />
+    <div id="activate-dialog-msg" style="display:none;font-size:12.5px;text-align:center;margin-bottom:12px;border-radius:6px;padding:6px 10px;"></div>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button id="activate-dialog-cancel" style="padding:8px 22px;border-radius:7px;font-weight:600;font-size:13.5px;cursor:pointer;border:1px solid var(--border);background:#f2f2f2;color:#333;transition:opacity .15s;">取消</button>
+      <button id="activate-dialog-submit" style="padding:8px 22px;border-radius:7px;font-weight:600;font-size:13.5px;cursor:pointer;border:none;background:#07C160;color:#fff;transition:opacity .15s;">立即激活</button>
+    </div>
+  </div>
+</div>
+<script>
+function showActivateDialog() {
+  $('#activate-code-input').val('');
+  $('#activate-dialog-msg').hide();
+  $('#activate-dialog-submit').prop('disabled', false).text('立即激活');
+  $('#activate-dialog-overlay').css('display', 'flex');
+  setTimeout(function(){ $('#activate-code-input').focus(); }, 100);
+}
+$('#activate-dialog-cancel').on('click', function() {
+  $('#activate-dialog-overlay').hide();
+});
+$('#activate-dialog-submit').on('click', function() {
+  var code = $('#activate-code-input').val().trim();
+  if (!code) {
+    $('#activate-dialog-msg').text('请输入激活码').css({'background':'#fff1f1','color':'#ef4444'}).show();
+    return;
+  }
+  $('#activate-dialog-submit').prop('disabled', true).text('激活中...');
+  $('#activate-dialog-msg').hide();
+  $.ajax({
+    url: '/activate', type: 'POST',
+    contentType: 'application/json',
+    data: JSON.stringify({code: code}),
+    success: function(res) {
+      if (res.status === 'success') {
+        $('#activate-dialog-overlay').hide();
+        svModal.success('激活成功！机器人现在可以正常使用了。', '激活成功');
+        checkActivate(false);
+      } else {
+        $('#activate-dialog-msg').text(res.message || '激活失败').css({'background':'#fff1f1','color':'#ef4444'}).show();
+        $('#activate-dialog-submit').prop('disabled', false).text('立即激活');
+      }
+    },
+    error: function() {
+      $('#activate-dialog-msg').text('请求失败，请重试').css({'background':'#fff1f1','color':'#ef4444'}).show();
+      $('#activate-dialog-submit').prop('disabled', false).text('立即激活');
+    }
+  });
+});
+$('#activate-code-input').on('keydown', function(e) {
+  if (e.key === 'Enter') $('#activate-dialog-submit').click();
+});
+</script>
 </body>
 </html>

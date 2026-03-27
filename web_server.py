@@ -40,7 +40,7 @@ def base_dir():
     return os.path.abspath(".")
 
 # 初始化 Flask 应用
-app = Flask(__name__, template_folder=resource_path('templates'))
+app = Flask(__name__, template_folder=resource_path('templates'), static_folder=resource_path('templates/static'))
 app.secret_key = 'your_very_long_and_random_secret_key_here'
 
 # 安全配置
@@ -221,7 +221,7 @@ def dashboard():
                 migrated.append({
                     'id': str(uuid.uuid4())[:8],
                     'enabled': True,
-                    'target': target,
+                    'targets': [target],
                     'time': task.get('time', '08:00'),
                     'repeat_type': 'daily',
                     'weekdays': [],
@@ -229,12 +229,29 @@ def dashboard():
                     'msgs': task.get('msgs', []),
                 })
         config['scheduled_msg_list'] = migrated
+    # 旧配置迁移：target(str) -> targets(list)
+    _target_migrated = False
+    for task in config.get('scheduled_msg_list', []):
+        if 'targets' not in task:
+            old = task.pop('target', '')
+            task['targets'] = [old] if old else []
+            _target_migrated = True
+    if _target_migrated:
+        try:
+            with open(CONFIG_FILE, 'w', encoding='utf-8') as _f:
+                json.dump(config, _f, ensure_ascii=False, indent=4)
+            log('SUCCESS', '定时消息发送目标格式已自动迁移 target -> targets')
+        except Exception as _e:
+            log('ERROR', f'迁移定时消息目标格式写入失败: {_e}')
     config.setdefault('everyday_start_stop_bot_switch', False)
     config.setdefault('everyday_start_bot_time', "08:00")
     config.setdefault('everyday_stop_bot_time', "23:00")
     config.setdefault('memory_switch', True)
     config.setdefault('memory_max_count', 500)
     config.setdefault('memory_context_count', 100)
+    config.setdefault('reply_delay_switch', True)
+    config.setdefault('reply_delay_min', 1)
+    config.setdefault('reply_delay_max', 5)
 
     return render_template('dashboard.html', config=config, logs=log_messages[-50:])
 
@@ -257,6 +274,7 @@ def _coerce_bool_fields(merged_config):
         'scheduled_msg_switch',
         'everyday_start_stop_bot_switch',   # 新增
         'memory_switch',                    # 记忆开关
+        'reply_delay_switch',               # 发送延迟开关
     ]
     for field in boolean_fields:
         if field in merged_config:
@@ -460,6 +478,26 @@ def check_activate():
         activated = check_license()
         return jsonify({'status': 'success', 'data': {'activated': bool(activated)}})
     except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/activate', methods=['POST'])
+@login_required
+def activate():
+    try:
+        data = request.get_json()
+        code = (data.get('code') or '').strip()
+        if not code:
+            return jsonify({'status': 'error', 'message': '激活码不能为空'})
+        from wxautox4.utils.useful import authenticate
+        result = authenticate(code)
+        if result:
+            log('SUCCESS', f'wxautox4 激活成功')
+            return jsonify({'status': 'success', 'message': '激活成功！'})
+        else:
+            log('WARNING', f'wxautox4 激活失败，激活码无效或已过期')
+            return jsonify({'status': 'error', 'message': '激活失败，激活码无效或已过期'})
+    except Exception as e:
+        log('ERROR', f'激活出错: {e}')
         return jsonify({'status': 'error', 'message': str(e)})
 
 @app.route('/check_update')
@@ -765,6 +803,9 @@ def main():
                 "memory_switch": True,
                 "memory_max_count": 500,
                 "memory_context_count": 100,
+                "reply_delay_switch": True,
+                "reply_delay_min": 1,
+                "reply_delay_max": 5,
             }
             with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
                 json.dump(default_config, f, ensure_ascii=False, indent=4)
