@@ -1,6 +1,6 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.6.1-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
+[![Version](https://img.shields.io/badge/version-V4.6.2-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
 [![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
 
@@ -20,7 +20,7 @@
 
 **环境要求：**
 - Windows 操作系统
-- Windows wx PC 版（`4.1.7` - `4.1.8.28` 版本）
+- Windows wx PC 版（`4.1.7` ~ `4.1.8.67` 版本）
 
 **下载地址（二选一）：**
 
@@ -37,7 +37,7 @@
 **环境要求：**
 - Python `3.8` - `3.12`
 - Windows 操作系统
-- Windows wx PC 版（`4.1.7` - `4.1.8.28` 版本）
+- Windows wx PC 版（`4.1.7` ~ `4.1.8.67` 版本）
 - wxautox4 授权（需购买，购买地址：https://www.siverking.online/static/img/siver_wx.jpg ）
 
 **安装步骤：**
@@ -48,12 +48,12 @@ git clone https://github.com/SiverKing/SiverWXbot_plus.git
 cd wxbot_plus
 ```
 
-2. **安装依赖**
+1. **安装依赖**
 ```bash
 pip install -r requirements.txt
 ```
 
-3. **启动机器人**
+1. **启动机器人**
 ```bash
 python web_server.py
 ```
@@ -351,6 +351,10 @@ python web_server.py
 ### Q: 我想自己开发/更改？ 
 
 **A:** 完全可以，代码完全开源。只要拥有wxautox4，自行拉取修改即可。
+
+### Q: 如何更新？ 
+
+**A:** 拉取最新的源码或者下载最新的exe，放到你旧版本的运行目录里替换或者直接使用即可。或者将旧运行目录的`config/` `memory/`文件夹备份，然后放在新的运行目录即可调用旧数据。更新前建议您旧备份运行目录`config/` `memory/`文件夹，避免数据丢失。
 
 ---
 

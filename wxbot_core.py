@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.6.1"
-version_log = "重要更新，强烈建议所有用户更新！！V4.6.1 - 新wx UI适配、性能优化、自动阻止锁屏/睡眠"
+version = "V4.6.2"
+version_log = "重要更新！强烈建议所有用户更新！！V4.6.2 - 适配最新wx版本4 1 8 67、key显示优化"
 
 # ============================================================
 # 标准库导入
@@ -2050,6 +2050,8 @@ class WXBot:
         except Exception as e:
             print(traceback.format_exc())
             log(level="ERROR", message=str(e) + "\n初始化微信监听器失败，请检查微信是否启动登录正确")
+            log(level="ERROR", message=str(e) + "\n请尝试退出wx再重新登录后再启动")
+            log(level="ERROR", message=str(e) + "\n若重启wx还是不行，请进入面板右上角文档检查环境要求，wx版本是否匹配")
             self.run_flag = False
 
         # 主循环

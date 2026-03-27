@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 import logging
 from functools import wraps
 import threading
-from wxbot_class_only_V2 import WXBot
+from wxbot_core import WXBot
 from logger import log
 import logger
 import pythoncom
@@ -204,10 +204,6 @@ def dashboard():
         {"sdk": "DusAPI", "key": "", "url": "https://api.dusapi.com", "model": "claude-sonnet-4-6"},
     ])
     config.setdefault('api_index', 0)
-    # 隐藏 api_configs 中的 key
-    for item in config.get('api_configs', []):
-        if item.get('key'):
-            item['key'] = '*' * min(len(item['key']), 24)
 
     # —— 新增字段默认值（关键）——
     config.setdefault('group_welcome_random', 1.0)          # 新人欢迎概率
@@ -356,13 +352,6 @@ def save_config_route():
 
         current_config = read_config() or {}
 
-        # api_configs 中 key 为星号时保留原值
-        if 'api_configs' in config_data and isinstance(config_data['api_configs'], list):
-            orig_configs = current_config.get('api_configs', [])
-            for i, item in enumerate(config_data['api_configs']):
-                if isinstance(item.get('key'), str) and item['key'].startswith('*'):
-                    item['key'] = orig_configs[i].get('key', '') if i < len(orig_configs) else ''
-
         merged_config = {**current_config, **config_data}
 
         # 若已有 api_configs，清理旧 API 字段（兼容保存时自动完成迁移）
@@ -478,7 +467,7 @@ def check_activate():
 def check_update():
     try:
         import requests as req
-        import wxbot_class_only_V2 as wxbot_mod
+        import wxbot_core as wxbot_mod
         local_version = getattr(wxbot_mod, 'version', '')
         r = req.get('https://wxbot.siverking.online/version.json', timeout=8)
         data = r.json()
@@ -507,9 +496,6 @@ def load_config():
     config = read_config()
     if not config:
         return jsonify({'status': 'error', 'message': '无法读取配置文件'})
-    for item in config.get('api_configs', []):
-        if item.get('key'):
-            item['key'] = '*' * min(len(item['key']), 24)
     return jsonify({'status': 'success', 'config': config})
 
 @app.route('/get_admin_config')

@@ -446,6 +446,7 @@ function getChapterFromURL() {
 function setChapterInURL(index) {
   const url = new URL(window.location.href);
   url.searchParams.set('c', index);
+  url.hash = '';  // 切换章节时清除旧章节的小节锚点
   history.pushState({ chapter: index }, '', url.toString());
 }
 
@@ -501,14 +502,16 @@ function renderChapter(index, pushState = true) {
     link.classList.toggle('active', parseInt(link.dataset.chapter) === index);
   });
 
+  // 切换章节时先更新 URL（含清 hash），再构建目录
+  // 这样 buildTOC 读到的 hash 已是空的，不会误滚到旧章节的小节
+  if (pushState) setChapterInURL(index);
+
   buildTOC();
   window.scrollTo(0, 0);
   closeDrawers();
 
-  if (pushState) setChapterInURL(index);
-
-  // 清掉旧的小节 hash，避免 buildTOC 误触发锚点滚动
-  if (window.location.hash) {
+  // 初次加载 / popstate：buildTOC 已利用当前 hash 触发了锚点滚动，用完后清掉
+  if (!pushState && window.location.hash) {
     const url = new URL(window.location.href);
     url.hash = '';
     history.replaceState({ chapter: index }, '', url.toString());

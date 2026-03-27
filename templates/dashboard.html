@@ -447,7 +447,8 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
             </div>
             <div class="col-12">
               <label class="cfg-label">API Key</label>
-              <input type="password" class="form-control api-key-input" value="{{ cfg.get('key', '') }}" placeholder="sk-...">
+              {% set _k = cfg.get('key', '') %}{% if _k|length > 10 %}{% set _km = _k[:5] + ('*' * (_k|length - 10)) + _k[-5:] %}{% else %}{% set _km = _k %}{% endif %}
+              <input type="text" class="form-control api-key-input" value="{{ _km }}" data-real-key="{{ _k }}" data-masked="{{ _km }}" placeholder="sk-..." autocomplete="off">
             </div>
           </div>
         </div>
@@ -932,6 +933,27 @@ $(function(){
     ]
   });
 
+  // ===== 接口配置：API Key 遮罩显示（前5位 + *** + 后5位）=====
+  function maskApiKey(key) {
+    if (!key) return '';
+    if (key.length <= 10) return key;
+    return key.slice(0, 5) + '*'.repeat(key.length - 10) + key.slice(-5);
+  }
+  // 聚焦：若正显示遮罩值则清空，方便输入新 Key
+  $(document).on('focus', '.api-key-input', function(){
+    var masked = $(this).data('masked') || '';
+    if (masked && $(this).val() === masked) {
+      $(this).val('').attr('placeholder', '输入新 Key，留空则保持原值');
+    }
+  });
+  // 失焦：若未填写则恢复遮罩显示
+  $(document).on('blur', '.api-key-input', function(){
+    if ($(this).val() === '') {
+      var masked = $(this).data('masked') || '';
+      $(this).val(masked).attr('placeholder', 'sk-...');
+    }
+  });
+
   // ===== 接口配置：SDK 变更自动填写 URL + 显示 DusAPI 提示 =====
   $(document).on('change', '.api-sdk-select', function(){
     var $item = $(this).closest('.api-config-item');
@@ -988,7 +1010,7 @@ $(function(){
           '<div class="col-12 col-md-6"><label class="cfg-label">Base URL</label>'+
             '<input type="text" class="form-control api-url-input" value="https://api.dusapi.com" placeholder="https://api.example.com"></div>'+
           '<div class="col-12"><label class="cfg-label">API Key</label>'+
-            '<input type="password" class="form-control api-key-input" placeholder="sk-..."></div>'+
+            '<input type="text" class="form-control api-key-input" data-real-key="" placeholder="sk-..." autocomplete="off"></div>'+
         '</div>'+
       '</div>';
     $('#api_configs_container').append(html);
@@ -1139,13 +1161,19 @@ $(function(){
     // 收集接口配置列表
     var api_configs=[];
     var api_index=0;
+    var _keyUpdates=[];
     $('.api-config-item').each(function(i){
       if($(this).find('.api-radio').is(':checked')) api_index=i;
+      var $k=$(this).find('.api-key-input');
+      var typedKey=$k.val(), maskedKey=$k.data('masked')||'', realKey=$k.data('real-key')||'';
+      // 若显示的是遮罩值或为空，保留原真实 Key；否则使用用户输入的新 Key
+      var keyToSave=(typedKey===maskedKey||typedKey==='')?realKey:typedKey;
+      _keyUpdates.push({$el:$k, key:keyToSave});
       api_configs.push({
         sdk:$(this).find('.api-sdk-select').val(),
         model:$(this).find('.api-model-input').val(),
         url:$(this).find('.api-url-input').val(),
-        key:$(this).find('.api-key-input').val()
+        key:keyToSave
       });
     });
     var configData={
@@ -1208,7 +1236,14 @@ $(function(){
     $.ajax({
       url:'/save_config', type:'POST', contentType:'application/json',
       data:JSON.stringify(configData),
-      success:function(res){ if(res.status==='success'){if(callback) callback(res); else svModal.success('配置保存成功');} else {svModal.error('保存失败: '+(res.message||''));} },
+      success:function(res){ if(res.status==='success'){
+        // 保存成功后对每个 key 字段重新显示遮罩
+        $.each(_keyUpdates,function(i,u){
+          var m=maskApiKey(u.key);
+          u.$el.val(m).attr('data-masked',m).attr('data-real-key',u.key).data('masked',m).data('real-key',u.key).attr('placeholder','sk-...');
+        });
+        if(callback) callback(res); else svModal.success('配置保存成功');
+      } else {svModal.error('保存失败: '+(res.message||''));} },
       error:function(xhr){ svModal.error('保存配置出错: '+xhr.responseText); }
     });
   }
