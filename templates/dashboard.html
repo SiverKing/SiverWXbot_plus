@@ -49,6 +49,15 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
 .topbar .user-area span { color: rgba(255,255,255,.75); font-size: 13px; }
 .topbar .user-area a { color: rgba(255,255,255,.75); font-size: 13px; text-decoration: none; border: 1px solid rgba(255,255,255,.2); padding: 4px 12px; border-radius: 6px; transition: all .2s; }
 .topbar .user-area a:hover { background: rgba(255,255,255,.1); color: #fff; }
+.topbar-notice {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 7px;
+  background: rgba(255,195,0,.13); border: 1px solid rgba(255,195,0,.45);
+  color: #FFC300; font-size: 12.5px; font-weight: 500; line-height: 1.4;
+  padding: 5px 14px; border-radius: 20px; white-space: nowrap;
+  pointer-events: none; user-select: none;
+}
+.topbar-notice i { font-size: 14px; flex-shrink: 0; }
 
 /* ===== Sidebar ===== */
 .sidebar {
@@ -192,6 +201,10 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
 <!-- ===== Topbar ===== -->
 <div class="topbar">
   <div class="brand"><i class="bi bi-robot"></i> SiverWXBot 管理面板</div>
+  <div class="topbar-notice" id="topbar-notice" style="display:none;">
+    <i class="bi bi-exclamation-triangle-fill"></i>
+    机器人运行中，若在面板修改了配置请关闭后重新启动
+  </div>
   <div class="user-area">
     <a href="https://wxbot.siverking.online/" target="_blank" rel="noopener"
        style="display:inline-flex;align-items:center;gap:5px;color:rgba(255,255,255,.75);font-size:13px;text-decoration:none;border:1px solid rgba(255,255,255,.2);padding:4px 12px;border-radius:6px;transition:all .2s;"
@@ -1485,6 +1498,7 @@ $(function(){
       if(!res || res.status !== 'success') return;
       var d = res.data;
       if(d.bot_running){
+        $('#topbar-notice').show();
         $('#status-dot').css('background', d.callback_is_die ? '#FA5151' : '#07C160');
         $('#status-text').text(d.callback_is_die ? '运行异常（回调出错）' : '运行中');
         $('#status-sub').text('微信账号：' + (d.wx_nickname || '获取中...'));
@@ -1502,6 +1516,7 @@ $(function(){
         $('#dv-lasttime').text(d.last_msg_time || '暂无');
         $('#dv-lastsender').text(d.last_msg_sender || '暂无');
       } else {
+        $('#topbar-notice').hide();
         $('#status-dot').css('background', '#ccc');
         // 只在首次加载（数据还是初始 "-"）时才显示"未运行"占位，否则保留上次数据
         var hasData = $('#sv-received').text() !== '-';

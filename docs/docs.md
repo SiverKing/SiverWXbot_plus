@@ -1,6 +1,6 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.6.3-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
+[![Version](https://img.shields.io/badge/version-V4.6.4-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
 [![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
 

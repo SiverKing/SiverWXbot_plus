@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.6.3"
-version_log = "重要更新！强烈建议所有用户更新！！V4.6.3 - 可自定义模拟人工随机延时、定时消息目标支持多个群发、面板图标显示优化、bug修复"
+version = "V4.6.4"
+version_log = "重要修复！重要更新！强烈建议所有用户更新！！V4.6.4 - 修复无法调用dusapi claude模型的bug"
 
 # ============================================================
 # 标准库导入
@@ -878,7 +878,8 @@ class DusAPI:
             "content-type": "application/json",
             'user-agent': f'siver-wxbot-panel/{version}'
         }
-        messages = [{"role": "system", "content": prompt}]
+        # Anthropic /v1/messages 格式：system 必须是顶层字段，messages 只允许 user/assistant
+        messages = []
         if history:
             for h in history:
                 role = "assistant" if h.get('attr') == 'self' else "user"
@@ -889,6 +890,7 @@ class DusAPI:
         payload = {
             "model": model,
             "max_tokens": 1024,
+            "system": prompt,
             "messages": messages,
         }
         api_endpoint = f"{self.base_url}/v1/messages"
