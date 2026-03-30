@@ -1,6 +1,6 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.6.5-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
+[![Version](https://img.shields.io/badge/version-V4.6.6-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
 [![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
 
@@ -195,6 +195,7 @@ python web_server.py
     "new_friend_msg": ["你好，我是机器人", "C:\\图片\\welcome.png"],
     "chat_keyword_switch": true,
     "group_keyword_switch": true,
+    "group_keyword_at_only": false,
     "keyword_dict": {
         "关键词1": "回复内容1",
         "关键词2": "回复内容2"
@@ -264,6 +265,7 @@ python web_server.py
 | `new_friend_msg` | array | `[]` | 打招呼消息列表，支持文字或图片绝对路径（自动识别） |
 | `chat_keyword_switch` | boolean | `false` | 是否开启私聊关键词回复 |
 | `group_keyword_switch` | boolean | `false` | 是否开启群聊关键词回复 |
+| `group_keyword_at_only` | boolean | `false` | 群聊关键词回复是否仅在被 @ 时触发（需同时开启 `group_keyword_switch`） |
 | `keyword_dict` | object | `{}` | 关键词→回复内容映射 |
 | `scheduled_msg_switch` | boolean | `false` | 是否开启定时消息 |
 | `scheduled_msg_list` | array | `[]` | 定时消息任务列表，详见下方说明 |

@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.6.5"
-version_log = "重要修复！重要更新！强烈建议所有用户更新！！V4.6.5 - 新增定时朋友圈功能、新增随机点赞朋友圈功能、新增每个监听群组可自由选择AI回复接口、新增面板可输入图片路径的地方支持直接选择文件、bug修复"
+version = "V4.6.6"
+version_log = "重要修复！重要更新！强烈建议所有用户更新！V4.6.6 - 修复4.6.5更新造成的群组关键词失效的问题、新增群聊关键词仅@回复开关、新增一键重启载入新配置按钮、bug修复"
 
 # ============================================================
 # 标准库导入
@@ -120,6 +120,7 @@ class WXBotConfig:
         # ---------- 关键词回复配置 ----------
         self.chat_keyword_switch = False    # 私聊关键词回复开关
         self.group_keyword_switch = False   # 群聊关键词回复开关
+        self.group_keyword_at_only = False  # 群聊关键词仅被@时触发
         self.keyword_dict = {}              # 关键词 -> 回复内容 字典
 
         # ---------- 定时消息配置 ----------
@@ -194,6 +195,7 @@ class WXBotConfig:
                     "new_friend_msg": [],
                     "chat_keyword_switch": False,
                     "group_keyword_switch": False,
+                    "group_keyword_at_only": False,
                     "keyword_dict": {},
                     "scheduled_msg_switch": False,
                     "scheduled_msg_list": [],
@@ -298,9 +300,10 @@ class WXBotConfig:
         self.new_frien_msg           = self.config.get('new_friend_msg', [])
 
         # 关键词配置
-        self.chat_keyword_switch  = self.config.get('chat_keyword_switch')
-        self.group_keyword_switch = self.config.get('group_keyword_switch')
-        self.keyword_dict         = self.config.get('keyword_dict', {})
+        self.chat_keyword_switch   = self.config.get('chat_keyword_switch')
+        self.group_keyword_switch  = self.config.get('group_keyword_switch')
+        self.group_keyword_at_only = self.config.get('group_keyword_at_only', False)
+        self.keyword_dict          = self.config.get('keyword_dict', {})
 
         # 定时消息配置
         self.scheduled_msg_switch = self.config.get('scheduled_msg_switch',
@@ -1566,6 +1569,20 @@ class WXBot:
 
         # --- 群聊消息处理 ---
         if chat.who in self.config.group:
+            # 群聊关键词回复
+            if self.config.group_keyword_switch:
+                # 若开启"仅被@时触发"，则消息中必须包含 @ 标识才继续匹配
+                _kw_at_pass = (not self.config.group_keyword_at_only) or (self.config.AtMe in message.content)
+                if _kw_at_pass:
+                    for keyword in self.config.keyword_dict:
+                        if keyword in message.content:
+                            log(message=f"群组 {chat.who} 关键字消息：" + message.content)
+                            self.config.human_delay()  # 模拟人工操作延迟（可在面板配置）
+                            result = chat.SendMsg(msg=self.config.keyword_dict[keyword])
+                            self.msg_replied_count += 1
+                            time.sleep(1)
+                            return result
+            
             if (self.config.AtMe in message.content and self.config.group_reply_at) \
                     or not self.config.group_reply_at:
                 # 去除消息中的 @ 标识后再传给 AI
@@ -1588,13 +1605,6 @@ class WXBot:
                 self.msg_replied_count += 1
                 return result
 
-            # 群聊关键词回复（不受 @ 限制）
-            if self.config.group_keyword_switch:
-                for keyword in self.config.keyword_dict:
-                    if keyword in message.content:
-                        log(message=f"群组 {chat.who} 关键字消息：" + message.content)
-                        chat.SendMsg(msg=self.config.keyword_dict[keyword])
-                        time.sleep(1)
             return result
 
         # --- 管理员命令处理 ---

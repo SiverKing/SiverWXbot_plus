@@ -210,6 +210,7 @@ def dashboard():
     config.setdefault('group_welcome_random', 1.0)          # 新人欢迎概率
     config.setdefault('chat_keyword_switch', False)          # 私聊关键词开关
     config.setdefault('group_keyword_switch', False)         # 群组关键词开关
+    config.setdefault('group_keyword_at_only', False)        # 群聊关键词仅@时回复
     config.setdefault('keyword_dict', {})                    # 关键词字典
     config.setdefault('scheduled_msg_switch', config.get('everyday_msg_switch', False))  # 定时消息开关
     config.setdefault('scheduled_msg_list', [])              # 定时消息任务列表
@@ -277,6 +278,7 @@ def _coerce_bool_fields(merged_config):
         # —— 新增布尔字段 ——
         'chat_keyword_switch',
         'group_keyword_switch',
+        'group_keyword_at_only',
         'scheduled_msg_switch',
         'scheduled_moments_switch',         # 定时朋友圈开关
         'moments_like_switch',              # 随机朋友圈点赞开关
@@ -857,6 +859,7 @@ def main():
                 "new_friend_msg": [],
                 "chat_keyword_switch": False,
                 "group_keyword_switch": False,
+                "group_keyword_at_only": False,
                 "keyword_dict": {},
                 "scheduled_msg_switch": False,
                 "scheduled_msg_list": [],
