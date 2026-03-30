@@ -1,8 +1,8 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.6.5-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
+[![Version](https://img.shields.io/badge/version-V4.6.6-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
 [![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
 > 一个功能完整、架构清晰的WX机器人框架，支持多 AI 平台接入、对话记忆、灵活的监听模式、丰富的管理命令和智能的消息处理流程。
 
@@ -221,6 +221,7 @@ python web_server.py
 |--------|------|
 | 私聊关键词回复 | 开关私聊关键词回复 |
 | 群聊关键词回复 | 开关群聊关键词回复 |
+| 仅在被 @ 时触发群聊关键词回复 | 开关群聊是否被@时才触发关键词 |
 | 添加关键词 | 左侧填写关键词，右侧填写对应的回复内容 |
 
 ![关键词配置](./img/6.png)  ![关键词回复](./img/7.png)

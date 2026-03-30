@@ -85,6 +85,8 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
 .action-bar .btn-start:hover { background: var(--primary-dark); color: #fff; }
 .action-bar .btn-stop { background: var(--danger); color: #fff; }
 .action-bar .btn-stop:hover { background: #e04040; color: #fff; }
+.action-bar .btn-restart { background: #FF8C00; color: #fff; }
+.action-bar .btn-restart:hover { background: #e07a00; color: #fff; }
 .action-bar .btn-load { background: var(--card); color: var(--card-fg); border: 1px solid var(--border); }
 .action-bar .btn-load:hover { background: var(--muted-bg); }
 .action-bar .btn-save { background: var(--primary); color: #fff; }
@@ -155,6 +157,9 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
 .switch-row .form-check-input { margin: 0; }
 .switch-row label { margin: 0; font-size: 13.5px; font-weight: 500; color: var(--card-fg); }
 .switch-row .switch-desc { font-size: 12px; color: var(--muted); margin-left: auto; }
+.sub-switch-row { display: flex; align-items: center; gap: 10px; padding: 8px 14px 8px 36px; background: var(--muted-bg); border-radius: 6px; margin-bottom: 12px; border-left: 3px solid var(--border); opacity: 0.85; }
+.sub-switch-row .form-check-input { margin: 0; }
+.sub-switch-row label { margin: 0; font-size: 13px; font-weight: 400; color: var(--muted); }
 
 /* ===== Responsive ===== */
 @media (max-width: 768px) {
@@ -239,7 +244,7 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
   <div class="nav-item"><a class="nav-link" data-tab="tab-prompt"><i class="bi bi-chat-square-text"></i> Prompt</a></div>
   <div class="nav-item"><a class="nav-link" data-tab="tab-admin"><i class="bi bi-shield-lock"></i> 管理员</a></div>
   <div class="nav-divider"></div>
-  <div class="nav-item"><a class="nav-link" data-tab="tab-listen"><i class="bi bi-ear"></i> 消息监听</a></div>
+  <div class="nav-item"><a class="nav-link" data-tab="tab-listen"><i class="bi bi-ear"></i> 私聊监听</a></div>
   <div class="nav-item"><a class="nav-link" data-tab="tab-group"><i class="bi bi-people"></i> 群组管理</a></div>
   <div class="nav-item"><a class="nav-link" data-tab="tab-friend"><i class="bi bi-person-plus"></i> 好友管理</a></div>
   <div class="nav-divider"></div>
@@ -261,6 +266,7 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
   <div class="action-bar">
     <button id="btnStart" class="btn btn-start"><i class="bi bi-play-fill"></i> 启动机器人</button>
     <button id="btnStop" class="btn btn-stop"><i class="bi bi-stop-fill"></i> 停止机器人</button>
+    <button id="btnRestart" class="btn btn-restart" style="display:none;"><i class="bi bi-arrow-repeat"></i> 重启载入新配置</button>
     <div style="flex:1"></div>
     <button id="btnLoad" class="btn btn-load"><i class="bi bi-arrow-down-circle"></i> 加载配置</button>
     <button id="btnSave" class="btn btn-save"><i class="bi bi-save"></i> 保存配置</button>
@@ -515,7 +521,7 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
   <!-- ===== Tab: Listen ===== -->
   <div class="config-panel" id="tab-listen">
     <div class="cfg-card">
-      <div class="cfg-card-header"><i class="bi bi-ear"></i><h5>消息监听</h5><span class="desc">配置需要监听的联系人</span></div>
+      <div class="cfg-card-header"><i class="bi bi-ear"></i><h5>私聊监听</h5><span class="desc">配置需要监听的联系人</span></div>
       <div class="switch-row">
         <input class="form-check-input" type="checkbox" id="AllListen_switch" name="AllListen_switch" {% if config.AllListen_switch %}checked{% endif %}>
         <label for="AllListen_switch">全局监听</label>
@@ -570,7 +576,7 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
         <textarea id="group_welcome_msg" name="group_welcome_msg">{{ config.group_welcome_msg }}</textarea>
       </div>
       <hr>
-      <label class="cfg-label">群组列表</label>
+      <label class="cfg-label">群组监听列表</label>
       <div class="cfg-hint" style="margin-bottom:10px;padding:10px 14px;background:#f0f7ff;border:1px solid #bcd4f5;border-radius:6px;color:#1a5fa8;font-size:12.5px;line-height:1.8;">
         <i class="bi bi-info-circle" style="color:#2d8cf0;"></i>
         <strong>群组专属接口</strong>：每个群聊可在右侧下拉框中单独选择调用的 AI 接口，实现一个面板管理多个不同 AI 的群聊。<br>
@@ -631,6 +637,10 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
       <div class="switch-row">
         <input class="form-check-input" type="checkbox" id="group_keyword_switch" name="group_keyword_switch" {% if config.group_keyword_switch %}checked{% endif %}>
         <label for="group_keyword_switch">群聊关键词回复</label>
+      </div>
+      <div class="sub-switch-row">
+        <input class="form-check-input" type="checkbox" id="group_keyword_at_only" name="group_keyword_at_only" {% if config.group_keyword_at_only %}checked{% endif %}>
+        <label for="group_keyword_at_only">仅在被 @ 时触发群聊关键词回复</label>
       </div>
       <div id="keyword_container">
         {% for key, value in config.keyword_dict.items() %}
@@ -1555,6 +1565,7 @@ $(function(){
       new_friend_reply_switch:$('#new_friend_reply_switch').is(':checked'),
       chat_keyword_switch:$('#chat_keyword_switch').is(':checked'),
       group_keyword_switch:$('#group_keyword_switch').is(':checked'),
+      group_keyword_at_only:$('#group_keyword_at_only').is(':checked'),
       admin:$('#admin').val(),
       prompt:$('#prompt').summernote('code'),
       group_welcome_msg:$('#group_welcome_msg').summernote('code'),
@@ -1699,6 +1710,34 @@ $(function(){
     }, '停止机器人', '确定停止', '取消');
   });
 
+  $('#btnRestart').click(function(){
+    var $btn = $(this);
+    saveConfig(function(){
+      $btn.prop('disabled', true).html('<i class="bi bi-stop-fill"></i> 正在停止...');
+      $.post('/stop_bot', function(res){
+        if(res.status !== 'success'){
+          svModal.error(res.message||'停止失败，重启中断');
+          $btn.prop('disabled', false).html('<i class="bi bi-arrow-repeat"></i> 重启载入新配置');
+          return;
+        }
+        $btn.html('<i class="bi bi-hourglass-split"></i> 等待中(2s)...');
+        setTimeout(function(){
+          $btn.html('<i class="bi bi-play-fill"></i> 正在启动...');
+          $.post('/start_bot', function(res2){
+            if(res2.status === 'success') svModal.success(res2.message||'机器人已重启并载入新配置', '重启成功');
+            else svModal.error(res2.message||'启动失败');
+          }).fail(function(xhr){ svModal.error('启动失败: '+xhr.responseText); })
+            .always(function(){
+              $btn.prop('disabled', false).html('<i class="bi bi-arrow-repeat"></i> 重启载入新配置');
+            });
+        }, 2000);
+      }).fail(function(xhr){
+        svModal.error('停止失败: '+xhr.responseText);
+        $btn.prop('disabled', false).html('<i class="bi bi-arrow-repeat"></i> 重启载入新配置');
+      });
+    });
+  });
+
   // ===== Log Panel =====
   var $logPanel=$('#logPanel'), $logBody=$('#logBody');
   var currentFilter='ALL';
@@ -1827,6 +1866,7 @@ $(function(){
       if(!res || res.status !== 'success') return;
       var d = res.data;
       if(d.bot_running){
+        $('#btnRestart').show();
         $('#topbar-notice').show();
         $('#status-dot').css('background', d.callback_is_die ? '#FA5151' : '#07C160');
         $('#status-text').text(d.callback_is_die ? '运行异常（回调出错）' : '运行中');
@@ -1845,6 +1885,7 @@ $(function(){
         $('#dv-lasttime').text(d.last_msg_time || '暂无');
         $('#dv-lastsender').text(d.last_msg_sender || '暂无');
       } else {
+        $('#btnRestart').hide();
         $('#topbar-notice').hide();
         $('#status-dot').css('background', '#ccc');
         // 只在首次加载（数据还是初始 "-"）时才显示"未运行"占位，否则保留上次数据
