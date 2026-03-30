@@ -1,6 +1,6 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.6.7-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
+[![Version](https://img.shields.io/badge/version-V4.6.8-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
 [![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
@@ -90,6 +90,14 @@
 - **独立开关** - 每条任务可单独启用/禁用
 - **间隔延时** - 打开朋友圈 → 随机延时 2~5s → 发布 → 随机延时 2~5s → 关闭，拟人化操作
 
+### 🖼️ 图片识别（新）
+- **私聊 & 群组独立开关** - 私聊和群组各有一个图片识别总开关，互不影响
+- **接口自由选择** - 开启后可从已配置的接口中选择用哪个接口做识别（支持 claude-sonnet-4-6、gpt-5 等视觉模型）
+- **直接图片消息** - 用户直接发送图片，机器人自动下载并调用多模态接口描述图片内容后回复
+- **引用图片消息** - 用户引用带图片的消息，自动提取图片路径与文字内容，一并传给识别接口处理
+- **识别关闭时零开销** - 关闭开关后不仅不回复，连图片下载也跳过，节省资源
+- **须使用 DusAPI** - 图片识别需使用支持视觉的模型（如 claude-sonnet-4-6、gpt-5 系列），通过 [DusAPI](https://dusapi.com) 调用
+
 ### 📂 图片路径快速选择（新）
 - 新好友打招呼消息、定时消息内容、定时朋友圈图片三处均支持 **📁 选择图片** 按钮
 - 点击后弹出系统原生文件选择框，选中图片后自动将完整本地路径填入输入框，无需手动输入路径
@@ -130,8 +138,9 @@
 | 一个 Key | ✅ 搞定所有模型 | ❌ 各平台单独申请 |
 | 兼容性 | ✅ 最优 | ⚠️ 部分接口差异 |
 | 自动重试 | ✅ 梯度重试，更稳定 | ⚠️ 依赖 SDK 默认行为 |
+| **图片识别** | ✅ 原生支持，填 Key 即用 | ⚠️ 需自行适配多模态格式 |
 
-👉 前往 [dusapi.com](https://dusapi.com) 注册获取 Key，支持 Claude Opus 4.6、Claude Sonnet 4.6、GPT-5、GPT-5 Pro 等主流模型。
+👉 前往 [dusapi.com](https://dusapi.com) 注册获取 Key，支持 Claude Opus 4.6、Claude Sonnet 4.6、GPT-5、GPT-5 Pro 等主流模型。**图片识别功能也只需一个 Key，无需任何额外配置，开启开关即可直接使用，非常方便。**
 
 ---
 
@@ -266,7 +275,11 @@ python web_server.py
     "memory_context_count": 100,
     "reply_delay_switch": true,
     "reply_delay_min": 1,
-    "reply_delay_max": 5
+    "reply_delay_max": 5,
+    "chat_image_recognition_switch": false,
+    "chat_image_recognition_api": 0,
+    "group_image_recognition_switch": false,
+    "group_image_recognition_api": 0
 }
 ```
 
@@ -312,6 +325,10 @@ python web_server.py
 | `reply_delay_switch` | boolean | `true` | 是否启用发送延迟（模拟人工操作），关闭后立即发送 |
 | `reply_delay_min` | integer | `1` | 发送延迟最小秒数（1~600） |
 | `reply_delay_max` | integer | `5` | 发送延迟最大秒数（1~600），实际延迟为 min~max 间的随机整数 |
+| `chat_image_recognition_switch` | boolean | `false` | 是否开启私聊图片识别；开启后直接发送的图片和引用图片均会调用 AI 识别并回复，关闭则跳过下载和识别 |
+| `chat_image_recognition_api` | integer | `0` | 私聊图片识别使用的接口索引（0-based），对应 `api_configs` 数组；须选择支持视觉的模型（如 claude-sonnet-4-6、gpt-5） |
+| `group_image_recognition_switch` | boolean | `false` | 是否开启群组图片识别；逻辑同私聊，与每群的专属接口（`group_api_map`）相互独立 |
+| `group_image_recognition_api` | integer | `0` | 群组图片识别使用的接口索引（0-based），须选择支持视觉的模型 |
 
 ### 定时任务（scheduled_msg_list）字段说明
 

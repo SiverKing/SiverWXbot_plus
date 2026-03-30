@@ -1,6 +1,6 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.6.7-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
+[![Version](https://img.shields.io/badge/version-V4.6.8-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
 [![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
@@ -169,7 +169,7 @@ python web_server.py
 
 ---
 
-### 消息监听配置
+### 私聊监听配置
 
 #### 双监听模式说明
 
@@ -179,6 +179,10 @@ python web_server.py
 | **黑名单模式** | 全局监听所有未读的红点消息（非群组，群组另外配置），动态管理会话列表。此时列表为黑名单，即黑名单的人员来消息时不会被处理。 |
 
 自行选择你需要的监听模式，填写好列表即可。
+
+#### 启用私聊图片识别
+
+支持通过调用dusapi的高级模型接口直接发送的图片及引用图片的识别。请在模型配置中添加配置一个Dusapi接口的高级模型(如claude4.6、gpt-5系列)用于图片识别。开启该功能后选中这个配置的接口即可
 
 ---
 
@@ -194,6 +198,7 @@ python web_server.py
 | 随机欢迎概率 | 设置触发入群欢迎的概率，拖动滑动条设置 |
 | 欢迎消息 | 设置欢迎消息内容 |
 | +添加群组 | 添加要监听的群组名称。若有群组备注名则采用备注名；若有同名群组，则给其中一个群组在 wx 中设置备注后，再添加备注名 |
+| 启用群组图片识别 | 支持通过调用dusapi的高级模型接口直接发送的图片及引用图片的识别。请在模型配置中添加配置一个Dusapi接口的高级模型(如claude4.6、gpt-5系列)用于图片识别。开启该功能后选中这个配置的接口即可 |
 
 可以为每个群组设置不同的AI接口调用方便同时处理监听和完成不同功能。
 
@@ -335,6 +340,10 @@ python web_server.py
 ### Q: 跟wxautox4什么关系？
 
 **A:** wxautox4为python库，和该项目为两个独立的东西。该项目基于wxautox4开发封装，可以理解成以wxautox4为内核的软件。联系本项目作者，即可获得wxautox4授权。
+
+### Q: 为什么运行不正常如图片下载失败、获取不到消息、消息发送人获取不正常
+
+**A:** 此为受windows系统屏幕缩放影响。请进入windows设置找到屏幕设置，将缩放调整为100%使用即可正常。
 
 ### Q: 为什么wx会被自动吸附到左侧？
 

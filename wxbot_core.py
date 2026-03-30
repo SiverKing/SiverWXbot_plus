@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.6.7"
-version_log = "重要修复！重要更新！强烈建议所有用户更新！V4.6.7 - 新增随机定时发布朋友圈、状态面板和/状态指令返回显示优化、新增几个管理员控制指令、bug修复"
+version = "V4.6.8"
+version_log = "重要修复！重要更新！强烈建议所有用户更新！V4.6.8 - 新增私聊和群组监听的图片消息，引用图片消息的图片识别，支持dusapi接口，可开关、bug修复"
 
 # ============================================================
 # 标准库导入
@@ -23,6 +23,8 @@ from datetime import datetime, timedelta
 # 第三方库导入
 # ============================================================
 import requests
+import base64
+import mimetypes
 import schedule                  # 定时任务库
 from openai import OpenAI        # OpenAI SDK
 
@@ -70,6 +72,7 @@ from logger import log
 WxParam.MESSAGE_HASH = True         # 启用消息哈希，辅助消息去重判断
 WxParam.FORCE_MESSAGE_XBIAS = True  # 每次启动强制重新获取 X 偏移量
 WxParam.CHAT_WINDOW_SIZE = (1500, 6000)
+WxParam.DEFAULT_MESSAGE_YBIAS = 40
 
 # ============================================================
 # 配置管理类
@@ -220,6 +223,10 @@ class WXBotConfig:
                     "reply_delay_switch": True,
                     "reply_delay_min": 1,
                     "reply_delay_max": 5,
+                    "chat_image_recognition_switch": False,
+                    "chat_image_recognition_api": 0,
+                    "group_image_recognition_switch": False,
+                    "group_image_recognition_api": 0,
                 }
                 with open(self.CONFIG_FILE, "w", encoding="utf-8") as f:
                     json.dump(base_config, f, ensure_ascii=False, indent=4)
@@ -374,6 +381,12 @@ class WXBotConfig:
         self.reply_delay_switch = bool(self.config.get('reply_delay_switch', True))
         self.reply_delay_min    = max(1, int(self.config.get('reply_delay_min', 1)))
         self.reply_delay_max    = max(1, int(self.config.get('reply_delay_max', 5)))
+
+        # 图片识别配置
+        self.chat_image_recognition_switch  = bool(self.config.get('chat_image_recognition_switch', False))
+        self.chat_image_recognition_api     = int(self.config.get('chat_image_recognition_api', 0))
+        self.group_image_recognition_switch = bool(self.config.get('group_image_recognition_switch', False))
+        self.group_image_recognition_api    = int(self.config.get('group_image_recognition_api', 0))
 
         log(message="全局配置更新完成")
 
@@ -906,7 +919,36 @@ class DusAPI:
         self.api_key = config.api_key
         self.base_url = config.base_url.rstrip('/')
 
-    def chat(self, message, model=None, stream=False, prompt=None, history=None):
+    @staticmethod
+    def build_image_block(image_path: str = "", image_url: str = "") -> dict:
+        """根据本地路径或 URL 构建 Anthropic image content block"""
+        if image_path:
+            mime_type, _ = mimetypes.guess_type(image_path)
+            if mime_type not in ("image/jpeg", "image/png", "image/gif", "image/webp"):
+                mime_type = "image/jpeg"
+            with open(image_path, "rb") as f:
+                image_data = base64.standard_b64encode(f.read()).decode("utf-8")
+            return {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": mime_type,
+                    "data": image_data,
+                },
+            }
+        elif image_url:
+            return {
+                "type": "image",
+                "source": {
+                    "type": "url",
+                    "url": image_url,
+                },
+            }
+        else:
+            raise ValueError("image_path 和 image_url 不能同时为空")
+
+    def chat(self, message, model=None, stream=False, prompt=None, history=None,
+             image_path: str = "", image_url: str = ""):
         if model is None:
             model = self.DS_NOW_MOD
         if prompt is None:
@@ -926,7 +968,15 @@ class DusAPI:
                 t = h.get('time', '')
                 content = f"[{t}] {h.get('content', '')}" if t else h.get('content', '')
                 messages.append({"role": role, "content": content})
-        messages.append({"role": "user", "content": message})
+        # 构建 user_content（支持图片多模态）
+        if image_path or image_url:
+            user_content = [
+                self.build_image_block(image_path, image_url),
+                {"type": "text", "text": message},
+            ]
+        else:
+            user_content = message
+        messages.append({"role": "user", "content": user_content})
         payload = {
             "model": model,
             "max_tokens": 1024,
@@ -1596,6 +1646,25 @@ class WXBot:
             log(message=text)
 
             if msg.attr == "friend":
+                # 根据当前会话类型决定是否需要下载图片（识别开关关闭时跳过下载）
+                _is_group = chat.who in self.config.group
+                _img_enabled = (self.config.group_image_recognition_switch if _is_group
+                                else self.config.chat_image_recognition_switch)
+                if msg.type == 'image':
+                    if _img_enabled:
+                        _down_path = msg.download()
+                        if _down_path:
+                            msg.content = str(_down_path)
+                        else:
+                            log("ERROR", f"{_down_path}")
+                            log("ERROR", "message_handle_callback下载图片出错")
+                if msg.type == 'quote':
+                    if _img_enabled:
+                        _down_path = msg.download_quote_image()
+                        if _down_path:
+                            msg.content = msg.content+"+引用的图片:"+str(_down_path)
+                        else:
+                            log("INFO", "引用内容不是图片或视频")
                 # 统计已接收消息数
                 self.msg_received_count += 1
                 self.last_msg_time   = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1716,8 +1785,36 @@ class WXBot:
                         history = self.memory_manager.get_messages(
                             chat.who, self.config.memory_context_count
                         )
-                    group_api = self._get_group_api(chat.who)
-                    reply = group_api.chat(content_without_at, prompt=self.config.prompt, history=history)
+                    if self.config.group_image_recognition_switch:
+                        if message.type == 'image':
+                            # 直接图片消息：content 已被替换为本地路径
+                            rec_api = self._init_api_by_index(self.config.group_image_recognition_api)
+                            reply = rec_api.chat(
+                                "请简短描述这张图片的内容",
+                                prompt=self.config.prompt,
+                                history=history,
+                                image_path=message.content
+                            )
+                        elif '+引用的图片:' in content_without_at:
+                            # 引用图片消息：拆分文字部分和图片路径
+                            text_part, img_path = content_without_at.split('+引用的图片:', 1)
+                            rec_api = self._init_api_by_index(self.config.group_image_recognition_api)
+                            reply = rec_api.chat(
+                                text_part.strip() or "请简短描述这张图片的内容",
+                                prompt=self.config.prompt,
+                                history=history,
+                                image_path=img_path.strip()
+                            )
+                        else:
+                            # 普通文字消息，走原有群组逻辑
+                            group_api = self._get_group_api(chat.who)
+                            reply = group_api.chat(content_without_at, prompt=self.config.prompt, history=history)
+                    else:
+                        # 识别关闭：图片消息静默跳过，文字正常
+                        # if message.type == 'image' or '+引用的图片:' in content_without_at:
+                            # return result
+                        group_api = self._get_group_api(chat.who)
+                        reply = group_api.chat(content_without_at, prompt=self.config.prompt, history=history)
                 except Exception as e:
                     print(traceback.format_exc())
                     log(level="ERROR", message=str(e) + "\n群组中调用AI回复错误！！")
@@ -1763,7 +1860,34 @@ class WXBot:
                     history = self.memory_manager.get_messages(
                         chat.who, self.config.memory_context_count
                     )
-                reply = self.api.chat(message.content, prompt=self.config.prompt, history=history)
+                if self.config.chat_image_recognition_switch:
+                    if message.type == 'image':
+                        # 直接图片消息：content 已被替换为本地路径
+                        rec_api = self._init_api_by_index(self.config.chat_image_recognition_api)
+                        reply = rec_api.chat(
+                            "请简短描述这张图片的内容",
+                            prompt=self.config.prompt,
+                            history=history,
+                            image_path=message.content
+                        )
+                    elif '+引用的图片:' in message.content:
+                        # 引用图片消息：拆分文字部分和图片路径
+                        text_part, img_path = message.content.split('+引用的图片:', 1)
+                        rec_api = self._init_api_by_index(self.config.chat_image_recognition_api)
+                        reply = rec_api.chat(
+                            text_part.strip() or "请简短描述这张图片的内容",
+                            prompt=self.config.prompt,
+                            history=history,
+                            image_path=img_path.strip()
+                        )
+                    else:
+                        # 普通文字消息，走原有逻辑
+                        reply = self.api.chat(message.content, prompt=self.config.prompt, history=history)
+                else:
+                    # 识别关闭：图片消息静默跳过，文字消息正常
+                    # if message.type == 'image' or '+引用的图片:' in message.content:
+                        # return True
+                    reply = self.api.chat(message.content, prompt=self.config.prompt, history=history)
         except Exception as e:
             print(traceback.format_exc())
             log(level="ERROR", message=str(e) + "\nAPI返回错误，请稍后再试")
@@ -2413,9 +2537,28 @@ class WXBot:
             【当前启用】通过 GetNextNewMessage 获取新消息（V2 版本接口）。
             黑名单过滤后，仅处理 friend 类型的私聊消息。
             """
+            Next_callback_down_path = None
+            Next_callback_down_id = None
             def Next_callback(msg):
+                nonlocal Next_callback_down_path, Next_callback_down_id
                 log(message=f'收到消息：{msg.sender}: {msg.content}')
-
+                # Next回调即为私聊
+                _any_img_enabled = (self.config.chat_image_recognition_switch)
+                if msg.type == 'image':
+                    if _any_img_enabled:
+                        Next_callback_down_path = msg.download()
+                        if Next_callback_down_path:
+                            Next_callback_down_id = msg.id
+                        else:
+                            log("ERR", "Next_callback下载图片出错")
+                if msg.type == 'quote':
+                    if _any_img_enabled:
+                        Next_callback_down_path = msg.download_quote_image()
+                        if Next_callback_down_path:
+                            Next_callback_down_id = msg.id
+                        else:
+                            log("INFO", "引用内容不是图片或视频")
+            
             messages_new = self.wx.GetNextNewMessage(filter_mute=False, callback=Next_callback)
             chat      = messages_new.get('chat_name')
             chat_type = messages_new.get('chat_type')
@@ -2428,6 +2571,12 @@ class WXBot:
 
             if msgs:
                 for msg in msgs:
+                    if msg.type == 'image':
+                        if msg.id == Next_callback_down_id:
+                            msg.content = str(Next_callback_down_path)
+                    if msg.type == 'quote':
+                        if msg.id == Next_callback_down_id:
+                            msg.content = msg.content+"+引用的图片:"+str(Next_callback_down_path)
                     # 仅处理 friend 类型的私聊消息，排除群聊
                     if msg.attr == 'friend' and chat_type == 'friend':
                         # 全局模式首次消息：写入记忆（此处不经过 message_handle_callback）

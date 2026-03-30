@@ -24,6 +24,7 @@ wxauto_logs/
 panel_logs/
 memory/
 backup/
+wxautox文件下载/
 
 *.zip
 *.whl

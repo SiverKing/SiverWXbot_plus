@@ -448,7 +448,7 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
         <i class="bi bi-stars" style="font-size:24px;color:#fff;flex-shrink:0;"></i>
         <div>
           <div style="color:#fff;font-weight:700;font-size:14px;margin-bottom:2px;">推荐使用 DusAPI · 兼容性更好，速度更快，使用更丝滑顺畅</div>
-          <div style="color:rgba(255,255,255,.85);font-size:12.5px;">支持 Claude、GPT 等全系模型，一个 Key 搞定所有需求，国内稳定低延迟畅快直连使用</div>
+          <div style="color:rgba(255,255,255,.85);font-size:12.5px;">支持 Claude、GPT 等全系模型，一个 Key 搞定所有需求，国内稳定低延迟畅快直连使用 · 🖼️ 原生支持图片识别，无需额外配置，填 Key 即可使用</div>
         </div>
       </div>
       <a href="https://dusapi.com" target="_blank" style="flex-shrink:0;background:rgba(255,255,255,.25);color:#fff;border:1px solid rgba(255,255,255,.5);border-radius:6px;padding:7px 18px;font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap;transition:all .2s;" onmouseover="this.style.background='rgba(255,255,255,.35)'" onmouseout="this.style.background='rgba(255,255,255,.25)'">立即前往 →</a>
@@ -466,7 +466,7 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
           </div>
           <div class="dusapi-item-hint" style="display:{% if cfg.get('sdk') == 'DusAPI' %}flex{% else %}none{% endif %};align-items:center;gap:8px;background:#F0FBF5;border:1px solid #B7EBD0;border-radius:6px;padding:10px 14px;margin-bottom:10px;">
             <i class="bi bi-check-circle-fill" style="color:#07C160;font-size:16px;flex-shrink:0;"></i>
-            <div style="font-size:12.5px;color:#06AD56;">已选择 <strong>DusAPI</strong> · 接口地址已自动填写 · 兼容性更好，速度更快 · <a href="https://dusapi.com" target="_blank" style="color:#07C160;font-weight:600;">前往 dusapi.com 获取 Key</a></div>
+            <div style="font-size:12.5px;color:#06AD56;">已选择 <strong>DusAPI</strong> · 接口地址已自动填写 · 兼容性更好，速度更快 · 🖼️ 原生支持图片识别，填 Key 即用 · <a href="https://dusapi.com" target="_blank" style="color:#07C160;font-weight:600;">前往 dusapi.com 获取 Key</a></div>
           </div>
           <div class="row g-2">
             <div class="col-12 col-md-3">
@@ -561,6 +561,32 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
         {% endfor %}
       </div>
       <button type="button" class="btn-add" data-target="#listen_list" data-name="listen_list"><i class="bi bi-plus-circle"></i> <span id="listenAddText">{% if config.AllListen_switch %}添加黑名单{% else %}添加监听{% endif %}</span></button>
+      <hr>
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:6px;">
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+          <input class="form-check-input" type="checkbox" id="chat_image_recognition_switch"
+                 name="chat_image_recognition_switch"
+                 {% if config.chat_image_recognition_switch %}checked{% endif %}
+                 onchange="toggleChatImgApi(this.checked)">
+          <label for="chat_image_recognition_switch" style="font-weight:600;cursor:pointer;">启用私聊图片识别</label>
+        </div>
+        <div id="chat_img_api_row" style="display:{% if config.chat_image_recognition_switch %}flex{% else %}none{% endif %};align-items:center;gap:8px;">
+          <label style="font-size:13px;white-space:nowrap;margin:0;">识别接口:</label>
+          <select class="form-select" id="chat_image_recognition_api" name="chat_image_recognition_api" style="width:210px;">
+            {% for cfg in config.api_configs %}
+            <option value="{{ loop.index0 }}"
+              {% if config.chat_image_recognition_api == loop.index0 %}selected{% endif %}>
+              接口{{ loop.index }}: {{ cfg.model }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div style="padding:9px 14px;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;color:#92400e;font-size:12.5px;line-height:1.8;">
+        <i class="bi bi-exclamation-triangle" style="color:#d97706;margin-right:4px;"></i>
+        图片识别目前仅支持 <a href="https://dusapi.com" target="_blank" style="color:#92400e;font-weight:600;">DusAPI</a> 接口，需选择支持视觉的模型，如 <strong>claude-sonnet-4-6</strong>、<strong>gpt-5</strong> 系列。
+        支持<strong>直接发送</strong>的图片及<strong>引用图片</strong>的识别。DusAPI 原生支持图片识别，和配置其他功能一样，填个 Key 即可通用，快速便捷。
+      </div>
     </div>
   </div>
 
@@ -614,6 +640,32 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
         {% endfor %}
       </div>
       <button type="button" class="btn-add" id="btn-add-group-item"><i class="bi bi-plus-circle"></i> 添加群组</button>
+      <hr>
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:6px;">
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+          <input class="form-check-input" type="checkbox" id="group_image_recognition_switch"
+                 name="group_image_recognition_switch"
+                 {% if config.group_image_recognition_switch %}checked{% endif %}
+                 onchange="toggleGroupImgApi(this.checked)">
+          <label for="group_image_recognition_switch" style="font-weight:600;cursor:pointer;">启用群组图片识别</label>
+        </div>
+        <div id="group_img_api_row" style="display:{% if config.group_image_recognition_switch %}flex{% else %}none{% endif %};align-items:center;gap:8px;">
+          <label style="font-size:13px;white-space:nowrap;margin:0;">识别接口:</label>
+          <select class="form-select" id="group_image_recognition_api" name="group_image_recognition_api" style="width:210px;">
+            {% for cfg in config.api_configs %}
+            <option value="{{ loop.index0 }}"
+              {% if config.group_image_recognition_api == loop.index0 %}selected{% endif %}>
+              接口{{ loop.index }}: {{ cfg.model }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div style="padding:9px 14px;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;color:#92400e;font-size:12.5px;line-height:1.8;">
+        <i class="bi bi-exclamation-triangle" style="color:#d97706;margin-right:4px;"></i>
+        图片识别目前仅支持 <a href="https://dusapi.com" target="_blank" style="color:#92400e;font-weight:600;">DusAPI</a> 接口，需选择支持视觉的模型，如 <strong>claude-sonnet-4-6</strong>、<strong>gpt-5</strong> 系列。
+        支持<strong>直接发送</strong>的图片及<strong>引用图片</strong>的识别。DusAPI 原生支持图片识别，和配置其他功能一样，填个 Key 即可通用，快速便捷。
+      </div>
     </div>
   </div>
 
@@ -1795,7 +1847,11 @@ $(function(){
       memory_context_count:parseInt($('#memory_context_count').val())||100,
       reply_delay_switch:$('#reply_delay_switch').is(':checked'),
       reply_delay_min:Math.max(1,parseInt($('#reply_delay_min').val())||1),
-      reply_delay_max:Math.max(1,parseInt($('#reply_delay_max').val())||5)
+      reply_delay_max:Math.max(1,parseInt($('#reply_delay_max').val())||5),
+      chat_image_recognition_switch:$('#chat_image_recognition_switch').is(':checked'),
+      chat_image_recognition_api:parseInt($('#chat_image_recognition_api').val())||0,
+      group_image_recognition_switch:$('#group_image_recognition_switch').is(':checked'),
+      group_image_recognition_api:parseInt($('#group_image_recognition_api').val())||0
     };
     $('input[name="listen_list"]').each(function(){ if($(this).val()) configData.listen_list.push($(this).val()); });
     // 群组：收集名称列表 + 专属接口映射
@@ -2436,6 +2492,16 @@ $(function(){
   checkActivate(false);
 
 });
+</script>
+
+<script>
+// 图片识别接口下拉框显示/隐藏（全局函数，供 onchange 调用）
+function toggleChatImgApi(checked) {
+  document.getElementById('chat_img_api_row').style.display = checked ? 'flex' : 'none';
+}
+function toggleGroupImgApi(checked) {
+  document.getElementById('group_img_api_row').style.display = checked ? 'flex' : 'none';
+}
 </script>
 
 <!-- ===== 自定义弹窗 ===== -->

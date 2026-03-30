@@ -261,6 +261,10 @@ def dashboard():
     config.setdefault('reply_delay_switch', True)
     config.setdefault('reply_delay_min', 1)
     config.setdefault('reply_delay_max', 5)
+    config.setdefault('chat_image_recognition_switch', False)   # 私聊图片识别开关
+    config.setdefault('chat_image_recognition_api',    0)        # 私聊识别接口索引
+    config.setdefault('group_image_recognition_switch', False)  # 群组图片识别开关
+    config.setdefault('group_image_recognition_api',   0)        # 群组识别接口索引
 
     return render_template('dashboard.html', config=config, logs=log_messages[-50:])
 
@@ -288,6 +292,8 @@ def _coerce_bool_fields(merged_config):
         'everyday_start_stop_bot_switch',   # 新增
         'memory_switch',                    # 记忆开关
         'reply_delay_switch',               # 发送延迟开关
+        'chat_image_recognition_switch',    # 私聊图片识别开关
+        'group_image_recognition_switch',   # 群组图片识别开关
     ]
     for field in boolean_fields:
         if field in merged_config:
@@ -882,6 +888,10 @@ def main():
                 "reply_delay_switch": True,
                 "reply_delay_min": 1,
                 "reply_delay_max": 5,
+                "chat_image_recognition_switch": False,
+                "chat_image_recognition_api": 0,
+                "group_image_recognition_switch": False,
+                "group_image_recognition_api": 0,
             }
             with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
                 json.dump(default_config, f, ensure_ascii=False, indent=4)
