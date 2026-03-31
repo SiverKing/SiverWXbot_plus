@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.6.8"
-version_log = "重要修复！重要更新！强烈建议所有用户更新！V4.6.8 - 新增私聊和群组监听的图片消息，引用图片消息的图片识别，支持dusapi接口，可开关、bug修复"
+version = "V4.6.9"
+version_log = "V4.6.9 - 优化全局监听的图片识别、bug修复"
 
 # ============================================================
 # 标准库导入
@@ -2521,7 +2521,7 @@ class WXBot:
                             break
                     self.process_message(chat, message)
 
-        def remove_timeout_listen(chat_time_out=180):
+        def remove_timeout_listen(chat_time_out=600):
             """
             移除超过指定时长未收到消息的监听会话（默认 3 分钟）。
             使用列表副本遍历，避免遍历时修改原列表导致跳过元素。
@@ -2537,25 +2537,24 @@ class WXBot:
             【当前启用】通过 GetNextNewMessage 获取新消息（V2 版本接口）。
             黑名单过滤后，仅处理 friend 类型的私聊消息。
             """
-            Next_callback_down_path = None
-            Next_callback_down_id = None
+            Next_callback_down_map = {}  # {msg.id: save_path}
             def Next_callback(msg):
-                nonlocal Next_callback_down_path, Next_callback_down_id
+                nonlocal Next_callback_down_map
                 log(message=f'收到消息：{msg.sender}: {msg.content}')
                 # Next回调即为私聊
                 _any_img_enabled = (self.config.chat_image_recognition_switch)
                 if msg.type == 'image':
                     if _any_img_enabled:
-                        Next_callback_down_path = msg.download()
-                        if Next_callback_down_path:
-                            Next_callback_down_id = msg.id
+                        _path = msg.download()
+                        if _path:
+                            Next_callback_down_map[msg.id] = _path
                         else:
                             log("ERR", "Next_callback下载图片出错")
                 if msg.type == 'quote':
                     if _any_img_enabled:
-                        Next_callback_down_path = msg.download_quote_image()
-                        if Next_callback_down_path:
-                            Next_callback_down_id = msg.id
+                        _path = msg.download_quote_image()
+                        if _path:
+                            Next_callback_down_map[msg.id] = _path
                         else:
                             log("INFO", "引用内容不是图片或视频")
             
@@ -2572,11 +2571,11 @@ class WXBot:
             if msgs:
                 for msg in msgs:
                     if msg.type == 'image':
-                        if msg.id == Next_callback_down_id:
-                            msg.content = str(Next_callback_down_path)
+                        if msg.id in Next_callback_down_map:
+                            msg.content = str(Next_callback_down_map[msg.id])
                     if msg.type == 'quote':
-                        if msg.id == Next_callback_down_id:
-                            msg.content = msg.content+"+引用的图片:"+str(Next_callback_down_path)
+                        if msg.id in Next_callback_down_map:
+                            msg.content = msg.content+"+引用的图片:"+str(Next_callback_down_map[msg.id])
                     # 仅处理 friend 类型的私聊消息，排除群聊
                     if msg.attr == 'friend' and chat_type == 'friend':
                         # 全局模式首次消息：写入记忆（此处不经过 message_handle_callback）
