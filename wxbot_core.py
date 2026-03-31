@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.7.01"
-version_log = "V4.7.01 - 分离prompt 现在可添加多个prompt每个白名单和群组监听都能独立设置prompt和接口、新增自定义规则转发功能、优化首次启动日志提示、优化群组上下文记忆带入发送人、新增自动，手动备份配置数据、bug修复"
+version = "V4.7.02"
+version_log = "V4.7.02 - 优化DusAPI调用、优化群组消息处理、bug修复"
 
 # ============================================================
 # 标准库导入
@@ -1073,7 +1073,7 @@ class DusAPI:
         messages.append({"role": "user", "content": user_content})
         payload = {
             "model": model,
-            "max_tokens": 1024,
+            "max_tokens": 8192,
             "system": prompt,
             "messages": messages,
         }
@@ -1085,7 +1085,7 @@ class DusAPI:
 
         for attempt in range(max_retries + 1):
             try:
-                response = requests.post(api_endpoint, headers=headers, json=payload, timeout=30)
+                response = requests.post(api_endpoint, headers=headers, json=payload, timeout=600)
                 response.raise_for_status()
                 response.encoding = 'utf-8'
                 response_data = response.json()
@@ -1898,6 +1898,8 @@ class WXBot:
                 # 去除消息中的 @ 标识后再传给 AI
                 content_without_at = re.sub(self.config.AtMe, "", message.content).strip()
                 log(message=f"群组 {chat.who} 消息：" + content_without_at)
+                # 拼接发送人前缀，与历史消息格式保持一致
+                content_with_sender = f"{message.sender}: {content_without_at}"
                 try:
                     history = []
                     if self.config.memory_switch and self.memory_manager:
@@ -1909,7 +1911,7 @@ class WXBot:
                             # 直接图片消息：content 已被替换为本地路径
                             rec_api = self._init_api_by_index(self.config.group_image_recognition_api)
                             reply = rec_api.chat(
-                                "请简短描述这张图片的内容",
+                                f"{message.sender}: 请简短描述这张图片的内容",
                                 prompt=self._get_group_prompt(chat.who),
                                 history=history,
                                 image_path=message.content
@@ -1919,7 +1921,7 @@ class WXBot:
                             text_part, img_path = content_without_at.split('+引用的图片:', 1)
                             rec_api = self._init_api_by_index(self.config.group_image_recognition_api)
                             reply = rec_api.chat(
-                                text_part.strip() or "请简短描述这张图片的内容",
+                                f"{message.sender}: {text_part.strip()}" if text_part.strip() else f"{message.sender}: 请简短描述这张图片的内容",
                                 prompt=self._get_group_prompt(chat.who),
                                 history=history,
                                 image_path=img_path.strip()
@@ -1927,13 +1929,13 @@ class WXBot:
                         else:
                             # 普通文字消息，走原有群组逻辑
                             group_api = self._get_group_api(chat.who)
-                            reply = group_api.chat(content_without_at, prompt=self._get_group_prompt(chat.who), history=history)
+                            reply = group_api.chat(content_with_sender, prompt=self._get_group_prompt(chat.who), history=history)
                     else:
                         # 识别关闭：图片消息静默跳过，文字正常
                         # if message.type == 'image' or '+引用的图片:' in content_without_at:
                             # return result
                         group_api = self._get_group_api(chat.who)
-                        reply = group_api.chat(content_without_at, prompt=self._get_group_prompt(chat.who), history=history)
+                        reply = group_api.chat(content_with_sender, prompt=self._get_group_prompt(chat.who), history=history)
                 except Exception as e:
                     print(traceback.format_exc())
                     log(level="ERROR", message=str(e) + "\n群组中调用AI回复错误！！")
