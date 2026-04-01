@@ -1,10 +1,10 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.7.02-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
+[![Version](https://img.shields.io/badge/version-V4.7.03-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
 [![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-> 一个功能完整、架构清晰的WX机器人框架，支持多 AI 平台接入、多份 Prompt 管理、对话记忆、自定义规则转发、灵活的监听模式、丰富的管理命令和智能的消息处理流程。
+> 一个功能完整、架构清晰的WX机器人框架，支持多 AI 平台接入、多份 Prompt 管理、对话记忆、拆分多条回复、图片识别、自定义规则转发、灵活的监听模式、50+ 管理命令和智能的消息处理流程。
 
 **作者**: [Siver](https://www.siver.top)
 
@@ -15,7 +15,7 @@
 ## 项目简介
 开源：https://github.com/SiverKing/SiverWXbot_plus/
 
-一个功能完整、架构清晰的WX机器人框架，支持多 AI 平台接入、多份 Prompt 管理、对话记忆、自定义规则转发、灵活的监听模式、丰富的管理命令和智能的消息处理流程。
+一个功能完整、架构清晰的WX机器人框架，支持多 AI 平台接入、多份 Prompt 管理、对话记忆、拆分多条回复、图片识别、自定义规则转发、灵活的监听模式、50+ 管理命令和智能的消息处理流程。
 
 本项目为基于`wxautox4`py库为内核，搭建并封装了实体功能的[开源](https://github.com/SiverKing/SiverWXbot_plus/)项目。可直接使用源码或exe快速部署，也可二次修改使用。本项目为开源项目，全部源代码免费开放不收取任何费用，仅供交流学习使用。wxautox4收费为内核库设备授权需要收费。若您拥有内核库授权，不仅可免费使用本项目，还可以自行开发或者使用其他基于内核库的项目。获取授权可查看README或者下方[安装部署](https://wxbot.siverking.online/docs.html?c=安装部署)内查看。当前有试用可获取，数量有限，先到先得。
 
@@ -190,6 +190,13 @@ python web_server.py
 
 支持通过调用dusapi的高级模型接口直接发送的图片及引用图片的识别。请在模型配置中添加配置一个Dusapi接口的高级模型(如claude4.6、gpt-5系列)用于图片识别。开启该功能后选中这个配置的接口即可
 
+#### 启用拆分多条回复
+
+启用后回复会根据接口ai抉择自动发送单条或者多条消息回复。可设置**单条最大字数**和**最多发送条数**
+
+AI 将自主决定是否将回复拆分为多条消息逐条发送，模拟真人聊天。此功能通过在 Prompt 中注入格式指令，让 AI 自主决定是否拆分及条数，每条之间加入发送延迟模拟真人。
+仅适用于支持自定义 Prompt 的接口（如 DusAPI）；Coze / Dify 等工作流类接口已在平台侧固化逻辑，此功能可能无效，推荐使用 DusAPI。
+
 ---
 
 ### 群组管理
@@ -205,8 +212,17 @@ python web_server.py
 | 欢迎消息 | 设置欢迎消息内容 |
 | +添加群组 | 添加要监听的群组名称。若有群组备注名则采用备注名；若有同名群组，则给其中一个群组在 wx 中设置备注后，再添加备注名 |
 | 启用群组图片识别 | 支持通过调用dusapi的高级模型接口直接发送的图片及引用图片的识别。请在模型配置中添加配置一个Dusapi接口的高级模型(如claude4.6、gpt-5系列)用于图片识别。开启该功能后选中这个配置的接口即可 |
+| 启用拆分多条回复 | 启用后回复会根据接口ai抉择自动发送单条或者多条消息回复。可设置**单条最大字数**和**最多发送条数**。AI 将自主决定是否将回复拆分为多条消息逐条发送，模拟真人聊天。此功能通过在 Prompt 中注入格式指令，让 AI 自主决定是否拆分及条数，每条之间加入发送延迟模拟真人。
+仅适用于支持自定义 Prompt 的接口（如 DusAPI）；Coze / Dify 等工作流类接口已在平台侧固化逻辑，此功能可能无效，推荐使用 DusAPI。 |
 
 - 可以为每个群组设置不同的prompt预设和AI接口调用方便同时处理监听和完成每个群不同的功能服务。
+
+#### 启用拆分多条回复
+
+启用后回复会根据接口ai抉择自动发送单条或者多条消息回复。可设置**单条最大字数**和**最多发送条数**
+
+AI 将自主决定是否将回复拆分为多条消息逐条发送，模拟真人聊天。此功能通过在 Prompt 中注入格式指令，让 AI 自主决定是否拆分及条数，每条之间加入发送延迟模拟真人。
+仅适用于支持自定义 Prompt 的接口（如 DusAPI）；Coze / Dify 等工作流类接口已在平台侧固化逻辑，此功能可能无效，推荐使用 DusAPI。
 
 ---
 
@@ -293,7 +309,13 @@ python web_server.py
 
 ### 其他配置
 
+#### 启用发送延迟
+
 可配置模拟人工操作延时功能。配置好后发送消息前会进行随机等待以模拟人工。
+
+#### 接口调用失败固定回复
+
+当调用 AI / 模型接口失败时，机器人将发送此固定回复，而非原始报错提示。
 
 ---
 
@@ -488,5 +510,14 @@ python web_server.py
 
 ---
 
+## 交流
+
 **项目地址**：[https://github.com/SiverKing/SiverWXbot_plus](https://github.com/SiverKing/SiverWXbot_plus)
-**作者主页**：[https://www.siver.top](https://www.siver.top)
+**作者主页**：[https://www.siver.top](https://www.siverking.online)
+**wxautox4内核库授权激活**: [wxautox4内核库授权激活](https://www.siverking.online/static/img/siver_wx.jpg)
+**联系作者**: [联系作者](https://www.siverking.online/static/img/siver_wx.jpg)
+**交流群**：![暂无](./img/)
+
+---
+
+

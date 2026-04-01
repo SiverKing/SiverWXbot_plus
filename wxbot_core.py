@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.7.02"
-version_log = "V4.7.02 - 优化DusAPI调用、优化群组消息处理、bug修复"
+version = "V4.7.03"
+version_log = "V4.7.03 - 新增私聊与群组ai回复可分多条发送(需支持prompt输入的接口)、优化识图的图片下载与页面提示、新增接口错误时的自定义固定回复语、新增与优化管理员/命令、新增面板收取开发者广播通知功能、自定义规则转发来源支持设置为全部来源、修复残留监听导致的双回复bug、bug修复"
 
 # ============================================================
 # 标准库导入
@@ -73,6 +73,31 @@ WxParam.MESSAGE_HASH = True         # 启用消息哈希，辅助消息去重判
 WxParam.FORCE_MESSAGE_XBIAS = True  # 每次启动强制重新获取 X 偏移量
 WxParam.CHAT_WINDOW_SIZE = (1500, 6000)
 WxParam.DEFAULT_MESSAGE_YBIAS = 40
+
+# ============================================================
+# 拆分多条回复常量
+# ============================================================
+SPLIT_SEPARATOR = "||SPLIT||"
+
+SPLIT_PROMPT_TEMPLATE = """\
+【回复格式要求】
+你的回复将直接发送到即时通讯软件（如微信），请模仿真人聊天可能会拆分多条发送的风格，
+你可以自行决定是否将回复拆分为多条消息，以及拆分几条，无需强制拆分。
+约束：每条不超过 {max_chars} 字，总条数不超过 {max_count} 条。
+若需拆分，在每条消息之间用以下分隔符单独占一行隔开：
+||SPLIT||
+
+例如：
+好的，我来解释一下。
+||SPLIT||
+这个问题其实很常见，主要原因是……
+||SPLIT||
+你可以试试这个方法。
+
+若无需拆分则正常回复，不要添加任何分隔符。
+严禁在正文内容中出现 ||SPLIT|| 字样。
+【以下是你的角色设定】
+{base_prompt}"""
 
 # ============================================================
 # 配置管理类
@@ -244,6 +269,13 @@ class WXBotConfig:
                     "chat_image_recognition_api": 0,
                     "group_image_recognition_switch": False,
                     "group_image_recognition_api": 0,
+                    "api_error_reply": "在忙，我稍后回复您",
+                    "chat_split_reply_switch": False,
+                    "chat_split_max_chars": 100,
+                    "chat_split_max_count": 4,
+                    "group_split_reply_switch": False,
+                    "group_split_max_chars": 100,
+                    "group_split_max_count": 4,
                 }
                 with open(self.CONFIG_FILE, "w", encoding="utf-8") as f:
                     json.dump(base_config, f, ensure_ascii=False, indent=4)
@@ -464,6 +496,17 @@ class WXBotConfig:
         self.group_prompt_map = self.config.get('group_prompt_map', {})
         self.init_prompt_dir()
 
+        # 接口调用失败时的固定回复
+        self.api_error_reply = self.config.get('api_error_reply', '在忙，我稍后回复您')
+
+        # 拆分多条回复配置
+        self.chat_split_reply_switch  = bool(self.config.get('chat_split_reply_switch', False))
+        self.chat_split_max_chars     = max(1, int(self.config.get('chat_split_max_chars', 100)))
+        self.chat_split_max_count     = max(1, int(self.config.get('chat_split_max_count', 4)))
+        self.group_split_reply_switch = bool(self.config.get('group_split_reply_switch', False))
+        self.group_split_max_chars    = max(1, int(self.config.get('group_split_max_chars', 100)))
+        self.group_split_max_count    = max(1, int(self.config.get('group_split_max_count', 4)))
+
         log(message="全局配置更新完成")
 
     def set_config(self, id, new_content):
@@ -629,6 +672,33 @@ class MemoryManager:
             pass
         return []
 
+    def clear_messages(self, chat_name):
+        """清空指定会话的对话记忆"""
+        path = self._get_memory_path(chat_name)
+        with self._get_lock(chat_name):
+            try:
+                with open(path, 'w', encoding='utf-8') as f:
+                    json.dump([], f, ensure_ascii=False)
+            except Exception:
+                pass
+
+    def clear_all_messages(self):
+        """清空所有会话的对话记忆，返回清除的会话数"""
+        count = 0
+        base = os.path.join(self.base_path, self.wx_id)
+        if not os.path.exists(base):
+            return count
+        for chat_dir in os.listdir(base):
+            memory_file = os.path.join(base, chat_dir, f"{chat_dir}_memory.json")
+            if os.path.exists(memory_file):
+                try:
+                    with open(memory_file, 'w', encoding='utf-8') as f:
+                        json.dump([], f, ensure_ascii=False)
+                    count += 1
+                except Exception:
+                    pass
+        return count
+
 
 # ============================================================
 # AI 接口类
@@ -784,11 +854,11 @@ class OpenAIAPI:
                     return text
 
             log(level="WARN", message="备用方案响应内容为空")
-            return "AI 未返回有效内容"
+            return "API返回错误，请稍后再试"
 
         except Exception as e:
             log(level="ERROR", message=f"备用方案也失败 [{type(e).__name__}]: {str(e)}")
-            return "API 接口失效，请联系管理员"
+            return "API返回错误，请稍后再试"
 
 
 class DifyAPI:
@@ -1100,7 +1170,7 @@ class DusAPI:
                             break
                     if result is None:
                         log(level="WARN", message="DusAPI 响应中未找到文本内容")
-                        return "AI 未返回有效内容"
+                        return "API返回错误，请稍后再试"
 
                 if attempt > 0:
                     log(message=f"DusAPI 第 {attempt} 次重试成功：{result[:100]}...")
@@ -1117,7 +1187,7 @@ class DusAPI:
                 else:
                     log(level="ERROR", message=f"DusAPI 已重试 {max_retries} 次，最终失败: {last_error}")
 
-        return "API接口失效，请联系管理员"
+        return "API返回错误，请稍后再试"
 
 
 # ============================================================
@@ -1309,6 +1379,8 @@ class WXBot:
 
         # 启动 wxautox 消息监听器
         log(message='启动wxautox监听器...')
+        self.wx.StopListening()
+        time.sleep(1)
         self.wx.StartListening()
 
         # 添加管理员账号监听（管理员始终监听，不受白名单模式限制）
@@ -1342,6 +1414,8 @@ class WXBot:
             _already_listened = set(self.config.listen_list) | set(self.config.group) | {self.config.cmd}
             _fwd_sources = set()
             for _rule in self.config.custom_forward_list:
+                if _rule.get('all_sources', False):
+                    continue  # 全部来源：依赖已有的私聊/群组监听，无需额外注册
                 for _src in _rule.get('sources', []):
                     if _src:
                         _fwd_sources.add(_src)
@@ -1906,13 +1980,23 @@ class WXBot:
                         history = self.memory_manager.get_messages(
                             chat.who, self.config.memory_context_count
                         )
+                    # 构建有效 prompt（拆分开关开启时注入格式要求）
+                    _base_group_prompt = self._get_group_prompt(chat.who)
+                    if self.config.group_split_reply_switch:
+                        _effective_group_prompt = self._build_split_prompt(
+                            _base_group_prompt,
+                            self.config.group_split_max_chars,
+                            self.config.group_split_max_count
+                        )
+                    else:
+                        _effective_group_prompt = _base_group_prompt
                     if self.config.group_image_recognition_switch:
                         if message.type == 'image':
                             # 直接图片消息：content 已被替换为本地路径
                             rec_api = self._init_api_by_index(self.config.group_image_recognition_api)
                             reply = rec_api.chat(
                                 f"{message.sender}: 请简短描述这张图片的内容",
-                                prompt=self._get_group_prompt(chat.who),
+                                prompt=_effective_group_prompt,
                                 history=history,
                                 image_path=message.content
                             )
@@ -1922,26 +2006,39 @@ class WXBot:
                             rec_api = self._init_api_by_index(self.config.group_image_recognition_api)
                             reply = rec_api.chat(
                                 f"{message.sender}: {text_part.strip()}" if text_part.strip() else f"{message.sender}: 请简短描述这张图片的内容",
-                                prompt=self._get_group_prompt(chat.who),
+                                prompt=_effective_group_prompt,
                                 history=history,
                                 image_path=img_path.strip()
                             )
                         else:
                             # 普通文字消息，走原有群组逻辑
                             group_api = self._get_group_api(chat.who)
-                            reply = group_api.chat(content_with_sender, prompt=self._get_group_prompt(chat.who), history=history)
+                            reply = group_api.chat(content_with_sender, prompt=_effective_group_prompt, history=history)
                     else:
                         # 识别关闭：图片消息静默跳过，文字正常
                         # if message.type == 'image' or '+引用的图片:' in content_without_at:
                             # return result
                         group_api = self._get_group_api(chat.who)
-                        reply = group_api.chat(content_with_sender, prompt=self._get_group_prompt(chat.who), history=history)
+                        reply = group_api.chat(content_with_sender, prompt=_effective_group_prompt, history=history)
                 except Exception as e:
                     print(traceback.format_exc())
                     log(level="ERROR", message=str(e) + "\n群组中调用AI回复错误！！")
-                    reply = "请稍后再试"
-                self.config.human_delay()  # 模拟人工操作延迟（可在面板配置）
-                result = chat.SendMsg(msg=reply, at=message.sender)
+                    reply = "API返回错误，请稍后再试"
+
+                # 接口调用失败时替换为配置的固定回复
+                if reply == "API返回错误，请稍后再试":
+                    reply = self.config.api_error_reply
+
+                # 拆分多条回复：首条 @ 发言人，后续条不 @
+                if self.config.group_split_reply_switch:
+                    parts = self._parse_split_reply(reply, self.config.group_split_max_count)
+                else:
+                    parts = [reply]
+
+                for i, part in enumerate(parts):
+                    self.config.human_delay()   # 每条发送前都延迟（含第一条，与原逻辑等效）
+                    result = chat.SendMsg(msg=part, at=message.sender if i == 0 else None)
+
                 self.msg_replied_count += 1
                 return result
 
@@ -1985,6 +2082,23 @@ class WXBot:
         name = self.config.group_prompt_map.get(group_name) or self.config.default_prompt
         return self.config.get_prompt_content(name)
 
+    # ----------------------------------------------------------
+    # 拆分多条回复辅助方法
+    # ----------------------------------------------------------
+
+    def _build_split_prompt(self, base_prompt, max_chars, max_count):
+        """将拆分格式要求注入到 prompt 前面，返回组合后的 prompt"""
+        return SPLIT_PROMPT_TEMPLATE.format(
+            max_chars=max_chars,
+            max_count=max_count,
+            base_prompt=base_prompt,
+        )
+
+    def _parse_split_reply(self, reply, max_count):
+        """按 ||SPLIT|| 分隔符解析回复，过滤空白，截断到 max_count 条"""
+        parts = [p.strip() for p in reply.split(SPLIT_SEPARATOR) if p.strip()]
+        return parts[:max_count] if parts else [reply]
+
     def _is_custom_forward_source(self, chat_who):
         """判断某个会话是否是任意自定义转发规则的监听来源"""
         for rule in self.config.custom_forward_list:
@@ -2006,7 +2120,8 @@ class WXBot:
         if not self.config.custom_forward_switch:
             return
         for rule in self.config.custom_forward_list:
-            if chat.who not in rule.get('sources', []):
+            # 全部来源：不过滤来源；否则只处理配置的来源
+            if not rule.get('all_sources', False) and chat.who not in rule.get('sources', []):
                 continue
             rule_type = rule.get('type', 'all')
             should_forward = False
@@ -2055,13 +2170,23 @@ class WXBot:
                     history = self.memory_manager.get_messages(
                         chat.who, self.config.memory_context_count
                     )
+                # 构建有效 prompt（拆分开关开启时注入格式要求）
+                _base_prompt = self._get_chat_prompt(chat.who)
+                if self.config.chat_split_reply_switch:
+                    _effective_prompt = self._build_split_prompt(
+                        _base_prompt,
+                        self.config.chat_split_max_chars,
+                        self.config.chat_split_max_count
+                    )
+                else:
+                    _effective_prompt = _base_prompt
                 if self.config.chat_image_recognition_switch:
                     if message.type == 'image':
                         # 直接图片消息：content 已被替换为本地路径（图片识别优先使用图片识别接口）
                         rec_api = self._init_api_by_index(self.config.chat_image_recognition_api)
                         reply = rec_api.chat(
                             "请简短描述这张图片的内容",
-                            prompt=self._get_chat_prompt(chat.who),
+                            prompt=_effective_prompt,
                             history=history,
                             image_path=message.content
                         )
@@ -2071,31 +2196,41 @@ class WXBot:
                         rec_api = self._init_api_by_index(self.config.chat_image_recognition_api)
                         reply = rec_api.chat(
                             text_part.strip() or "请简短描述这张图片的内容",
-                            prompt=self._get_chat_prompt(chat.who),
+                            prompt=_effective_prompt,
                             history=history,
                             image_path=img_path.strip()
                         )
                     else:
                         # 普通文字消息：使用用户专属接口和 prompt
-                        reply = self._get_chat_api(chat.who).chat(message.content, prompt=self._get_chat_prompt(chat.who), history=history)
+                        reply = self._get_chat_api(chat.who).chat(message.content, prompt=_effective_prompt, history=history)
                 else:
                     # 识别关闭：图片消息静默跳过，文字消息正常
                     # if message.type == 'image' or '+引用的图片:' in message.content:
                         # return True
-                    reply = self._get_chat_api(chat.who).chat(message.content, prompt=self._get_chat_prompt(chat.who), history=history)
+                    reply = self._get_chat_api(chat.who).chat(message.content, prompt=_effective_prompt, history=history)
         except Exception as e:
             print(traceback.format_exc())
             log(level="ERROR", message=str(e) + "\nAPI返回错误，请稍后再试")
             reply = "API返回错误，请稍后再试"
 
-        if len(reply) >= 2000:
-            # 超长回复分段发送
-            segments = self.config.split_long_text(reply)
-            for segment in segments:
-                result = chat.SendMsg(segment)
+        # 接口调用失败时替换为配置的固定回复
+        if reply == "API返回错误，请稍后再试":
+            reply = self.config.api_error_reply
+
+        # 拆分多条回复：仅在开关开启且回复包含分隔符时生效
+        if self.config.chat_split_reply_switch:
+            parts = self._parse_split_reply(reply, self.config.chat_split_max_count)
         else:
-            self.config.human_delay()  # 模拟人工操作延迟（可在面板配置）
-            result = chat.SendMsg(reply)
+            parts = [reply]
+
+        for part in parts:
+            self.config.human_delay()   # 每条发送前都延迟（含第一条，与原逻辑等效）
+            if len(part) >= 2000:
+                for segment in self.config.split_long_text(part):
+                    result = chat.SendMsg(segment)
+            else:
+                result = chat.SendMsg(part)
+
         self.msg_replied_count += 1
         return result
 
@@ -2163,6 +2298,93 @@ class WXBot:
             )
         elif content in ("/指令", "指令"):
             result = self.send_command_list(chat)
+        elif content == "/系统状态指令":
+            result = chat.SendMsg(
+                '--- 系统状态 ---\n'
+                '[/状态] 完整运行状态摘要\n'
+                '[/接口测试 内容] 测试当前AI接口\n'
+                '[/当前版本] 版本号及更新说明\n'
+                '[/更新配置] 重载配置并重初始化监听'
+            )
+        elif content == "/用户管理指令":
+            result = chat.SendMsg(
+                '--- 用户管理 ---\n'
+                '[/当前用户] 当前监听用户列表\n'
+                '[/添加用户***] 添加监听用户\n'
+                '[/删除用户***] 移除监听用户'
+            )
+        elif content == "/群组管理指令":
+            result = chat.SendMsg(
+                '--- 群组管理 ---\n'
+                '[/当前群] 当前监听群列表\n'
+                '[/添加群***] / [/删除群***]\n'
+                '[/开启群机器人] / [/关闭群机器人]\n'
+                '[/群机器人状态]\n'
+                '[/开启群机器人欢迎语] / [/关闭群机器人欢迎语]\n'
+                '[/群机器人欢迎语状态]\n'
+                '[/当前群机器人欢迎语]\n'
+                '[/更改群机器人欢迎语为***]'
+            )
+        elif content == "/Prompt管理指令":
+            result = chat.SendMsg(
+                '--- Prompt 管理 ---\n'
+                '[/Prompt列表] 所有可用Prompt\n'
+                '[/当前Prompt] 默认Prompt名称及内容\n'
+                '[/切换Prompt ***] 切换默认Prompt\n'
+                '[/更改AI设定为***] 修改默认Prompt内容\n'
+                '[/当前AI设定] 查看当前默认Prompt内容'
+            )
+        elif content == "/关键词指令":
+            result = chat.SendMsg(
+                '--- 关键词回复 ---\n'
+                '[/关键词状态] 查看关键词配置及列表\n'
+                '[/开启私聊关键词] / [/关闭私聊关键词]\n'
+                '[/开启群聊关键词] / [/关闭群聊关键词]\n'
+                '[/开启群聊关键词@触发] / [/关闭群聊关键词@触发]'
+            )
+        elif content == "/记忆指令":
+            result = chat.SendMsg(
+                '--- 对话记忆 ---\n'
+                '[/记忆状态] 查看记忆配置\n'
+                '[/开启记忆] / [/关闭记忆]\n'
+                '[/清除记忆] 清除管理员对话记忆\n'
+                '[/清除用户记忆 ***] 清除指定用户/群记忆\n'
+                '[/清除全部记忆] 清除所有对话记忆'
+            )
+        elif content == "/延迟指令":
+            result = chat.SendMsg(
+                '--- 回复延迟 ---\n'
+                '[/回复延迟状态] 查看回复延迟配置\n'
+                '[/开启回复延迟] / [/关闭回复延迟]'
+            )
+        elif content == "/图片识别指令":
+            result = chat.SendMsg(
+                '--- 图片识别 ---\n'
+                '[/图片识别状态] 查看私聊/群聊图片识别开关及接口\n'
+                '（开关需在面板配置，指令仅支持查看）'
+            )
+        elif content == "/拆分回复指令":
+            result = chat.SendMsg(
+                '--- 拆分多条回复 ---\n'
+                '[/拆分回复状态] 查看拆分回复配置\n'
+                '[/开启私聊拆分回复] / [/关闭私聊拆分回复]\n'
+                '[/开启群聊拆分回复] / [/关闭群聊拆分回复]\n'
+                '（字数/条数上限需在面板配置）'
+            )
+        elif content == "/新好友指令":
+            result = chat.SendMsg(
+                '--- 新好友 ---\n'
+                '[/新好友状态] 查看新好友自动通过及回复状态\n'
+                '（开关需在面板配置，指令仅支持查看）'
+            )
+        elif content == "/接口指令":
+            result = chat.SendMsg(
+                '--- AI接口 & 错误回复 ---\n'
+                '[/查看接口列表] 返回所有接口配置\n'
+                '[/选择接口 N] 切换至第N个接口\n'
+                '[/查看错误回复] 查看接口失败固定回复\n'
+                '[/设置错误回复 ***] 修改接口失败固定回复'
+            )
         elif content == "/状态":
             result = self._build_status_msg(chat, message)
         elif content == "/关键词状态":
@@ -2213,6 +2435,66 @@ class WXBot:
             message_re = message
             message_re.content = re.sub("/接口测试", "", message.content).strip()
             result = self.wx_send_ai(chat, message_re)
+        # --- Prompt 管理 ---
+        elif content == "/Prompt列表":
+            result = self.handle_list_prompts(chat, message)
+        elif content == "/当前Prompt":
+            name = self.config.default_prompt
+            body = self.config.get_prompt_content(name)
+            result = chat.SendMsg(f"当前默认Prompt（{name}）：\n{body}")
+        elif content.startswith("/切换Prompt"):
+            result = self.handle_switch_prompt(chat, message)
+        # --- 清除记忆 ---
+        elif content == "/清除记忆":
+            result = self.handle_clear_memory(chat, message)
+        elif content.startswith("/清除用户记忆"):
+            result = self.handle_clear_user_memory(chat, message)
+        elif content == "/清除全部记忆":
+            result = self.handle_clear_all_memory(chat, message)
+        # --- 图片识别 ---
+        elif content == "/图片识别状态":
+            result = self.handle_image_recognition_status(chat, message)
+        # --- 拆分多条回复 ---
+        elif content == "/拆分回复状态":
+            result = self.handle_split_reply_status(chat, message)
+        elif content == "/开启私聊拆分回复":
+            self.config.set_config('chat_split_reply_switch', True)
+            result = chat.SendMsg(f"私聊拆分回复已开启（单条≤{self.config.chat_split_max_chars}字，最多{self.config.chat_split_max_count}条）")
+        elif content == "/关闭私聊拆分回复":
+            self.config.set_config('chat_split_reply_switch', False)
+            result = chat.SendMsg("私聊拆分回复已关闭")
+        elif content == "/开启群聊拆分回复":
+            self.config.set_config('group_split_reply_switch', True)
+            result = chat.SendMsg(f"群聊拆分回复已开启（单条≤{self.config.group_split_max_chars}字，最多{self.config.group_split_max_count}条）")
+        elif content == "/关闭群聊拆分回复":
+            self.config.set_config('group_split_reply_switch', False)
+            result = chat.SendMsg("群聊拆分回复已关闭")
+        # --- 关键词开关完善 ---
+        elif content == "/开启私聊关键词":
+            self.config.set_config('chat_keyword_switch', True)
+            result = chat.SendMsg("私聊关键词回复已开启")
+        elif content == "/关闭私聊关键词":
+            self.config.set_config('chat_keyword_switch', False)
+            result = chat.SendMsg("私聊关键词回复已关闭")
+        elif content == "/开启群聊关键词":
+            self.config.set_config('group_keyword_switch', True)
+            result = chat.SendMsg("群聊关键词回复已开启")
+        elif content == "/关闭群聊关键词":
+            self.config.set_config('group_keyword_switch', False)
+            result = chat.SendMsg("群聊关键词回复已关闭")
+        # --- 新好友 ---
+        elif content == "/新好友状态":
+            result = self.handle_new_friend_status(chat, message)
+        # --- 接口错误固定回复 ---
+        elif content == "/查看错误回复":
+            result = chat.SendMsg(f"接口失败固定回复：{self.config.api_error_reply}")
+        elif content.startswith("/设置错误回复"):
+            new_err = re.sub("/设置错误回复", "", content).strip()
+            if new_err:
+                self.config.set_config('api_error_reply', new_err)
+                result = chat.SendMsg(f"接口失败固定回复已更新：{new_err}")
+            else:
+                result = chat.SendMsg("请提供回复内容，如：/设置错误回复 在忙，我稍后回复您")
         else:
             # 未匹配到任何指令
             # self 消息（文件传输助手场景下机器人自身回复的同步）不调用 AI，避免误触发关键词或 AI 回复
@@ -2278,6 +2560,24 @@ class WXBot:
 
         # 定时消息状态
         send_msg += "当前定时消息状态：" + ("开启\n" if self.config.scheduled_msg_switch else "关闭\n")
+
+        # 图片识别状态
+        send_msg += "私聊图片识别：" + ("开启" if self.config.chat_image_recognition_switch else "关闭")
+        send_msg += "  群聊图片识别：" + ("开启\n" if self.config.group_image_recognition_switch else "关闭\n")
+
+        # 拆分多条回复状态
+        send_msg += "私聊拆分回复：" + ("开启" if self.config.chat_split_reply_switch else "关闭")
+        send_msg += "  群聊拆分回复：" + ("开启\n" if self.config.group_split_reply_switch else "关闭\n")
+
+        # 新好友状态
+        send_msg += "新好友自动通过：" + ("开启" if self.config.new_frined_switch else "关闭")
+        send_msg += "  自动回复：" + ("开启\n" if self.config.new_frien_reply_switch else "关闭\n")
+
+        # 当前默认 Prompt
+        send_msg += f"当前默认Prompt：{self.config.default_prompt}\n"
+
+        # 接口错误固定回复
+        send_msg += f"接口失败回复：{self.config.api_error_reply}\n"
 
         return chat.SendMsg(send_msg)
 
@@ -2437,42 +2737,116 @@ class WXBot:
             return chat.SendMsg(f'AI设定更新失败：{e}')
         return chat.SendMsg(f'默认AI设定（{self.config.default_prompt}）已更新\n' + new_prompt)
 
+    def handle_list_prompts(self, chat, message):
+        """处理 /Prompt列表 指令：列出所有可用 Prompt 名称"""
+        try:
+            files = sorted([f[:-3] for f in os.listdir(self.config.prompt_dir) if f.endswith('.md')])
+        except Exception:
+            files = []
+        if not files:
+            return chat.SendMsg("当前没有可用的 Prompt")
+        current = self.config.default_prompt
+        lines = ["可用 Prompt 列表（* 为当前默认）："]
+        for name in files:
+            mark = "* " if name == current else "  "
+            lines.append(f"{mark}{name}")
+        return chat.SendMsg('\n'.join(lines))
+
+    def handle_switch_prompt(self, chat, message):
+        """处理 /切换Prompt xxx 指令：切换默认 Prompt"""
+        name = re.sub("/切换Prompt", "", message.content).strip()
+        if not name:
+            return chat.SendMsg("请提供 Prompt 名称，如：/切换Prompt 默认")
+        path = os.path.join(self.config.prompt_dir, f'{name}.md')
+        if not os.path.exists(path):
+            try:
+                files = sorted([f[:-3] for f in os.listdir(self.config.prompt_dir) if f.endswith('.md')])
+            except Exception:
+                files = []
+            available = '、'.join(files) if files else '（无）'
+            return chat.SendMsg(f"Prompt「{name}」不存在\n可用 Prompt：{available}")
+        self.config.set_config('default_prompt', name)
+        return chat.SendMsg(f"默认 Prompt 已切换为：{name}")
+
+    def handle_clear_memory(self, chat, message):
+        """处理 /清除记忆 指令：清除管理员（当前聊天）的对话记忆"""
+        if not self.memory_manager:
+            return chat.SendMsg("记忆功能未初始化")
+        self.memory_manager.clear_messages(self.config.cmd)
+        return chat.SendMsg(f"已清除「{self.config.cmd}」的对话记忆")
+
+    def handle_clear_user_memory(self, chat, message):
+        """处理 /清除用户记忆 xxx 指令：清除指定用户/群的记忆"""
+        name = re.sub("/清除用户记忆", "", message.content).strip()
+        if not name:
+            return chat.SendMsg("请提供用户或群名称，如：/清除用户记忆 张三")
+        if not self.memory_manager:
+            return chat.SendMsg("记忆功能未初始化")
+        self.memory_manager.clear_messages(name)
+        return chat.SendMsg(f"已清除「{name}」的对话记忆")
+
+    def handle_clear_all_memory(self, chat, message):
+        """处理 /清除全部记忆 指令：清除所有对话记忆"""
+        if not self.memory_manager:
+            return chat.SendMsg("记忆功能未初始化")
+        count = self.memory_manager.clear_all_messages()
+        return chat.SendMsg(f"已清除所有对话记忆（共 {count} 个会话）")
+
+    def handle_image_recognition_status(self, chat, message):
+        """处理 /图片识别状态 指令：返回私聊和群聊图片识别开关及接口信息"""
+        def api_label(idx):
+            if 0 <= idx < len(self.config.api_configs):
+                cfg = self.config.api_configs[idx]
+                return f"接口{idx + 1}（{cfg.get('model', '')}）"
+            return f"接口{idx + 1}"
+        chat_sw  = "开启" if self.config.chat_image_recognition_switch  else "关闭"
+        group_sw = "开启" if self.config.group_image_recognition_switch else "关闭"
+        lines = [
+            "--- 图片识别状态 ---",
+            f"私聊图片识别：{chat_sw}  识别接口：{api_label(self.config.chat_image_recognition_api)}",
+            f"群聊图片识别：{group_sw}  识别接口：{api_label(self.config.group_image_recognition_api)}",
+        ]
+        return chat.SendMsg('\n'.join(lines))
+
+    def handle_split_reply_status(self, chat, message):
+        """处理 /拆分回复状态 指令：返回私聊和群聊拆分回复配置"""
+        chat_sw  = "开启" if self.config.chat_split_reply_switch  else "关闭"
+        group_sw = "开启" if self.config.group_split_reply_switch else "关闭"
+        lines = [
+            "--- 拆分多条回复状态 ---",
+            f"私聊拆分回复：{chat_sw}  单条≤{self.config.chat_split_max_chars}字  最多{self.config.chat_split_max_count}条",
+            f"群聊拆分回复：{group_sw}  单条≤{self.config.group_split_max_chars}字  最多{self.config.group_split_max_count}条",
+        ]
+        return chat.SendMsg('\n'.join(lines))
+
+    def handle_new_friend_status(self, chat, message):
+        """处理 /新好友状态 指令：返回新好友自动通过和自动回复配置"""
+        accept = "开启" if self.config.new_frined_switch      else "关闭"
+        reply  = "开启" if self.config.new_frien_reply_switch else "关闭"
+        msgs   = self.config.new_frien_msg if self.config.new_frien_msg else ["（无）"]
+        lines  = [
+            "--- 新好友状态 ---",
+            f"自动通过好友申请：{accept}",
+            f"自动回复新好友：{reply}",
+            "自动回复消息：",
+        ] + [f"  · {m}" for m in msgs]
+        return chat.SendMsg('\n'.join(lines))
+
     def send_command_list(self, chat):
         """发送全量指令帮助列表"""
         commands = (
-            '指令列表[发送中括号里内容]：\n'
-            '--- 系统状态 ---\n'
-            '[/状态] 完整运行状态摘要\n'
-            '[/接口测试 内容] 测试当前AI接口\n'
-            '[/当前版本] 版本号及更新说明\n'
-            '[/更新配置] 重载配置并重初始化监听\n'
-            '--- 用户管理 ---\n'
-            '[/当前用户] 当前监听用户列表\n'
-            '[/添加用户***] 添加监听用户\n'
-            '[/删除用户***] 移除监听用户\n'
-            '--- 群组管理 ---\n'
-            '[/当前群] 当前监听群列表\n'
-            '[/添加群***] / [/删除群***]\n'
-            '[/开启群机器人] / [/关闭群机器人]\n'
-            '[/群机器人状态]\n'
-            '[/开启群机器人欢迎语] / [/关闭群机器人欢迎语]\n'
-            '[/群机器人欢迎语状态]\n'
-            '[/当前群机器人欢迎语]\n'
-            '[/更改群机器人欢迎语为***]\n'
-            '--- 关键词回复 ---\n'
-            '[/关键词状态] 查看关键词配置及列表\n'
-            '[/开启群聊关键词@触发] / [/关闭群聊关键词@触发]\n'
-            '--- 对话记忆 ---\n'
-            '[/记忆状态] 查看记忆配置\n'
-            '[/开启记忆] / [/关闭记忆]\n'
-            '--- 回复延迟 ---\n'
-            '[/回复延迟状态] 查看回复延迟配置\n'
-            '[/开启回复延迟] / [/关闭回复延迟]\n'
-            '--- AI接口 ---\n'
-            '[/查看接口列表] 返回所有接口配置\n'
-            '[/选择接口 N] 切换至第N个接口\n'
-            '[/当前AI设定] 返回当前AI提示词\n'
-            '[/更改AI设定为***] 修改AI提示词\n'
+            '指令目录（发送对应指令查看详细）：\n'
+            '/系统状态指令\n'
+            '/用户管理指令\n'
+            '/群组管理指令\n'
+            '/Prompt管理指令\n'
+            '/关键词指令\n'
+            '/记忆指令\n'
+            '/延迟指令\n'
+            '/图片识别指令\n'
+            '/拆分回复指令\n'
+            '/新好友指令\n'
+            '/接口指令\n'
             '作者:https://www.siver.top'
         )
         return chat.SendMsg(commands)
@@ -2796,11 +3170,20 @@ class WXBot:
                                 )
                             except Exception as e:
                                 log(level="WARNING", message=f"写入记忆失败: {e}")
+                        # 自定义规则转发：必须在 add_chat_to_listen 之前执行
+                        # msg.forward() 依赖主窗口上下文，加入监听后上下文切换到子窗口会失效
+                        if self.config.custom_forward_switch:
+                            try:
+                                import types as _types
+                                self._handle_custom_forward(_types.SimpleNamespace(who=chat), msg)
+                            except Exception as _fwd_e:
+                                log(level="ERROR", message=f"自定义转发处理出错: {_fwd_e}")
                         if not self.is_chat_listened(chat):
                             self.add_chat_to_listen(chat)
                         else:
                             log(message=chat + '在监听列表')
-                        self.process_message(self.wx.GetSubWindow(nickname=chat), msg)
+                        _sub_chat = self.wx.GetSubWindow(nickname=chat)
+                        self.process_message(_sub_chat, msg)
 
         # ---- 全局监听模式主流程 ----
         # 当前仅启用 get_next_new_message（混合模式中的新消息拉取）

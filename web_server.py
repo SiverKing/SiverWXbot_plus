@@ -438,6 +438,13 @@ def dashboard():
     config.setdefault('chat_prompt_map', {})
     config.setdefault('chat_api_map', {})
     config.setdefault('group_prompt_map', {})
+    config.setdefault('api_error_reply', '在忙，我稍后回复您')   # 接口调用失败时的固定回复
+    config.setdefault('chat_split_reply_switch', False)   # 私聊拆分多条回复开关
+    config.setdefault('chat_split_max_chars', 100)        # 私聊单条最大字数
+    config.setdefault('chat_split_max_count', 4)          # 私聊最多条数
+    config.setdefault('group_split_reply_switch', False)  # 群聊拆分多条回复开关
+    config.setdefault('group_split_max_chars', 100)       # 群聊单条最大字数
+    config.setdefault('group_split_max_count', 4)         # 群聊最多条数
 
     return render_template('dashboard.html', config=config, logs=log_messages[-50:], prompts=prompts)
 
@@ -468,6 +475,8 @@ def _coerce_bool_fields(merged_config):
         'chat_image_recognition_switch',    # 私聊图片识别开关
         'group_image_recognition_switch',   # 群组图片识别开关
         'custom_forward_switch',            # 自定义转发总开关
+        'chat_split_reply_switch',          # 私聊拆分多条回复开关
+        'group_split_reply_switch',         # 群聊拆分多条回复开关
     ]
     for field in boolean_fields:
         if field in merged_config:
@@ -770,6 +779,13 @@ def start_bot():
         pythoncom.CoInitialize()
         global bot
         try:
+            # 启动前先清理旧实例的残留监听，防止崩溃重启后同一群/用户被双重注册导致双回调
+            if bot:
+                try:
+                    bot.stop()
+                    log('INFO', '已清理上次残留的 WeChat 监听')
+                except Exception as _e:
+                    log('WARNING', f'清理旧监听时出错（可忽略）: {_e}')
             bot = WXBot()
             bot.run()
         finally:
@@ -1103,6 +1119,13 @@ def time_start_stop():
                         def run_bot():
                             pythoncom.CoInitialize()  # 防止多线程调用COM组件时出错
                             global bot
+                            # 启动前先清理旧实例的残留监听，防止崩溃重启后双回调
+                            if bot:
+                                try:
+                                    bot.stop()
+                                    log('INFO', '已清理上次残留的 WeChat 监听')
+                                except Exception as _e:
+                                    log('WARNING', f'清理旧监听时出错（可忽略）: {_e}')
                             bot = WXBot()
                             bot.run()
                             pythoncom.CoUninitialize()  # 释放COM组件
@@ -1204,6 +1227,13 @@ def main():
                 "chat_prompt_map": {},
                 "chat_api_map": {},
                 "group_prompt_map": {},
+                "api_error_reply": "在忙，我稍后回复您",
+                "chat_split_reply_switch": False,
+                "chat_split_max_chars": 100,
+                "chat_split_max_count": 4,
+                "group_split_reply_switch": False,
+                "group_split_max_chars": 100,
+                "group_split_max_count": 4,
             }
             with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
                 json.dump(default_config, f, ensure_ascii=False, indent=4)
