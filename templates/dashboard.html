@@ -349,6 +349,16 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
       </div>
     </div>
 
+    <!-- 开发者广播通知卡片（有通知时由 JS 控制显示） -->
+    <div class="cfg-card" id="infrom-card" style="display:none;">
+      <div class="cfg-card-header">
+        <i class="bi bi-megaphone-fill" style="color:#576B95;"></i>
+        <h5>开发者通知</h5>
+        <span class="desc">来自开发者的广播消息</span>
+      </div>
+      <div style="padding:12px 16px;border-radius:8px;background:#f0f7ff;border:1px solid #bcd4f5;color:#1a5fa8;font-size:13px;line-height:1.9;white-space:pre-wrap;word-break:break-word;" id="infrom-content"></div>
+    </div>
+
     <!-- wxautox4 激活状态卡片（JS 控制位置：未激活插到运行状态前面，已激活插到后面） -->
     <div class="cfg-card" id="activate-card" style="display:none;">
       <div class="cfg-card-header">
@@ -676,6 +686,36 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
         <i class="bi bi-exclamation-triangle" style="color:#d97706;margin-right:4px;"></i>
         图片识别目前仅支持 <a href="https://dusapi.com" target="_blank" style="color:#92400e;font-weight:600;">DusAPI</a> 接口，需选择支持视觉的模型，如 <strong>claude-sonnet-4-6</strong>、<strong>gpt-5</strong> 系列。
         支持<strong>直接发送</strong>的图片及<strong>引用图片</strong>的识别。DusAPI 原生支持图片识别，和配置其他功能一样，填个 Key 即可通用，快速便捷。
+        遇到图片下载、保存或识图相关报错时，请尝试：将 <strong>Windows 屏幕缩放设置为 100%</strong>，并将<strong>微信字体保持标准大小</strong>后重试。
+      </div>
+      <hr>
+      <div class="switch-row">
+        <input class="form-check-input" type="checkbox" id="chat_split_reply_switch"
+               {% if config.get('chat_split_reply_switch', False) %}checked{% endif %}
+               onchange="toggleChatSplitReply(this.checked)">
+        <label for="chat_split_reply_switch" style="font-weight:600;cursor:pointer;">启用拆分多条回复</label>
+        <span class="switch-desc">AI 将自主决定是否将回复拆分为多条消息逐条发送，模拟真人聊天</span>
+      </div>
+      <div id="chat_split_settings" style="{% if not config.get('chat_split_reply_switch', False) %}display:none;{% endif %}">
+        <div class="row g-3" style="margin-bottom:10px;">
+          <div class="col-6">
+            <label class="cfg-label" for="chat_split_max_chars">单条最大字数</label>
+            <input type="number" class="form-control" id="chat_split_max_chars" min="10" max="2000"
+                   value="{{ config.get('chat_split_max_chars', 100) }}" placeholder="100">
+            <div class="cfg-hint">AI 每条回复不超过此字数</div>
+          </div>
+          <div class="col-6">
+            <label class="cfg-label" for="chat_split_max_count">最多发送条数</label>
+            <input type="number" class="form-control" id="chat_split_max_count" min="1" max="10"
+                   value="{{ config.get('chat_split_max_count', 4) }}" placeholder="4">
+            <div class="cfg-hint">单次回复最多拆分为几条</div>
+          </div>
+        </div>
+        <div style="padding:9px 14px;background:#f0f7ff;border:1px solid #bcd4f5;border-radius:6px;color:#1a5fa8;font-size:12.5px;line-height:1.8;">
+          <i class="bi bi-info-circle" style="color:#2d8cf0;margin-right:4px;"></i>
+          此功能通过在 Prompt 中注入格式指令，让 AI 自主决定是否拆分及条数，每条之间加入发送延迟模拟真人。<br>
+          <strong>仅适用于支持自定义 Prompt 的接口</strong>（如 <strong>DusAPI</strong>）；Coze / Dify 等工作流类接口已在平台侧固化逻辑，此功能可能无效，推荐使用 DusAPI。
+        </div>
       </div>
     </div>
   </div>
@@ -762,6 +802,36 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
         <i class="bi bi-exclamation-triangle" style="color:#d97706;margin-right:4px;"></i>
         图片识别目前仅支持 <a href="https://dusapi.com" target="_blank" style="color:#92400e;font-weight:600;">DusAPI</a> 接口，需选择支持视觉的模型，如 <strong>claude-sonnet-4-6</strong>、<strong>gpt-5</strong> 系列。
         支持<strong>直接发送</strong>的图片及<strong>引用图片</strong>的识别。DusAPI 原生支持图片识别，和配置其他功能一样，填个 Key 即可通用，快速便捷。
+        遇到图片下载、保存或识图相关报错时，请尝试：将 <strong>Windows 屏幕缩放设置为 100%</strong>，并将<strong>微信字体保持标准大小</strong>后重试。
+      </div>
+      <hr>
+      <div class="switch-row">
+        <input class="form-check-input" type="checkbox" id="group_split_reply_switch"
+               {% if config.get('group_split_reply_switch', False) %}checked{% endif %}
+               onchange="toggleGroupSplitReply(this.checked)">
+        <label for="group_split_reply_switch" style="font-weight:600;cursor:pointer;">启用拆分多条回复</label>
+        <span class="switch-desc">AI 将自主决定是否将回复拆分为多条消息，首条 @ 发言人，后续条不 @</span>
+      </div>
+      <div id="group_split_settings" style="{% if not config.get('group_split_reply_switch', False) %}display:none;{% endif %}">
+        <div class="row g-3" style="margin-bottom:10px;">
+          <div class="col-6">
+            <label class="cfg-label" for="group_split_max_chars">单条最大字数</label>
+            <input type="number" class="form-control" id="group_split_max_chars" min="10" max="2000"
+                   value="{{ config.get('group_split_max_chars', 100) }}" placeholder="100">
+            <div class="cfg-hint">AI 每条回复不超过此字数</div>
+          </div>
+          <div class="col-6">
+            <label class="cfg-label" for="group_split_max_count">最多发送条数</label>
+            <input type="number" class="form-control" id="group_split_max_count" min="1" max="10"
+                   value="{{ config.get('group_split_max_count', 4) }}" placeholder="4">
+            <div class="cfg-hint">单次回复最多拆分为几条</div>
+          </div>
+        </div>
+        <div style="padding:9px 14px;background:#f0f7ff;border:1px solid #bcd4f5;border-radius:6px;color:#1a5fa8;font-size:12.5px;line-height:1.8;">
+          <i class="bi bi-info-circle" style="color:#2d8cf0;margin-right:4px;"></i>
+          此功能通过在 Prompt 中注入格式指令，让 AI 自主决定是否拆分及条数，每条之间加入发送延迟模拟真人。群聊模式下首条消息 @ 发言人，后续条不重复 @。<br>
+          <strong>仅适用于支持自定义 Prompt 的接口</strong>（如 <strong>DusAPI</strong>）；Coze / Dify 等工作流类接口已在平台侧固化逻辑，此功能可能无效，推荐使用 DusAPI。
+        </div>
       </div>
     </div>
   </div>
@@ -844,15 +914,24 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
           <!-- 监听来源 -->
           <div class="mb-3">
             <label class="cfg-label">监听来源 <span style="font-size:11px;color:var(--primary);font-weight:400;">（填入微信联系人昵称或群名，可添加多个）</span></label>
-            <div class="fwd-source-list">
-              {% for src in rule.sources %}
-              <div class="list-item" style="margin-bottom:6px;">
-                <input type="text" class="form-control" name="fwd_source" value="{{ src }}" placeholder="联系人昵称或群名">
-                <button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>
-              </div>
-              {% endfor %}
+            <div class="switch-row" style="margin-bottom:8px;">
+              <input class="form-check-input fwd-all-sources" type="checkbox"
+                     {% if rule.get('all_sources', False) %}checked{% endif %}
+                     onchange="toggleFwdAllSources(this)">
+              <label style="font-size:13px;font-weight:600;cursor:pointer;">全部来源</label>
+              <span class="switch-desc">所有已监听的私聊和群组均作为来源，无需逐一填写</span>
             </div>
-            <button type="button" class="btn-add btn-add-fwd-source" style="margin-top:6px;"><i class="bi bi-plus-circle"></i> 添加来源</button>
+            <div class="fwd-manual-sources" style="{% if rule.get('all_sources', False) %}display:none;{% endif %}">
+              <div class="fwd-source-list">
+                {% for src in rule.sources %}
+                <div class="list-item" style="margin-bottom:6px;">
+                  <input type="text" class="form-control" name="fwd_source" value="{{ src }}" placeholder="联系人昵称或群名">
+                  <button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>
+                </div>
+                {% endfor %}
+              </div>
+              <button type="button" class="btn-add btn-add-fwd-source" style="margin-top:6px;"><i class="bi bi-plus-circle"></i> 添加来源</button>
+            </div>
           </div>
           <!-- 转发类型 -->
           <div class="mb-3">
@@ -1252,6 +1331,14 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
           </div>
         </div>
         <div class="cfg-hint" style="margin-top:8px;">实际延迟为最小值到最大值之间的随机整数秒 · 若最小值大于最大值则自动互换</div>
+      </div>
+      <hr style="margin:18px 0 14px;">
+      <div class="mb-2">
+        <label class="cfg-label" for="api_error_reply" style="font-weight:600;">接口调用失败固定回复</label>
+        <input type="text" class="form-control" id="api_error_reply"
+               value="{{ config.get('api_error_reply', '在忙，我稍后回复您') }}"
+               placeholder="在忙，我稍后回复您">
+        <div class="cfg-hint" style="margin-top:6px;">当调用 AI / 模型接口失败时，机器人将发送此固定回复，而非原始报错提示。</div>
       </div>
     </div>
   </div>
@@ -1906,8 +1993,15 @@ $(function(){
         '</div>'+
         '<div class="mb-3">'+
           '<label class="cfg-label">监听来源 <span style="font-size:11px;color:var(--primary);font-weight:400;">（填入微信联系人昵称或群名，可添加多个）</span></label>'+
-          '<div class="fwd-source-list"></div>'+
-          '<button type="button" class="btn-add btn-add-fwd-source" style="margin-top:6px;"><i class="bi bi-plus-circle"></i> 添加来源</button>'+
+          '<div class="switch-row" style="margin-bottom:8px;">'+
+            '<input class="form-check-input fwd-all-sources" type="checkbox" onchange="toggleFwdAllSources(this)">'+
+            '<label style="font-size:13px;font-weight:600;cursor:pointer;">全部来源</label>'+
+            '<span class="switch-desc">所有已监听的私聊和群组均作为来源，无需逐一填写</span>'+
+          '</div>'+
+          '<div class="fwd-manual-sources">'+
+            '<div class="fwd-source-list"></div>'+
+            '<button type="button" class="btn-add btn-add-fwd-source" style="margin-top:6px;"><i class="bi bi-plus-circle"></i> 添加来源</button>'+
+          '</div>'+
         '</div>'+
         '<div class="mb-3">'+
           '<label class="cfg-label">转发类型 <span style="font-size:11px;color:var(--muted);font-weight:400;">（选择消息触发转发的条件类型）</span></label>'+
@@ -2295,6 +2389,13 @@ $(function(){
       chat_image_recognition_api:parseInt($('#chat_image_recognition_api').val())||0,
       group_image_recognition_switch:$('#group_image_recognition_switch').is(':checked'),
       group_image_recognition_api:parseInt($('#group_image_recognition_api').val())||0,
+      api_error_reply:$('#api_error_reply').val().trim()||'在忙，我稍后回复您',
+      chat_split_reply_switch:$('#chat_split_reply_switch').is(':checked'),
+      chat_split_max_chars:Math.max(1,parseInt($('#chat_split_max_chars').val())||100),
+      chat_split_max_count:Math.max(1,parseInt($('#chat_split_max_count').val())||4),
+      group_split_reply_switch:$('#group_split_reply_switch').is(':checked'),
+      group_split_max_chars:Math.max(1,parseInt($('#group_split_max_chars').val())||100),
+      group_split_max_count:Math.max(1,parseInt($('#group_split_max_count').val())||4),
       custom_forward_switch:$('#custom_forward_switch').is(':checked'),
       custom_forward_list:[]
     };
@@ -2409,6 +2510,7 @@ $(function(){
       $r.find('input[name="fwd_target"]').each(function(){ if($(this).val().trim()) targets.push($(this).val().trim()); });
       configData.custom_forward_list.push({
         id: $r.data('rule-id'),
+        all_sources: $r.find('.fwd-all-sources').is(':checked'),
         sources: sources,
         type: $r.find('.fwd-type-select').val(),
         keywords: keywords,
@@ -2585,6 +2687,15 @@ $(function(){
           $('#update-current-ver').text('当前版本：' + current);
           $('#update-latest').css('display', 'flex');
           $('#update-card').insertAfter('#status-main-card');
+        }
+
+        // 开发者广播通知：有内容时始终插到 status-main-card 前面（顶部显示）
+        var infrom = (res.data.infrom || '').trim();
+        if (infrom) {
+          $('#infrom-content').text(infrom);
+          $('#infrom-card').insertBefore('#status-main-card').show();
+        } else {
+          $('#infrom-card').hide();
         }
       },
       error: function() {
@@ -2971,12 +3082,23 @@ $(function(){
 </script>
 
 <script>
+// 自定义转发：全部来源开关
+function toggleFwdAllSources(cb) {
+  $(cb).closest('.mb-3').find('.fwd-manual-sources').toggle(!cb.checked);
+}
 // 图片识别接口下拉框显示/隐藏（全局函数，供 onchange 调用）
 function toggleChatImgApi(checked) {
   document.getElementById('chat_img_api_row').style.display = checked ? 'flex' : 'none';
 }
 function toggleGroupImgApi(checked) {
   document.getElementById('group_img_api_row').style.display = checked ? 'flex' : 'none';
+}
+// 拆分多条回复设置区块显示/隐藏
+function toggleChatSplitReply(checked) {
+  document.getElementById('chat_split_settings').style.display = checked ? '' : 'none';
+}
+function toggleGroupSplitReply(checked) {
+  document.getElementById('group_split_settings').style.display = checked ? '' : 'none';
 }
 </script>
 
