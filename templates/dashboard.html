@@ -629,6 +629,12 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
         </select>
         <span class="cfg-hint" style="margin:0;color:#0369a1;">接口使用模型配置中的默认选择 &nbsp;·&nbsp; 如新增了 Prompt 未看到，请保存配置后刷新页面</span>
       </div>
+      <!-- 全局模式过滤免打扰选项（全局监听模式时显示） -->
+      <div id="global-filter-mute-row" style="display:{% if config.AllListen_switch %}flex{% else %}none{% endif %};align-items:center;gap:10px;margin-bottom:12px;padding:10px 14px;background:#fef3c7;border:1px solid #fde68a;border-radius:6px;">
+        <input class="form-check-input" type="checkbox" id="AllListen_filter_mute" name="AllListen_filter_mute" {% if config.AllListen_filter_mute %}checked{% endif %} style="margin:0;">
+        <label for="AllListen_filter_mute" style="margin:0;font-size:13px;font-weight:500;color:#78350f;cursor:pointer;">过滤免打扰消息</label>
+        <span class="cfg-hint" style="margin:0;color:#92400e;">开启后将忽略设置了免打扰的会话消息</span>
+      </div>
       <!-- 模式提示条 -->
       <div id="listenModeHint" class="d-flex align-items-center gap-2 px-3 py-2 rounded mb-3" style="font-size:13px;font-weight:600;{% if config.AllListen_switch %}background:#FEF2F2;color:#DC2626;border:1px solid #FECACA{% else %}background:#F0FDF4;color:#16A34A;border:1px solid #BBF7D0{% endif %}">
         <i class="bi {% if config.AllListen_switch %}bi-shield-x{% else %}bi-shield-check{% endif %}" style="font-size:16px"></i>
@@ -1910,10 +1916,12 @@ $(function(){
   function _updateListenMode(isGlobal) {
     if (isGlobal) {
       $('#global-prompt-row').show();
+      $('#global-filter-mute-row').show();
       $('.listen-extra').hide();
       $('#listenListLabel').html('黑名单列表');
     } else {
       $('#global-prompt-row').hide();
+      $('#global-filter-mute-row').hide();
       $('.listen-extra').show();
       $('#listenListLabel').html('监听列表 <span style="font-size:11px;color:var(--muted);font-weight:400;">（白名单模式：可为每个用户设置专属 Prompt 和接口）</span>');
     }
@@ -2358,6 +2366,7 @@ $(function(){
       api_configs:api_configs,
       api_index:api_index,
       AllListen_switch:$('#AllListen_switch').is(':checked'),
+      AllListen_filter_mute:$('#AllListen_filter_mute').is(':checked'),
       group_switch:$('#group_switch').is(':checked'),
       group_reply_at:$('#group_reply_at').is(':checked'),
       group_welcome:$('#group_welcome').is(':checked'),

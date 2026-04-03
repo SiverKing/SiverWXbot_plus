@@ -456,6 +456,7 @@ def get_logs():
 def _coerce_bool_fields(merged_config):
     boolean_fields = [
         'AllListen_switch',
+        'AllListen_filter_mute',
         'group_switch',
         'group_reply_at',
         'group_welcome',
@@ -1220,6 +1221,7 @@ def main():
                 "prompt": "你是一个ai回复助手，请根据用户的问题给出回答,回复尽量保持在30字以内",
                 "admin": "文件传输助手",
                 "AllListen_switch": False,
+                "AllListen_filter_mute": True,
                 "listen_list": [],
                 "group": [],
                 "group_api_map": {},

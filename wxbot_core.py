@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.7.05"
-version_log = "V4.7.05 - 优化群聊和私聊监听识别图片的下载图片逻辑、修复自定义转发和普通监听的消息处理混乱bug、修复面板记忆展示bug、修复纯自定义转发监听群会触发群欢迎消息的bug、修复群聊开关关闭时无法注册自定义转发同名群监听的bug、性能优化"
+version = "V4.7.06"
+version_log = "V4.7.06 - 内核库wxautox4更新、修复上版本更新导致的自定义转发来源收到消息就报错的bug、修复初始化偶尔卡死、私聊监听全局模式新增过滤免打扰开关、修复邮件报错配置不热生效bug"
 
 # ============================================================
 # 标准库导入
@@ -226,6 +226,7 @@ class WXBotConfig:
                     "prompt": "你是一个ai回复助手，请根据用户的问题给出回答,回复尽量保持在30字以内",
                     "admin": "文件传输助手",
                     "AllListen_switch": False,
+                    "AllListen_filter_mute": True,
                     "listen_list": [],
                     "group": [],
                     "group_api_map": {},
@@ -393,8 +394,9 @@ class WXBotConfig:
 
         # 微信基础配置
         self.cmd            = self.config.get('admin', "")
-        self.listen_list    = self.config.get('listen_list', [])
-        self.AllListen_switch = self.config.get('AllListen_switch')
+        self.listen_list          = self.config.get('listen_list', [])
+        self.AllListen_switch     = self.config.get('AllListen_switch')
+        self.AllListen_filter_mute = bool(self.config.get('AllListen_filter_mute', True))
 
         # 群聊配置
         self.group                = self.config.get('group', [])
@@ -1957,11 +1959,11 @@ class WXBot:
             or (chat.who == self.config.cmd)
         )
         if not is_monitored:
-            return
+            return True  # 不在监听范围，跳过处理（返回 True 表示正常）
 
         # --- 群聊消息处理 ---
         if chat.who in self.config.group and not self.config.group_switch:
-            return result  # 群机器人开关关闭，跳过 AI 处理（自定义转发在回调层已处理）
+            return True  # 群机器人开关关闭，跳过 AI 处理（自定义转发在回调层已处理）
         if chat.who in self.config.group:
             # 群聊关键词回复
             if self.config.group_keyword_switch:
@@ -2949,7 +2951,8 @@ class WXBot:
         if len(NewFriends) != 0:
             log(message="以下是新朋友：\n" + str(NewFriends))
             for new in NewFriends:
-                new_name = datetime.now().strftime('%Y%m%d%H%M%S') + '_机器人备注'
+                new_name = new.name + '_机器人备注'
+                # new_name = datetime.now().strftime('%Y%m%d%H%M%S') + '_机器人备注'
                 new.accept(remark=new_name)  # 接受好友请求并设置备注
                 log(message="已通过" + new_name + "的好友请求")
                 self.wx.SwitchToChat()       # 通过请求后切换回聊天页面
@@ -3154,7 +3157,7 @@ class WXBot:
                 else:
                     log('INFO', '私聊全局监听收到群聊消息，跳过')
             
-            messages_new = self.wx.GetNextNewMessage(filter_mute=False, callback=Next_callback)
+            messages_new = self.wx.GetNextNewMessage(filter_mute=self.config.AllListen_filter_mute, callback=Next_callback)
             chat      = messages_new.get('chat_name')
             chat_type = messages_new.get('chat_type')
             msgs      = messages_new.get('msg')
