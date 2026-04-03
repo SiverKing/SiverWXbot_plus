@@ -113,7 +113,7 @@ body {
   background-size: 48px 48px;
   pointer-events: none;
 }
-.hero-content { position: relative; z-index: 1; max-width: 760px; }
+.hero-content { position: relative; z-index: 1; max-width: 820px; }
 .hero-badge {
   display: inline-flex;
   align-items: center;
@@ -141,15 +141,11 @@ body {
   flex-wrap: wrap;
   gap: 0 0.18em;
 }
-
-/* "Siver" — 描边空心字，轻盈 */
 .hero-title .t-siver {
   color: transparent;
   -webkit-text-stroke: 1.5px rgba(255,255,255,0.75);
   letter-spacing: -0.01em;
 }
-
-/* "WXBot" — 绿色渐变 + 发光，视觉核心 */
 .hero-title .t-wxbot {
   background: linear-gradient(135deg, #38D98A 0%, #07C160 45%, #06AD56 100%);
   -webkit-background-clip: text;
@@ -157,7 +153,6 @@ body {
   background-clip: text;
   filter: drop-shadow(0 0 18px rgba(7,193,96,0.55));
   position: relative;
-  /* 扫光动画 */
   overflow: hidden;
 }
 .hero-title .t-wxbot::after {
@@ -182,8 +177,6 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .hero-title .t-wxbot::after { animation: none; }
 }
-
-/* "Plus" — 右上角小字 badge */
 .hero-title .t-plus {
   font-size: 0.42em;
   font-weight: 700;
@@ -221,6 +214,13 @@ body {
   transition: all 0.2s;
 }
 .hero-tag:hover { background: rgba(7,193,96,0.15); border-color: rgba(7,193,96,0.3); color: var(--primary); }
+.hero-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
 .btn-cta {
   display: inline-flex;
   align-items: center;
@@ -237,6 +237,58 @@ body {
 }
 .btn-cta:hover { background: var(--primary-dark); color: #fff; transform: translateY(-2px); box-shadow: 0 8px 32px rgba(7,193,96,0.4); }
 .btn-cta i { font-size: 18px; }
+.btn-cta-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 28px;
+  border: 1px solid rgba(255,255,255,0.25);
+  color: rgba(255,255,255,0.82);
+  font-size: 1rem;
+  font-weight: 600;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+.btn-cta-ghost:hover { border-color: rgba(255,255,255,0.6); color: #fff; background: rgba(255,255,255,0.06); }
+
+/* ── Stats strip ── */
+.stats-strip {
+  background: #1a1a1a;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  padding: 28px 24px;
+}
+.stats-inner {
+  max-width: 960px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+.stat-item {
+  text-align: center;
+}
+.stat-num {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--primary);
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.stat-label {
+  font-size: 12.5px;
+  color: rgba(255,255,255,0.45);
+  letter-spacing: 0.04em;
+}
+.stat-divider {
+  width: 1px;
+  height: 36px;
+  background: rgba(255,255,255,0.08);
+}
 
 /* ── Features ── */
 .features {
@@ -244,56 +296,93 @@ body {
   padding: 80px 24px;
 }
 .features-container { max-width: 1200px; margin: 0 auto; }
+.section-label {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--primary);
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
 .features-title {
   font-family: 'Space Grotesk', sans-serif;
   text-align: center;
   font-size: 2rem;
   font-weight: 700;
   color: var(--text);
+  margin-bottom: 8px;
+}
+.features-subtitle {
+  text-align: center;
+  font-size: 0.95rem;
+  color: var(--muted);
   margin-bottom: 48px;
 }
 .features-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 20px;
 }
 .feature-card {
   background: rgba(255,255,255,0.7);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255,255,255,0.5);
   border-radius: 12px;
-  padding: 32px 24px;
-  text-align: center;
+  padding: 28px 22px;
   transition: all 0.3s;
   box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 .feature-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 8px 24px rgba(7,193,96,0.12);
   border-color: rgba(7,193,96,0.3);
 }
+.feature-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
 .feature-icon {
-  width: 56px;
-  height: 56px;
-  margin: 0 auto 20px;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
   background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-  border-radius: 12px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff;
-  font-size: 26px;
+  font-size: 22px;
 }
 .feature-title {
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 600;
   color: var(--text);
-  margin-bottom: 10px;
 }
 .feature-desc {
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   color: var(--muted);
-  line-height: 1.6;
+  line-height: 1.65;
+}
+.feature-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 14px;
+}
+.feature-tag {
+  font-size: 11.5px;
+  padding: 2px 9px;
+  border-radius: 100px;
+  background: rgba(7,193,96,0.08);
+  color: var(--primary-dark);
+  border: 1px solid rgba(7,193,96,0.2);
+  font-weight: 500;
 }
 
 /* ── Footer ── */
@@ -318,6 +407,7 @@ body {
   .hero-subtitle { font-size: 0.95rem; }
   .features { padding: 60px 20px; }
   .features-grid { grid-template-columns: 1fr; }
+  .stat-divider { display: none; }
 }
 </style>
 </head>
@@ -355,56 +445,227 @@ body {
     <p class="hero-subtitle">开源 · 成品 · 可直接使用 · 可二次开发 · WX机器人</p>
     <div class="hero-tags">
       <span class="hero-tag">基于wxautox4</span>
-      <span class="hero-tag">智能客服</span>
-      <span class="hero-tag">AI回复</span>
+      <span class="hero-tag">AI智能回复</span>
+      <span class="hero-tag">多Prompt管理</span>
+      <span class="hero-tag">图片识别</span>
+      <span class="hero-tag">自定义转发</span>
       <span class="hero-tag">群组机器人</span>
-      <span class="hero-tag">定时消息</span>
       <span class="hero-tag">关键词回复</span>
+      <span class="hero-tag">定时消息</span>
       <span class="hero-tag">消息记忆</span>
-      <span class="hero-tag">消息监听</span>
+      <span class="hero-tag">朋友圈管理</span>
+      <span class="hero-tag">拆分多条回复</span>
+      <span class="hero-tag">白名单/黑名单</span>
     </div>
-    <a href="docs.html" class="btn-cta">
-      <span>开始使用</span>
-      <i class="bi bi-arrow-right"></i>
-    </a>
+    <div class="hero-cta">
+      <a href="docs.html" class="btn-cta">
+        <span>开始使用</span>
+        <i class="bi bi-arrow-right"></i>
+      </a>
+      <a href="https://github.com/SiverKing/SiverWXbot_plus" class="btn-cta-ghost" target="_blank">
+        <i class="bi bi-github"></i>
+        <span>GitHub</span>
+      </a>
+    </div>
   </div>
 </section>
+
+<!-- Stats strip -->
+<div class="stats-strip">
+  <div class="stats-inner">
+    <div class="stat-item">
+      <div class="stat-num">4+</div>
+      <div class="stat-label">支持 AI 接口</div>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-item">
+      <div class="stat-num">∞</div>
+      <div class="stat-label">自定义 Prompt</div>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-item">
+      <div class="stat-num">12+</div>
+      <div class="stat-label">核心功能模块</div>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-item">
+      <div class="stat-num">exe</div>
+      <div class="stat-label">打包开箱即用</div>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-item">
+      <div class="stat-num">Web</div>
+      <div class="stat-label">可视化管理面板</div>
+    </div>
+  </div>
+</div>
 
 <!-- Features -->
 <section class="features">
   <div class="features-container">
-    <h2 class="features-title">核心功能</h2>
+    <p class="section-label">功能一览</p>
+    <h2 class="features-title">该有的都有</h2>
+    <p class="features-subtitle">从 AI 回复到朋友圈自动化，开箱即用，也可深度定制</p>
     <div class="features-grid">
+
       <div class="feature-card">
-        <div class="feature-icon"><i class="bi bi-chat-dots"></i></div>
-        <h3 class="feature-title">AI智能回复</h3>
-        <p class="feature-desc">接入多种AI模型，智能理解并回复消息，支持上下文记忆</p>
+        <div class="feature-header">
+          <div class="feature-icon"><i class="bi bi-chat-dots"></i></div>
+          <h3 class="feature-title">AI 智能回复</h3>
+        </div>
+        <p class="feature-desc">接入多种 AI 接口，智能理解并回复消息。支持上下文对话记忆，私聊和群组可独立绑定不同接口。推荐使用 <a href="https://www.dusapi.com" target="_blank" style="color:var(--primary);font-weight:600;text-decoration:none;">DusAPI</a>，国内直连，支持 GPT / Claude 等高级主流模型，价格实惠稳定。</p>
+        <div class="feature-tags">
+          <span class="feature-tag">DusAPI ⭐</span>
+          <span class="feature-tag">OpenAI</span>
+          <span class="feature-tag">Claude</span>
+          <span class="feature-tag">Dify</span>
+          <span class="feature-tag">Coze</span>
+        </div>
       </div>
+
       <div class="feature-card">
-        <div class="feature-icon"><i class="bi bi-people"></i></div>
-        <h3 class="feature-title">群组管理</h3>
-        <p class="feature-desc">灵活的群组监听配置，支持@回复、入群欢迎等功能</p>
+        <div class="feature-header">
+          <div class="feature-icon"><i class="bi bi-file-text"></i></div>
+          <h3 class="feature-title">多 Prompt 管理</h3>
+        </div>
+        <p class="feature-desc">支持创建任意数量的 Prompt 文件，私聊用户和群组可各自绑定不同的 Prompt，也可通过管理员指令快速切换。</p>
+        <div class="feature-tags">
+          <span class="feature-tag">按用户绑定</span>
+          <span class="feature-tag">按群组绑定</span>
+          <span class="feature-tag">指令切换</span>
+        </div>
       </div>
+
       <div class="feature-card">
-        <div class="feature-icon"><i class="bi bi-key"></i></div>
-        <h3 class="feature-title">关键词回复</h3>
-        <p class="feature-desc">自定义关键词触发规则，快速响应常见问题</p>
+        <div class="feature-header">
+          <div class="feature-icon"><i class="bi bi-eye"></i></div>
+          <h3 class="feature-title">图片识别</h3>
+        </div>
+        <p class="feature-desc">私聊和群聊均支持图片识别，直接图片消息和引用图片均可识别。识别关闭时跳过下载，零额外开销。</p>
+        <div class="feature-tags">
+          <span class="feature-tag">私聊识别</span>
+          <span class="feature-tag">群聊识别</span>
+          <span class="feature-tag">引用图片</span>
+        </div>
       </div>
+
       <div class="feature-card">
-        <div class="feature-icon"><i class="bi bi-clock"></i></div>
-        <h3 class="feature-title">定时消息</h3>
-        <p class="feature-desc">设置定时任务，自动发送消息到指定联系人或群组</p>
+        <div class="feature-header">
+          <div class="feature-icon"><i class="bi bi-arrow-left-right"></i></div>
+          <h3 class="feature-title">自定义转发</h3>
+        </div>
+        <p class="feature-desc">灵活配置消息转发规则，支持关键词触发、指定发送人触发或无差别转发，可同时转发至多个目标。</p>
+        <div class="feature-tags">
+          <span class="feature-tag">关键词触发</span>
+          <span class="feature-tag">发送人过滤</span>
+          <span class="feature-tag">多目标转发</span>
+        </div>
       </div>
+
       <div class="feature-card">
-        <div class="feature-icon"><i class="bi bi-journal-text"></i></div>
-        <h3 class="feature-title">消息记忆</h3>
-        <p class="feature-desc">记录对话历史，AI回复时携带上下文，更智能</p>
+        <div class="feature-header">
+          <div class="feature-icon"><i class="bi bi-people"></i></div>
+          <h3 class="feature-title">群组管理</h3>
+        </div>
+        <p class="feature-desc">灵活的群组监听配置，支持@回复、入群欢迎语、关键词触发等。每个群可独立配置 Prompt 和 AI 接口。</p>
+        <div class="feature-tags">
+          <span class="feature-tag">@回复</span>
+          <span class="feature-tag">入群欢迎</span>
+          <span class="feature-tag">独立配置</span>
+        </div>
       </div>
+
       <div class="feature-card">
-        <div class="feature-icon"><i class="bi bi-broadcast"></i></div>
-        <h3 class="feature-title">消息监听</h3>
-        <p class="feature-desc">支持白名单/黑名单模式，灵活控制监听范围</p>
+        <div class="feature-header">
+          <div class="feature-icon"><i class="bi bi-key"></i></div>
+          <h3 class="feature-title">关键词回复</h3>
+        </div>
+        <p class="feature-desc">自定义关键词触发规则，AI 回复前优先匹配关键词，快速响应常见问题。群聊支持仅 @ 时触发。</p>
+        <div class="feature-tags">
+          <span class="feature-tag">私聊关键词</span>
+          <span class="feature-tag">群聊关键词</span>
+          <span class="feature-tag">@限制触发</span>
+        </div>
       </div>
+
+      <div class="feature-card">
+        <div class="feature-header">
+          <div class="feature-icon"><i class="bi bi-clock"></i></div>
+          <h3 class="feature-title">定时消息</h3>
+        </div>
+        <p class="feature-desc">设置定时任务自动发送消息，支持单次、每日、每周、每月或自定义日期，可向多个联系人或群组同时发送。</p>
+        <div class="feature-tags">
+          <span class="feature-tag">多目标</span>
+          <span class="feature-tag">灵活周期</span>
+          <span class="feature-tag">支持图片</span>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-header">
+          <div class="feature-icon"><i class="bi bi-heart"></i></div>
+          <h3 class="feature-title">朋友圈管理</h3>
+        </div>
+        <p class="feature-desc">支持定时发布朋友圈、随机时间自动发圈、自动随机点赞好友朋友圈，打造更真实的账号活跃度。</p>
+        <div class="feature-tags">
+          <span class="feature-tag">定时发圈</span>
+          <span class="feature-tag">随机发圈</span>
+          <span class="feature-tag">自动点赞</span>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-header">
+          <div class="feature-icon"><i class="bi bi-journal-text"></i></div>
+          <h3 class="feature-title">对话记忆</h3>
+        </div>
+        <p class="feature-desc">记录对话历史并在 AI 请求时携带上下文，存储上限和上下文条数均可自定义，面板可视化浏览和管理记忆。</p>
+        <div class="feature-tags">
+          <span class="feature-tag">上下文感知</span>
+          <span class="feature-tag">可视化管理</span>
+          <span class="feature-tag">按需清除</span>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-header">
+          <div class="feature-icon"><i class="bi bi-card-list"></i></div>
+          <h3 class="feature-title">拆分多条回复</h3>
+        </div>
+        <p class="feature-desc">AI 回复可自动拆分为多条发送，私聊和群聊独立控制，字数上限和最大条数均可在面板灵活配置。</p>
+        <div class="feature-tags">
+          <span class="feature-tag">私聊拆分</span>
+          <span class="feature-tag">群聊拆分</span>
+          <span class="feature-tag">自定义上限</span>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-header">
+          <div class="feature-icon"><i class="bi bi-broadcast"></i></div>
+          <h3 class="feature-title">消息监听</h3>
+        </div>
+        <p class="feature-desc">支持白名单/黑名单双模式，白名单模式精准响应指定用户，黑名单模式开放监听所有好友，灵活适配不同场景。</p>
+        <div class="feature-tags">
+          <span class="feature-tag">白名单模式</span>
+          <span class="feature-tag">黑名单模式</span>
+          <span class="feature-tag">新好友管理</span>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-header">
+          <div class="feature-icon"><i class="bi bi-power"></i></div>
+          <h3 class="feature-title">定时启停</h3>
+        </div>
+        <p class="feature-desc">配置每日自动启停时间，让机器人只在工作时段运行，支持邮件告警通知，无需手动值守。</p>
+        <div class="feature-tags">
+          <span class="feature-tag">自动启动</span>
+          <span class="feature-tag">自动停止</span>
+          <span class="feature-tag">邮件通知</span>
+        </div>
+      </div>
+
     </div>
   </div>
 </section>

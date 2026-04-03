@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.7.04"
-version_log = "V4.7.04 - 优化上下文记忆带入、优化记忆展示、优化拆分回复提示、优化运行中的重载配置运行按钮功能、bug修复"
+version = "V4.7.05"
+version_log = "V4.7.05 - 优化群聊和私聊监听识别图片的下载图片逻辑、修复自定义转发和普通监听的消息处理混乱bug、修复面板记忆展示bug、修复纯自定义转发监听群会触发群欢迎消息的bug、修复群聊开关关闭时无法注册自定义转发同名群监听的bug、性能优化"
 
 # ============================================================
 # 标准库导入
@@ -1411,7 +1411,9 @@ class WXBot:
 
         # 注册自定义转发监听（跳过已在私聊/群组列表中的来源，避免重复注册）
         if self.config.custom_forward_switch:
-            _already_listened = set(self.config.listen_list) | set(self.config.group) | {self.config.cmd}
+            # group_switch=OFF 时群组未注册监听器，不能算作"已监听"，否则转发来源中的同名群会被漏掉
+            _listened_groups = set(self.config.group) if self.config.group_switch else set()
+            _already_listened = set(self.config.listen_list) | _listened_groups | {self.config.cmd}
             _fwd_sources = set()
             for _rule in self.config.custom_forward_list:
                 if _rule.get('all_sources', False):
@@ -1831,20 +1833,26 @@ class WXBot:
 
             if msg.attr == "friend":
                 # 根据当前会话类型决定是否需要下载图片（识别开关关闭时跳过下载）
+                # 纯自定义转发来源（不在群组、白名单、全局动态列表中）不下载图片
                 _is_group = chat.who in self.config.group
-                _img_enabled = (self.config.group_image_recognition_switch if _is_group
-                                else self.config.chat_image_recognition_switch)
+                if _is_group:
+                    _img_enabled = self.config.group_image_recognition_switch
+                elif not self.config.AllListen_switch and chat.who in self.config.listen_list:
+                    _img_enabled = self.config.chat_image_recognition_switch
+                elif self.config.AllListen_switch and self.is_chat_listened(chat.who):
+                    _img_enabled = self.config.chat_image_recognition_switch
+                else:
+                    _img_enabled = False  # 纯自定义转发来源，跳过图片下载
                 try:
-                    if msg.type == 'image':
-                        if _img_enabled:
+                    if _img_enabled:
+                        if msg.type == 'image':
                             _down_path = msg.download()
                             if _down_path:
                                 msg.content = str(_down_path)
                             else:
                                 log("ERROR", f"{_down_path}")
                                 log("ERROR", "message_handle_callback下载图片出错")
-                    if msg.type == 'quote':
-                        if _img_enabled:
+                        elif msg.type == 'quote':
                             _down_path = msg.download_quote_image()
                             if _down_path:
                                 msg.content = msg.content+"+引用的图片:"+str(_down_path)
@@ -1878,8 +1886,8 @@ class WXBot:
                     )
 
             elif msg.attr == "system":
-                # 系统消息：触发群新人欢迎语逻辑
-                if self.config.group_welcome:
+                # 系统消息：触发群新人欢迎语逻辑（仅限已配置群组，纯转发来源群组跳过）
+                if self.config.group_welcome and chat.who in self.config.group:
                     result = self.send_group_welcome_msg(chat, msg)
                     if not result:
                         self.is_err(
@@ -1943,8 +1951,8 @@ class WXBot:
         # 白名单模式：仅处理 listen_list 中的用户；
         # 群聊：group_switch 开启时处理；管理员始终处理。
         is_monitored = (
-            not (self.config.AllListen_switch and chat.who in self.config.listen_list)
-            or ((not self.config.AllListen_switch) and chat.who in self.config.listen_list)
+            (self.config.AllListen_switch and chat.who not in self.config.listen_list)
+            or (not self.config.AllListen_switch and chat.who in self.config.listen_list)
             or (chat.who in self.config.group and self.config.group_switch)
             or (chat.who == self.config.cmd)
         )
@@ -1952,6 +1960,8 @@ class WXBot:
             return
 
         # --- 群聊消息处理 ---
+        if chat.who in self.config.group and not self.config.group_switch:
+            return result  # 群机器人开关关闭，跳过 AI 处理（自定义转发在回调层已处理）
         if chat.who in self.config.group:
             # 群聊关键词回复
             if self.config.group_keyword_switch:
@@ -2050,11 +2060,14 @@ class WXBot:
             return result
 
         # --- 普通好友：调用 AI 回复 ---
-        # 白名单模式下：若来源不在白名单中（仅为自定义转发专属监听目标），跳过 AI 回复
+        # 白名单模式：来源不在白名单中（纯自定义转发来源），跳过 AI 回复
         if (not self.config.AllListen_switch and
                 chat.who not in self.config.listen_list and
                 chat.who not in self.config.group and
                 chat.who != self.config.cmd):
+            return result
+        # 全局模式：来源不在动态监听列表中（纯自定义转发来源），跳过 AI 回复
+        if self.config.AllListen_switch and not self.is_chat_listened(chat.who):
             return result
         result = self.wx_send_ai(chat, message)
         return result
@@ -3034,9 +3047,9 @@ class WXBot:
 
         :param chat: 会话昵称（字符串）
         """
-        log(message=chat + '不在监听列表，正在添加进列表')
+        log(message=chat + ' 不在动态监听列表，正在添加进列表')
         self.all_Mode_listen_list.append([chat, time.time()])
-        log(message='当前监听列表：' + str(self.all_Mode_listen_list))
+        log(message='当前全局模式动态监听列表：' + str(self.all_Mode_listen_list))
         self.wx.AddListenChat(nickname=chat, callback=self.message_handle_callback)
 
     def is_chat_listened(self, chat):
@@ -3116,26 +3129,30 @@ class WXBot:
             Next_callback_down_map = {}  # {msg.id: save_path}
             def Next_callback(msg):
                 nonlocal Next_callback_down_map
-                log(message=f'收到消息：{msg.sender}: {msg.content}')
-                # Next回调即为私聊
-                _any_img_enabled = (self.config.chat_image_recognition_switch)
-                try:
-                    if msg.type == 'image':
-                        if _any_img_enabled:
-                            _path = msg.download()
-                            if _path:
-                                Next_callback_down_map[msg.id] = _path
-                            else:
-                                log("ERROR", "Next_callback下载图片出错，请尝试将windows屏幕设置的缩放调整为100%后重试")
-                    if msg.type == 'quote':
-                        if _any_img_enabled:
-                            _path = msg.download_quote_image()
-                            if _path:
-                                Next_callback_down_map[msg.id] = _path
-                            else:
-                                log("INFO", "引用内容不是图片或视频")
-                except Exception as e:
-                    log(level="ERROR", message=f"Next_callback下载图片出错，请尝试将windows屏幕设置的缩放调整为100%后重试: {e}")
+                # 排除群聊再下载
+                if self.wx.chat_type == 'friend':
+                    log(message=f'收到私聊消息：{msg.sender}: {msg.content}')
+                    # Next回调即为私聊
+                    _any_img_enabled = (self.config.chat_image_recognition_switch)
+                    try:
+                        if msg.type == 'image':
+                            if _any_img_enabled:
+                                _path = msg.download()
+                                if _path:
+                                    Next_callback_down_map[msg.id] = _path
+                                else:
+                                    log("ERROR", "Next_callback下载图片出错，请尝试将windows屏幕设置的缩放调整为100%后重试")
+                        elif msg.type == 'quote':
+                            if _any_img_enabled:
+                                _path = msg.download_quote_image()
+                                if _path:
+                                    Next_callback_down_map[msg.id] = _path
+                                else:
+                                    log("INFO", "引用内容不是图片或视频")
+                    except Exception as e:
+                        log(level="ERROR", message=f"Next_callback下载图片出错，请尝试将windows屏幕设置的缩放调整为100%后重试: {e}")
+                else:
+                    log('INFO', '私聊全局监听收到群聊消息，跳过')
             
             messages_new = self.wx.GetNextNewMessage(filter_mute=False, callback=Next_callback)
             chat      = messages_new.get('chat_name')
@@ -3170,6 +3187,7 @@ class WXBot:
                                 )
                             except Exception as e:
                                 log(level="WARNING", message=f"写入记忆失败: {e}")
+                        
                         # 自定义规则转发：必须在 add_chat_to_listen 之前执行
                         # msg.forward() 依赖主窗口上下文，加入监听后上下文切换到子窗口会失效
                         if self.config.custom_forward_switch:
@@ -3178,6 +3196,7 @@ class WXBot:
                                 self._handle_custom_forward(_types.SimpleNamespace(who=chat), msg)
                             except Exception as _fwd_e:
                                 log(level="ERROR", message=f"自定义转发处理出错: {_fwd_e}")
+                        
                         if not self.is_chat_listened(chat):
                             self.add_chat_to_listen(chat)
                         else:

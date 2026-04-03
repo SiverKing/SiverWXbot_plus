@@ -1016,6 +1016,20 @@ def memory_list():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
 
+def _safe_is_dir(parent_abs, name):
+    """os.path.isdir 在 Windows 上对末尾含 '.' 的名称会自动去掉 '.' 导致误判。
+    用 UNC 长路径前缀绕过 Windows 路径规范化，其他系统走普通逻辑。"""
+    if os.name == 'nt':
+        p = '\\\\?\\' + parent_abs + '\\' + name
+    else:
+        p = os.path.join(parent_abs, name)
+    try:
+        import stat as _stat
+        return _stat.S_ISDIR(os.stat(p).st_mode)
+    except OSError:
+        return False
+
+
 @app.route('/memory/chats/<wx_id>')
 @login_required
 def memory_chats(wx_id):
@@ -1024,8 +1038,8 @@ def memory_chats(wx_id):
         wx_path = os.path.join(MEMORY_BASE, wx_id)
         if not os.path.exists(wx_path):
             return jsonify({'status': 'success', 'chats': []})
-        chats = [d for d in os.listdir(wx_path)
-                 if os.path.isdir(os.path.join(wx_path, d))]
+        wx_abs = os.path.abspath(wx_path)
+        chats = [d for d in os.listdir(wx_path) if _safe_is_dir(wx_abs, d)]
         return jsonify({'status': 'success', 'chats': chats})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
@@ -1035,9 +1049,21 @@ def memory_chats(wx_id):
 def memory_data(wx_id, chat_name):
     """返回指定窗口的记忆数据（JSON 列表）"""
     try:
-        file_path = os.path.join(MEMORY_BASE, wx_id, chat_name, f"{chat_name}_memory.json")
-        if not os.path.exists(file_path):
+        dir_abs = os.path.abspath(os.path.join(MEMORY_BASE, wx_id))
+        if os.name == 'nt':
+            chat_dir = '\\\\?\\' + dir_abs + '\\' + chat_name
+        else:
+            chat_dir = os.path.join(dir_abs, chat_name)
+        if not os.path.exists(chat_dir):
             return jsonify({'status': 'success', 'messages': []})
+        # 扫目录找实际的 *_memory.json 文件（Windows 可能截断目录名导致文件名与目录名不一致）
+        mem_files = [f for f in os.listdir(chat_dir) if f.endswith('_memory.json')]
+        if not mem_files:
+            return jsonify({'status': 'success', 'messages': []})
+        if os.name == 'nt':
+            file_path = '\\\\?\\' + dir_abs + '\\' + chat_name + '\\' + mem_files[0]
+        else:
+            file_path = os.path.join(chat_dir, mem_files[0])
         with open(file_path, 'r', encoding='utf-8') as f:
             messages = json.load(f)
         return jsonify({'status': 'success', 'messages': messages if isinstance(messages, list) else []})
@@ -1049,7 +1075,10 @@ def memory_data(wx_id, chat_name):
 def memory_delete_wx(wx_id):
     """删除指定微信号的所有记忆"""
     try:
-        wx_path = os.path.join(MEMORY_BASE, wx_id)
+        if os.name == 'nt':
+            wx_path = '\\\\?\\' + os.path.abspath(os.path.join(MEMORY_BASE, wx_id))
+        else:
+            wx_path = os.path.join(MEMORY_BASE, wx_id)
         if os.path.exists(wx_path):
             shutil.rmtree(wx_path)
         log('SUCCESS', f'已删除微信号 {wx_id} 的所有记忆')
@@ -1062,7 +1091,11 @@ def memory_delete_wx(wx_id):
 def memory_delete_chat(wx_id, chat_name):
     """删除指定窗口的记忆文件"""
     try:
-        chat_path = os.path.join(MEMORY_BASE, wx_id, chat_name)
+        parent_abs = os.path.abspath(os.path.join(MEMORY_BASE, wx_id))
+        if os.name == 'nt':
+            chat_path = '\\\\?\\' + parent_abs + '\\' + chat_name
+        else:
+            chat_path = os.path.join(parent_abs, chat_name)
         if os.path.exists(chat_path):
             shutil.rmtree(chat_path)
         log('SUCCESS', f'已删除 {wx_id}/{chat_name} 的记忆')
