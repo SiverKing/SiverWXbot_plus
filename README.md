@@ -1,7 +1,7 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.7.05-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
-[![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
+[![Version](https://img.shields.io/badge/version-V4.7.06-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
+[![Python](https://img.shields.io/badge/python-3.9+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
 > 一个功能完整、架构清晰的WX机器人框架，支持多 AI 平台接入、多份 Prompt 管理、对话记忆、拆分多条回复、图片识别、自定义规则转发、灵活的监听模式、50+ 管理命令和智能的消息处理流程。
@@ -15,9 +15,9 @@
 ## 📦 安装部署
 
 ### 环境要求
-- Python `3.8` ~ `3.12`
+- Python `3.9` ~ `3.12`
 - Windows 操作系统
-- Windows wx PC 版（`4.1.7` ~ `4.1.8.67` 版本）
+- Windows wx PC 版（`4.1.7` ~ `4.1.8.101` 版本）
 
 ### 安装步骤
 
@@ -680,7 +680,7 @@ memory/
 
 ## 📄 许可证
 
-本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
+本项目采用 Apache 许可证 - 详见 [LICENSE](LICENSE) 文件
 
 ---
 

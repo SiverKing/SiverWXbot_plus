@@ -65,12 +65,7 @@ def read_config(config_path=email_path):
             while True:
                 time.sleep(100)
 
-# 读取配置文件
-config = read_config()
-mail_host = config['host']
-mail_port = config['port']
-mail_user = config['user']
-mail_pass = config['pass']
+# 配置在每次发送时动态读取，不使用模块级全局变量（避免启动时缓存旧配置）
 
 def send_qq_email(receiver, subject, content):
     '''
@@ -79,16 +74,26 @@ def send_qq_email(receiver, subject, content):
     subject: 邮件主题
     content: 邮件内容
     '''
+    # 每次发送时重新读取配置，确保使用最新配置
+    cfg = read_config()
+    mail_host = cfg['host']
+    mail_port = cfg['port']
+    mail_user = cfg['user']
+    mail_pass = cfg['pass']
+
     # 创建MIMEText对象构建邮件内容
     message = MIMEText(content, 'plain', 'utf-8')
     message['From'] = Header(mail_user)          # 发件人
     message['To'] = Header(receiver)             # 收件人
     message['Subject'] = Header(subject)         # 主题
-    
+
     try:
         # 使用SSL加密连接SMTP服务器
         smtpObj = smtplib.SMTP_SSL(mail_host, mail_port)
-        smtpObj.login(mail_user, mail_pass)      # 登录邮箱
+        # 确保用户名和密码是纯 ASCII 字符串，去除可能的空白字符和 BOM
+        user_clean = mail_user.strip().encode('ascii', errors='ignore').decode('ascii')
+        pass_clean = mail_pass.strip().encode('ascii', errors='ignore').decode('ascii')
+        smtpObj.login(user_clean, pass_clean)      # 登录邮箱
         smtpObj.sendmail(mail_user, receiver, message.as_string())
         print("邮件发送成功")
     except smtplib.SMTPException as e:
@@ -96,15 +101,16 @@ def send_qq_email(receiver, subject, content):
     finally:
         smtpObj.quit()
 
-def send_email(receiver=mail_user, subject="默认邮件主题", content="这是来自Python程序的默认邮件内容"):
+def send_email(receiver=None, subject="默认邮件主题", content="这是来自Python程序的默认邮件内容"):
     '''
     发送邮件 默认给配置中的自己发邮件
-    receiver: 收件人邮箱
+    receiver: 收件人邮箱（None 时发给配置文件中的发件人自己）
     subject: 邮件主题
     content: 邮件内容
     '''
-    global config
-    config = read_config()
+    cfg = read_config()
+    if receiver is None:
+        receiver = cfg['user']
     send_qq_email(receiver, subject, content)
 
 # 使用示例
