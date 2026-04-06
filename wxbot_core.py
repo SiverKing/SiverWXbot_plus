@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.7.06"
-version_log = "V4.7.06 - 内核库wxautox4更新、修复上版本更新导致的自定义转发来源收到消息就报错的bug、修复初始化偶尔卡死、私聊监听全局模式新增过滤免打扰开关、修复邮件报错配置不热生效bug"
+version = "V4.7.07"
+version_log = "V4.7.07 - 新增语音可以自动转文字识别(与图片识别同开关)、dusapi接口参数优化、修复全局模式下自定义转发来源不回复的bug"
 
 # ============================================================
 # 标准库导入
@@ -1145,7 +1145,7 @@ class DusAPI:
         messages.append({"role": "user", "content": user_content})
         payload = {
             "model": model,
-            "max_tokens": 8192,
+            "max_tokens": 200000,
             "system": prompt,
             "messages": messages,
         }
@@ -1835,13 +1835,13 @@ class WXBot:
 
             if msg.attr == "friend":
                 # 根据当前会话类型决定是否需要下载图片（识别开关关闭时跳过下载）
-                # 纯自定义转发来源（不在群组、白名单、全局动态列表中）不下载图片
+                # 纯自定义转发来源（不在群组、白名单、全局动态列表中、全局模式在黑名单）不下载图片
                 _is_group = chat.who in self.config.group
                 if _is_group:
                     _img_enabled = self.config.group_image_recognition_switch
-                elif not self.config.AllListen_switch and chat.who in self.config.listen_list:
+                elif not self.config.AllListen_switch and chat.who in self.config.listen_list: # 白名单
                     _img_enabled = self.config.chat_image_recognition_switch
-                elif self.config.AllListen_switch and self.is_chat_listened(chat.who):
+                elif (self.config.AllListen_switch and chat.who not in self.config.listen_list and chat.chat_type == 'friend'): # 全局黑名单且排除自定义转发监听来源的群聊
                     _img_enabled = self.config.chat_image_recognition_switch
                 else:
                     _img_enabled = False  # 纯自定义转发来源，跳过图片下载
@@ -1860,6 +1860,15 @@ class WXBot:
                                 msg.content = msg.content+"+引用的图片:"+str(_down_path)
                             else:
                                 log("INFO", "引用内容不是图片或视频")
+                        elif msg.type == 'voice':
+                            try:
+                                _voice_content = msg.to_text()
+                                if _voice_content:
+                                    msg.content = str(_voice_content)
+                                else:
+                                    log("WARNING", "消息自动语音转文字失败")
+                            except Exception as e:
+                                log("WARNING", "消息自动语音转文字失败")
                 except Exception as e:
                     log(level="ERROR", message=f"message_handle_callback下载图片出错,请尝试将windows设置屏幕缩放设置为100%后再尝试: {e}")
                 # 统计已接收消息数
@@ -2068,9 +2077,11 @@ class WXBot:
                 chat.who not in self.config.group and
                 chat.who != self.config.cmd):
             return result
-        # 全局模式：来源不在动态监听列表中（纯自定义转发来源），跳过 AI 回复
-        if self.config.AllListen_switch and not self.is_chat_listened(chat.who):
+        # 全局模式：来源在黑名单中,或者不是私聊（纯自定义转发来源）,跳过 AI 回复
+        if (self.config.AllListen_switch and chat.who in self.config.listen_list) or\
+            (self.config.AllListen_switch and chat.chat_type != 'friend'):
             return result
+        # 私聊AI接口回复
         result = self.wx_send_ai(chat, message)
         return result
 
@@ -3138,20 +3149,28 @@ class WXBot:
                     # Next回调即为私聊
                     _any_img_enabled = (self.config.chat_image_recognition_switch)
                     try:
-                        if msg.type == 'image':
-                            if _any_img_enabled:
+                        if _any_img_enabled:
+                            if msg.type == 'image':
                                 _path = msg.download()
                                 if _path:
                                     Next_callback_down_map[msg.id] = _path
                                 else:
                                     log("ERROR", "Next_callback下载图片出错，请尝试将windows屏幕设置的缩放调整为100%后重试")
-                        elif msg.type == 'quote':
-                            if _any_img_enabled:
+                            elif msg.type == 'quote':
                                 _path = msg.download_quote_image()
                                 if _path:
                                     Next_callback_down_map[msg.id] = _path
                                 else:
                                     log("INFO", "引用内容不是图片或视频")
+                            elif msg.type == 'voice':
+                                try:
+                                    _voice_content = msg.to_text()
+                                    if _voice_content:
+                                        Next_callback_down_map[msg.id] = _voice_content
+                                    else:
+                                        log("WARNING", "消息自动语音转文字失败")
+                                except Exception as e:
+                                    log("WARNING", "消息自动语音转文字失败")
                     except Exception as e:
                         log(level="ERROR", message=f"Next_callback下载图片出错，请尝试将windows屏幕设置的缩放调整为100%后重试: {e}")
                 else:
@@ -3172,9 +3191,12 @@ class WXBot:
                     if msg.type == 'image':
                         if msg.id in Next_callback_down_map:
                             msg.content = str(Next_callback_down_map[msg.id])
-                    if msg.type == 'quote':
+                    elif msg.type == 'quote':
                         if msg.id in Next_callback_down_map:
                             msg.content = msg.content+"+引用的图片:"+str(Next_callback_down_map[msg.id])
+                    elif msg.type == 'voice':
+                        if msg.id in Next_callback_down_map:
+                            msg.content = str(Next_callback_down_map[msg.id])
                     # 仅处理 friend 类型的私聊消息，排除群聊
                     if msg.attr == 'friend' and chat_type == 'friend':
                         # 全局模式首次消息：写入记忆（此处不经过 message_handle_callback）

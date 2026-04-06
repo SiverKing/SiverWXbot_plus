@@ -673,10 +673,10 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
                  name="chat_image_recognition_switch"
                  {% if config.chat_image_recognition_switch %}checked{% endif %}
                  onchange="toggleChatImgApi(this.checked)">
-          <label for="chat_image_recognition_switch" style="font-weight:600;cursor:pointer;">启用私聊图片识别</label>
+          <label for="chat_image_recognition_switch" style="font-weight:600;cursor:pointer;">启用私聊图片、语音识别</label>
         </div>
         <div id="chat_img_api_row" style="display:{% if config.chat_image_recognition_switch %}flex{% else %}none{% endif %};align-items:center;gap:8px;flex-wrap:wrap;">
-          <label style="font-size:13px;white-space:nowrap;margin:0;">识别接口:</label>
+          <label style="font-size:13px;white-space:nowrap;margin:0;">识别图片接口:</label>
           <select class="form-select" id="chat_image_recognition_api" name="chat_image_recognition_api" style="width:210px;">
             {% for cfg in config.api_configs %}
             <option value="{{ loop.index0 }}"
@@ -690,9 +690,10 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
       </div>
       <div style="padding:9px 14px;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;color:#92400e;font-size:12.5px;line-height:1.8;">
         <i class="bi bi-exclamation-triangle" style="color:#d97706;margin-right:4px;"></i>
-        图片识别目前仅支持 <a href="https://dusapi.com" target="_blank" style="color:#92400e;font-weight:600;">DusAPI</a> 接口，需选择支持视觉的模型，如 <strong>claude-sonnet-4-6</strong>、<strong>gpt-5</strong> 系列。
+        <strong>图片识别：</strong>目前仅支持 <a href="https://dusapi.com" target="_blank" style="color:#92400e;font-weight:600;">DusAPI</a> 接口，需选择支持视觉的模型，如 <strong>claude-sonnet-4-6</strong>、<strong>gpt-5</strong> 系列。
         支持<strong>直接发送</strong>的图片及<strong>引用图片</strong>的识别。DusAPI 原生支持图片识别，和配置其他功能一样，填个 Key 即可通用，快速便捷。
         遇到图片下载、保存或识图相关报错时，请尝试：将 <strong>Windows 屏幕缩放设置为 100%</strong>，并将<strong>微信字体保持标准大小</strong>后重试。
+        <br><strong>语音识别：</strong>开启后会自动调用微信的语音消息转文字功能，仅能识别普通话。如果提示转文字失败，请在微信设置 → 通用 → 聊天中，将「语音消息自动转成文字」功能打开。
       </div>
       <hr>
       <div class="switch-row">
@@ -790,10 +791,10 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
                  name="group_image_recognition_switch"
                  {% if config.group_image_recognition_switch %}checked{% endif %}
                  onchange="toggleGroupImgApi(this.checked)">
-          <label for="group_image_recognition_switch" style="font-weight:600;cursor:pointer;">启用群组图片识别</label>
+          <label for="group_image_recognition_switch" style="font-weight:600;cursor:pointer;">启用群组图片、语音识别</label>
         </div>
         <div id="group_img_api_row" style="display:{% if config.group_image_recognition_switch %}flex{% else %}none{% endif %};align-items:center;gap:8px;flex-wrap:wrap;">
-          <label style="font-size:13px;white-space:nowrap;margin:0;">识别接口:</label>
+          <label style="font-size:13px;white-space:nowrap;margin:0;">识别图片接口:</label>
           <select class="form-select" id="group_image_recognition_api" name="group_image_recognition_api" style="width:210px;">
             {% for cfg in config.api_configs %}
             <option value="{{ loop.index0 }}"
@@ -810,6 +811,7 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
         图片识别目前仅支持 <a href="https://dusapi.com" target="_blank" style="color:#92400e;font-weight:600;">DusAPI</a> 接口，需选择支持视觉的模型，如 <strong>claude-sonnet-4-6</strong>、<strong>gpt-5</strong> 系列。
         支持<strong>直接发送</strong>的图片及<strong>引用图片</strong>的识别。DusAPI 原生支持图片识别，和配置其他功能一样，填个 Key 即可通用，快速便捷。
         遇到图片下载、保存或识图相关报错时，请尝试：将 <strong>Windows 屏幕缩放设置为 100%</strong>，并将<strong>微信字体保持标准大小</strong>后重试。
+        <br><strong>语音识别：</strong>开启后会自动调用微信的语音消息转文字功能，仅能识别普通话。如果提示转文字失败，请在微信设置 → 通用 → 聊天中，将「语音消息自动转成文字」功能打开。
       </div>
       <hr>
       <div class="switch-row">
