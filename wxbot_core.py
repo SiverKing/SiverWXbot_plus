@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.7.07"
-version_log = "V4.7.07 - 新增语音可以自动转文字识别(与图片识别同开关)、dusapi接口参数优化、修复全局模式下自定义转发来源不回复的bug"
+version = "V4.7.08"
+version_log = "V4.7.08 - 优化dusapi接口调用逻辑防止受openai官方接口调整影响"
 
 # ============================================================
 # 标准库导入
@@ -1065,10 +1065,9 @@ class CozeAPI:
 class DusAPI:
     """
     DusAPI 兼容接口封装类
-    两种模型均使用 Anthropic 格式（x-api-key + /v1/messages），
-    根据模型名称自动选择响应解析方式：
-    - 包含 'claude' → 按 claude.py 解析（content[0]['text']）
-    - 包含 'gpt' 或其他 → 按 gpt.py 解析（遍历 content 找 type=='text'）
+    根据模型名称自动选择协议：
+    - 包含 'claude' → Anthropic 格式（x-api-key + /v1/messages）
+    - 包含 'gpt'    → GPT/OpenAI 格式（Bearer + /v1/chat/completions）
     """
 
     def __init__(self, config):
@@ -1105,91 +1104,389 @@ class DusAPI:
         else:
             raise ValueError("image_path 和 image_url 不能同时为空")
 
-    def chat(self, message, model=None, stream=False, prompt=None, history=None,
-             image_path: str = "", image_url: str = ""):
-        if model is None:
-            model = self.DS_NOW_MOD
-        if not prompt:
-            # fallback：尝试从 prompt 目录读取默认 prompt
-            prompt = getattr(self.config, 'get_prompt_content', lambda n: '')(
-                getattr(self.config, 'default_prompt', '默认')
+    @staticmethod
+    def _build_gpt_image_block(image_path: str = "", image_url: str = "") -> dict:
+        """根据本地路径或 URL 构建 GPT/Responses API image input block"""
+        if image_path:
+            mime_type, _ = mimetypes.guess_type(image_path)
+            if mime_type not in ("image/jpeg", "image/png", "image/gif", "image/webp"):
+                mime_type = "image/jpeg"
+            with open(image_path, "rb") as f:
+                image_data = base64.standard_b64encode(f.read()).decode("utf-8")
+            return {
+                "type": "input_image",
+                "image_url": f"data:{mime_type};base64,{image_data}"
+            }
+        elif image_url:
+            return {
+                "type": "input_image",
+                "image_url": image_url
+            }
+        else:
+            raise ValueError("image_path 和 image_url 不能同时为空")
+
+    @staticmethod
+    def _extract_gpt_text(response_data: dict):
+        """提取 GPT/Responses API 非流式返回文本"""
+        try:
+            output_text = response_data.get("output_text")
+            if isinstance(output_text, str) and output_text:
+                return output_text
+
+            output = response_data.get("output", [])
+            result_parts = []
+
+            if isinstance(output, list):
+                for item in output:
+                    if not isinstance(item, dict):
+                        continue
+                    if item.get("type") != "message":
+                        continue
+
+                    content = item.get("content", [])
+                    if not isinstance(content, list):
+                        continue
+
+                    for block in content:
+                        if not isinstance(block, dict):
+                            continue
+                        if block.get("type") in ("output_text", "text"):
+                            text = block.get("text")
+                            if text:
+                                result_parts.append(text)
+
+            if result_parts:
+                return "".join(result_parts)
+
+            return None
+        except Exception:
+            return None
+
+    def _stream_claude_text(self, api_endpoint, headers, payload) -> str:
+        """Anthropic 流式接收并拼接为完整文本"""
+        response = requests.post(
+            api_endpoint,
+            headers=headers,
+            json=payload,
+            timeout=600,
+            stream=True
+        )
+        response.raise_for_status()
+        response.encoding = 'utf-8'
+
+        result_parts = []
+
+        for raw_line in response.iter_lines(decode_unicode=True):
+            if not raw_line:
+                continue
+            if not raw_line.startswith("data:"):
+                continue
+
+            data_str = raw_line[5:].strip()
+            if not data_str:
+                continue
+
+            try:
+                data = json.loads(data_str)
+            except Exception:
+                continue
+
+            if data.get("type") == "content_block_delta":
+                delta = data.get("delta", {})
+                text = delta.get("text")
+                if text:
+                    result_parts.append(text)
+            elif data.get("type") == "message_stop":
+                break
+
+        return "".join(result_parts)
+
+    def _stream_gpt_text(self, api_endpoint, headers, payload) -> str:
+        """GPT/Responses API 流式接收并拼接为完整文本"""
+        response = requests.post(
+            api_endpoint,
+            headers=headers,
+            json=payload,
+            timeout=600,
+            stream=True
+        )
+        response.encoding = 'utf-8'
+
+        if response.status_code >= 400:
+            raise Exception(
+                f"GPT接口请求失败，status={response.status_code}, "
+                f"response={response.text}, payload={json.dumps(payload, ensure_ascii=False)[:3000]}"
             )
 
-        headers = {
-            "x-api-key": self.api_key,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
-            'user-agent': f'siver-wxbot-panel/{version}'
-        }
-        # Anthropic /v1/messages 格式：system 必须是顶层字段，messages 只允许 user/assistant
-        messages = []
-        if history:
-            for h in history:
-                role = "assistant" if h.get('attr') == 'self' else "user"
-                t = h.get('time', '')
-                raw = h.get('content', '')
-                sender = h.get('sender', '')
-                if role == 'user' and sender:
-                    content = f"[{t}] {sender}: {raw}" if t else f"{sender}: {raw}"
-                else:
-                    content = f"[{t}] {raw}" if t else raw
-                messages.append({"role": role, "content": content})
-        # 构建 user_content（支持图片多模态）
-        if image_path or image_url:
-            user_content = [
-                self.build_image_block(image_path, image_url),
-                {"type": "text", "text": message},
-            ]
-        else:
-            user_content = message
-        messages.append({"role": "user", "content": user_content})
-        payload = {
-            "model": model,
-            "max_tokens": 200000,
-            "system": prompt,
-            "messages": messages,
-        }
-        api_endpoint = f"{self.base_url}/v1/messages"
-        # 梯度重试间隔（秒）：第1次失败后等2s，第2次4s，第3次8s，第4次16s，第5次32s
-        retry_delays = [2, 4, 8, 16, 32]
-        max_retries  = 5
-        last_error   = None
+        result_parts = []
 
-        for attempt in range(max_retries + 1):
+        for raw_line in response.iter_lines(decode_unicode=True):
+            if not raw_line:
+                continue
+            if not raw_line.startswith("data:"):
+                continue
+
+            data_str = raw_line[5:].strip()
+            if not data_str:
+                continue
+            if data_str == "[DONE]":
+                break
+
             try:
-                response = requests.post(api_endpoint, headers=headers, json=payload, timeout=600)
-                response.raise_for_status()
-                response.encoding = 'utf-8'
-                response_data = response.json()
+                data = json.loads(data_str)
+            except Exception:
+                continue
 
-                if 'claude' in model.lower():
+            event_type = data.get("type")
+
+            # Responses API 常见文本增量事件
+            if event_type in (
+                "response.output_text.delta",
+                "response.refusal.delta",
+            ):
+                delta = data.get("delta")
+                if isinstance(delta, str) and delta:
+                    result_parts.append(delta)
+
+            # 某些兼容层可能直接给 output_text
+            elif event_type == "response.completed":
+                try:
+                    output_text = data.get("response", {}).get("output_text")
+                    if isinstance(output_text, str) and output_text:
+                        if not result_parts:
+                            result_parts.append(output_text)
+                except Exception:
+                    pass
+
+        return "".join(result_parts)
+
+    def chat(self, message, model=None, stream=True, prompt=None, history=None,
+             image_path: str = "", image_url: str = ""):
+        """
+        发送消息并返回回复文本。
+        :param image_path: 本地图片路径，优先于 image_url
+        :param image_url:  图片 URL，image_path 为空时使用
+
+        stream=False -> 普通非流式请求并返回完整字符串
+        stream=True  -> 走流式请求，但在 chat 内部收集完整后返回完整字符串
+        """
+        if model is None:
+            model = self.DS_NOW_MOD
+        if prompt is None:
+            prompt = self.config.prompt
+
+        retry_delays = [2, 4, 8, 16, 32]
+        max_retries = 5
+        last_error = None
+
+        # =========================
+        # Claude / Anthropic 分支
+        # =========================
+        if 'claude' in model.lower():
+            headers = {
+                "x-api-key": self.api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+                'user-agent': f'siver-dusapi/{version}'
+            }
+
+            if image_path or image_url:
+                user_content = [
+                    self.build_image_block(image_path, image_url),
+                    {"type": "text", "text": message},
+                ]
+            else:
+                user_content = message
+
+            messages = []
+            if history:
+                for h in history:
+                    role = "assistant" if h.get('attr') == 'self' else "user"
+                    t = h.get('time', '')
+                    raw = h.get('content', '')
+                    sender = h.get('sender', '')
+                    if role == 'user' and sender:
+                        content = f"[{t}] {sender}: {raw}" if t else f"{sender}: {raw}"
+                    else:
+                        content = f"[{t}] {raw}" if t else raw
+                    messages.append({"role": role, "content": content})
+            messages.append({"role": "user", "content": user_content})
+
+            payload = {
+                "model": model,
+                "max_tokens": 200000,
+                "system": prompt,
+                "messages": messages,
+            }
+
+            api_endpoint = f"{self.base_url}/v1/messages"
+
+            if stream:
+                payload["stream"] = True
+
+                for attempt in range(max_retries + 1):
+                    try:
+                        result = self._stream_claude_text(api_endpoint, headers, payload)
+                        if result:
+                            if attempt > 0:
+                                log(message=f"DusAPI Claude 流式第 {attempt} 次重试成功：{result[:100]}...")
+                            else:
+                                log(message=f"DusAPI Claude 流式返回成功：{result[:100]}...")
+                            return result
+                        else:
+                            log(level="WARN", message="DusAPI Claude 流式响应中未找到文本内容")
+                            return "API返回错误，请稍后再试"
+
+                    except Exception as e:
+                        last_error = e
+                        if attempt < max_retries:
+                            delay = retry_delays[attempt]
+                            log(level="WARNING", message=f"DusAPI Claude 流式第 {attempt + 1} 次失败（{type(e).__name__}），{delay}s 后重试...")
+                            time.sleep(delay)
+                        else:
+                            log(level="ERROR", message=f"DusAPI Claude 流式已重试 {max_retries} 次，最终失败: {last_error}")
+
+                return "API返回错误，请稍后再试"
+
+            for attempt in range(max_retries + 1):
+                try:
+                    response = requests.post(api_endpoint, headers=headers, json=payload, timeout=600)
+                    response.raise_for_status()
+                    response.encoding = 'utf-8'
+                    response_data = response.json()
+
                     result = response_data['content'][0]['text']
-                else:
-                    result = None
-                    for content_block in response_data['content']:
-                        if content_block.get('type') == 'text':
-                            result = content_block['text']
-                            break
+
+                    if attempt > 0:
+                        log(message=f"DusAPI Claude 第 {attempt} 次重试成功：{result[:100]}...")
+                    else:
+                        log(message=f"DusAPI Claude 返回成功：{result[:100]}...")
+                    return result
+
+                except Exception as e:
+                    last_error = e
+                    if attempt < max_retries:
+                        delay = retry_delays[attempt]
+                        log(level="WARNING", message=f"DusAPI Claude 第 {attempt + 1} 次失败（{type(e).__name__}），{delay}s 后重试...")
+                        time.sleep(delay)
+                    else:
+                        log(level="ERROR", message=f"DusAPI Claude 已重试 {max_retries} 次，最终失败: {last_error}")
+
+            return "API返回错误，请稍后再试"
+
+        # =========================
+        # GPT / OpenAI 分支
+        # =========================
+        elif 'gpt' in model.lower():
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "content-type": "application/json",
+                'user-agent': f'siver-dusapi/{version}'
+            }
+
+            input_items = []
+
+            if prompt:
+                input_items.append({
+                    "role": "system",
+                    "content": prompt
+                })
+
+            if history:
+                for h in history:
+                    role = "assistant" if h.get('attr') == 'self' else "user"
+                    t = h.get('time', '')
+                    raw = h.get('content', '')
+                    sender = h.get('sender', '')
+                    if role == 'user' and sender:
+                        content = f"[{t}] {sender}: {raw}" if t else f"{sender}: {raw}"
+                    else:
+                        content = f"[{t}] {raw}" if t else raw
+                    input_items.append({
+                        "role": role,
+                        "content": content
+                    })
+
+            if image_path or image_url:
+                user_content = [
+                    {"type": "input_text", "text": message},
+                    self._build_gpt_image_block(image_path, image_url),
+                ]
+            else:
+                user_content = message
+
+            input_items.append({
+                "role": "user",
+                "content": user_content
+            })
+
+            payload = {
+                "model": model,
+                "input": input_items,
+                "max_output_tokens": 4096,
+            }
+
+            api_endpoint = f"{self.base_url}/v1/responses"
+
+            if stream:
+                payload["stream"] = True
+
+                for attempt in range(max_retries + 1):
+                    try:
+                        result = self._stream_gpt_text(api_endpoint, headers, payload)
+                        if result:
+                            if attempt > 0:
+                                log(message=f"DusAPI GPT 流式第 {attempt} 次重试成功：{result[:100]}...")
+                            else:
+                                log(message=f"DusAPI GPT 流式返回成功：{result[:100]}...")
+                            return result
+                        else:
+                            log(level="WARN", message="DusAPI GPT 流式响应中未找到文本内容")
+                            return "API返回错误，请稍后再试"
+
+                    except Exception as e:
+                        last_error = e
+                        if attempt < max_retries:
+                            delay = retry_delays[attempt]
+                            log(level="WARNING", message=f"DusAPI GPT 流式第 {attempt + 1} 次失败（{type(e).__name__}），{delay}s 后重试...")
+                            time.sleep(delay)
+                        else:
+                            log(level="ERROR", message=f"DusAPI GPT 流式已重试 {max_retries} 次，最终失败: {last_error}")
+
+                return "API返回错误，请稍后再试"
+
+            for attempt in range(max_retries + 1):
+                try:
+                    response = requests.post(api_endpoint, headers=headers, json=payload, timeout=600)
+                    response.raise_for_status()
+                    response.encoding = 'utf-8'
+                    response_data = response.json()
+
+                    result = self._extract_gpt_text(response_data)
                     if result is None:
-                        log(level="WARN", message="DusAPI 响应中未找到文本内容")
+                        log(level="WARN", message=f"DusAPI GPT 响应中未找到文本内容：{response_data}")
                         return "API返回错误，请稍后再试"
 
-                if attempt > 0:
-                    log(message=f"DusAPI 第 {attempt} 次重试成功：{result[:100]}...")
-                else:
-                    log(message=f"DusAPI 返回成功：{result[:100]}...")
-                return result
+                    if attempt > 0:
+                        log(message=f"DusAPI GPT 第 {attempt} 次重试成功：{result[:100]}...")
+                    else:
+                        log(message=f"DusAPI GPT 返回成功：{result[:100]}...")
+                    return result
 
-            except Exception as e:
-                last_error = e
-                if attempt < max_retries:
-                    delay = retry_delays[attempt]
-                    log(level="WARNING", message=f"DusAPI 第 {attempt + 1} 次失败（{type(e).__name__}），{delay}s 后重试...")
-                    time.sleep(delay)
-                else:
-                    log(level="ERROR", message=f"DusAPI 已重试 {max_retries} 次，最终失败: {last_error}")
+                except Exception as e:
+                    last_error = e
+                    if attempt < max_retries:
+                        delay = retry_delays[attempt]
+                        log(level="WARNING", message=f"DusAPI GPT 第 {attempt + 1} 次失败（{type(e).__name__}），{delay}s 后重试...")
+                        time.sleep(delay)
+                    else:
+                        log(level="ERROR", message=f"DusAPI GPT 已重试 {max_retries} 次，最终失败: {last_error}")
 
-        return "API返回错误，请稍后再试"
+            return "API返回错误，请稍后再试"
+
+        else:
+            log(level="WARNING", message=f"DusAPI 未识别的模型名称：{model}，无法路由到对应协议")
+            return "API返回错误，请稍后再试"
 
 
 # ============================================================
