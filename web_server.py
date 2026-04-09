@@ -442,6 +442,8 @@ def dashboard():
     config.setdefault('chat_split_reply_switch', False)   # 私聊拆分多条回复开关
     config.setdefault('chat_split_max_chars', 100)        # 私聊单条最大字数
     config.setdefault('chat_split_max_count', 4)          # 私聊最多条数
+    config.setdefault('group_reply_at_msg', True)          # 群聊回复是否@发言人
+    config.setdefault('group_reply_quote', False)          # 群聊回复是否引用消息
     config.setdefault('group_split_reply_switch', False)  # 群聊拆分多条回复开关
     config.setdefault('group_split_max_chars', 100)       # 群聊单条最大字数
     config.setdefault('group_split_max_count', 4)         # 群聊最多条数
@@ -459,6 +461,8 @@ def _coerce_bool_fields(merged_config):
         'AllListen_filter_mute',
         'group_switch',
         'group_reply_at',
+        'group_reply_at_msg',
+        'group_reply_quote',
         'group_welcome',
         'new_friend_switch',
         'new_friend_reply_switch',
@@ -1234,7 +1238,7 @@ def main():
         if not os.path.exists(CONFIG_FILE):
             default_config = {
                 "api_configs": [
-                    {"sdk": "DusAPI", "key": "your-api-key", "url": "https://api.dusapi.com", "model": "gpt-5"},
+                    {"sdk": "DusAPI", "key": "your-api-key", "url": "https://api.dusapi.com", "model": "gpt-5.4"},
                     {"sdk": "DusAPI", "key": "your-api-key", "url": "https://api.dusapi.com", "model": "claude-sonnet-4-6"},
                 ],
                 "api_index": 0,
@@ -1247,6 +1251,8 @@ def main():
                 "group_api_map": {},
                 "group_switch": False,
                 "group_reply_at": False,
+                "group_reply_at_msg": True,
+                "group_reply_quote": False,
                 "group_welcome": False,
                 "group_welcome_random": 1.0,
                 "group_welcome_msg": "欢迎新朋友！请先查看群公告！",

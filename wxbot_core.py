@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.7.09"
-version_log = "V4.7.09 - 新增可以暂停自动回复方便人工接管的管理员命令、自动通过好友支持自定义前后缀备注、自动通过好友支持自定义设置随机检查时间、定时消息支持设定为随机定时消息、修复全局模式将企微私信识别成群聊跳过的bug"
+version = "V4.7.10"
+version_log = "V4.7.10 - 优化面板拆分回复功能提示、群聊自动回复支持设置是否@回复、群聊自动回复支持设置是否引用回复、优化DusAPI接口调用逻辑"
 
 # ============================================================
 # 标准库导入
@@ -223,7 +223,7 @@ class WXBotConfig:
             if not os.path.exists(self.CONFIG_FILE):
                 base_config = {
                     "api_configs": [
-                        {"sdk": "DusAPI", "key": "your-api-key", "url": "https://api.dusapi.com", "model": "gpt-5"},
+                        {"sdk": "DusAPI", "key": "your-api-key", "url": "https://api.dusapi.com", "model": "gpt-5.4"},
                         {"sdk": "DusAPI", "key": "your-api-key", "url": "https://api.dusapi.com", "model": "claude-sonnet-4-6"},
                     ],
                     "api_index": 0,
@@ -236,6 +236,8 @@ class WXBotConfig:
                     "group_api_map": {},
                     "group_switch": False,
                     "group_reply_at": False,
+                    "group_reply_at_msg": True,
+                    "group_reply_quote": False,
                     "group_welcome": False,
                     "group_welcome_random": 1.0,
                     "group_welcome_msg": "欢迎新朋友！请先查看群公告！",
@@ -413,6 +415,8 @@ class WXBotConfig:
         self.group_api_map        = self.config.get('group_api_map', {})
         self.group_switch         = self.config.get('group_switch')
         self.group_reply_at       = self.config.get('group_reply_at')
+        self.group_reply_at_msg   = bool(self.config.get('group_reply_at_msg', True))
+        self.group_reply_quote    = bool(self.config.get('group_reply_quote', False))
         self.group_welcome        = self.config.get('group_welcome')
         self.group_welcome_random = self.config.get('group_welcome_random')
         self.group_welcome_msg    = self.config.get('group_welcome_msg', '')
@@ -1352,14 +1356,13 @@ class DusAPI:
                                 log(message=f"DusAPI Claude 流式返回成功：{result[:100]}...")
                             return result
                         else:
-                            log(level="WARN", message="DusAPI Claude 流式响应中未找到文本内容")
-                            return "API返回错误，请稍后再试"
+                            raise ValueError("DusAPI Claude 流式响应中未找到文本内容")
 
                     except Exception as e:
                         last_error = e
                         if attempt < max_retries:
                             delay = retry_delays[attempt]
-                            log(level="WARNING", message=f"DusAPI Claude 流式第 {attempt + 1} 次失败（{type(e).__name__}），{delay}s 后重试...")
+                            log(level="WARNING", message=f"DusAPI Claude 流式第 {attempt + 1} 次失败（{type(e).__name__}: {e}），{delay}s 后重试...")
                             time.sleep(delay)
                         else:
                             log(level="ERROR", message=f"DusAPI Claude 流式已重试 {max_retries} 次，最终失败: {last_error}")
@@ -1385,7 +1388,7 @@ class DusAPI:
                     last_error = e
                     if attempt < max_retries:
                         delay = retry_delays[attempt]
-                        log(level="WARNING", message=f"DusAPI Claude 第 {attempt + 1} 次失败（{type(e).__name__}），{delay}s 后重试...")
+                        log(level="WARNING", message=f"DusAPI Claude 第 {attempt + 1} 次失败（{type(e).__name__}: {e}），{delay}s 后重试...")
                         time.sleep(delay)
                     else:
                         log(level="ERROR", message=f"DusAPI Claude 已重试 {max_retries} 次，最终失败: {last_error}")
@@ -1441,7 +1444,7 @@ class DusAPI:
             payload = {
                 "model": model,
                 "input": input_items,
-                "max_output_tokens": 4096,
+                "max_output_tokens": 200000,
             }
 
             api_endpoint = f"{self.base_url}/v1/responses"
@@ -1459,14 +1462,13 @@ class DusAPI:
                                 log(message=f"DusAPI GPT 流式返回成功：{result[:100]}...")
                             return result
                         else:
-                            log(level="WARN", message="DusAPI GPT 流式响应中未找到文本内容")
-                            return "API返回错误，请稍后再试"
+                            raise ValueError("DusAPI GPT 流式响应中未找到文本内容")
 
                     except Exception as e:
                         last_error = e
                         if attempt < max_retries:
                             delay = retry_delays[attempt]
-                            log(level="WARNING", message=f"DusAPI GPT 流式第 {attempt + 1} 次失败（{type(e).__name__}），{delay}s 后重试...")
+                            log(level="WARNING", message=f"DusAPI GPT 流式第 {attempt + 1} 次失败（{type(e).__name__}: {e}），{delay}s 后重试...")
                             time.sleep(delay)
                         else:
                             log(level="ERROR", message=f"DusAPI GPT 流式已重试 {max_retries} 次，最终失败: {last_error}")
@@ -1482,8 +1484,7 @@ class DusAPI:
 
                     result = self._extract_gpt_text(response_data)
                     if result is None:
-                        log(level="WARN", message=f"DusAPI GPT 响应中未找到文本内容：{response_data}")
-                        return "API返回错误，请稍后再试"
+                        raise ValueError(f"DusAPI GPT 响应中未找到文本内容：{response_data}")
 
                     if attempt > 0:
                         log(message=f"DusAPI GPT 第 {attempt} 次重试成功：{result[:100]}...")
@@ -1495,7 +1496,7 @@ class DusAPI:
                     last_error = e
                     if attempt < max_retries:
                         delay = retry_delays[attempt]
-                        log(level="WARNING", message=f"DusAPI GPT 第 {attempt + 1} 次失败（{type(e).__name__}），{delay}s 后重试...")
+                        log(level="WARNING", message=f"DusAPI GPT 第 {attempt + 1} 次失败（{type(e).__name__}: {e}），{delay}s 后重试...")
                         time.sleep(delay)
                     else:
                         log(level="ERROR", message=f"DusAPI GPT 已重试 {max_retries} 次，最终失败: {last_error}")
@@ -2479,9 +2480,18 @@ class WXBot:
                 else:
                     parts = [reply]
 
+                _at_msg   = self.config.group_reply_at_msg
+                _quote    = self.config.group_reply_quote
                 for i, part in enumerate(parts):
                     self.config.human_delay()   # 每条发送前都延迟（含第一条，与原逻辑等效）
-                    result = chat.SendMsg(msg=part, at=message.sender if i == 0 else None)
+                    if i == 0 and _quote and _at_msg:
+                        result = message.quote(part, at=message.sender)
+                    elif i == 0 and _quote:
+                        result = message.quote(part)
+                    elif _at_msg:
+                        result = chat.SendMsg(msg=part, at=message.sender if i == 0 else None)
+                    else:
+                        result = chat.SendMsg(msg=part)
 
                 self.msg_replied_count += 1
                 return result
