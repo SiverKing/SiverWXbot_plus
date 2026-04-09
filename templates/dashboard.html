@@ -722,7 +722,8 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
           <i class="bi bi-info-circle" style="color:#2d8cf0;margin-right:4px;"></i>
           此功能通过在 Prompt 中注入格式指令，让 AI 自主决定是否拆分及条数，每条之间加入发送延迟模拟真人。<br>
           <strong>仅适用于支持自定义 Prompt 的接口</strong>（如 <strong>DusAPI</strong>）；Coze / Dify 等工作流类接口已在平台侧固化逻辑，此功能可能无效，推荐使用 DusAPI。<br>
-          💡 单条字数限制越小、最多发送条数设置越多，拆分概率越大；反之字数限制越高、条数越少，拆分为多条的概率越低。
+          💡 单条字数限制越小、最多发送条数设置越多，拆分概率越大；反之字数限制越高、条数越少，拆分为多条的概率越低。<br>
+          ⚠️ <strong>最终效果取决于模型能力与你的 Prompt</strong>：分不分开发送、怎么分，完全由模型自主决策，面板只是给出参数提示。模型智商越高、理解能力越强，少写点 Prompt 它就能领会；模型智商低，写再多也未必管用。我们无法干预模型内部的决策逻辑——<strong>想要更好的拆分效果，请在自己的 Prompt 里明确写出拆分规则和示例</strong>，反复调教、多次测试，才能找到最适合你当前模型和接口的最佳姿势。
         </div>
       </div>
     </div>
@@ -740,6 +741,16 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
         <input class="form-check-input" type="checkbox" id="group_reply_at" name="group_reply_at" {% if config.group_reply_at %}checked{% endif %}>
         <label for="group_reply_at">仅@时回复</label>
         <span class="switch-desc">仅在被@时才回复群消息</span>
+      </div>
+      <div class="switch-row">
+        <input class="form-check-input" type="checkbox" id="group_reply_at_msg" name="group_reply_at_msg" {% if config.group_reply_at_msg %}checked{% endif %}>
+        <label for="group_reply_at_msg">回复时@发言人</label>
+        <span class="switch-desc">回复群消息时@发言人</span>
+      </div>
+      <div class="switch-row">
+        <input class="form-check-input" type="checkbox" id="group_reply_quote" name="group_reply_quote" {% if config.group_reply_quote %}checked{% endif %}>
+        <label for="group_reply_quote">回复时引用消息</label>
+        <span class="switch-desc">回复群消息时引用原消息（首条引用）</span>
       </div>
       <div class="switch-row">
         <input class="form-check-input" type="checkbox" id="group_welcome" name="group_welcome" {% if config.group_welcome %}checked{% endif %}>
@@ -840,7 +851,8 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
           <i class="bi bi-info-circle" style="color:#2d8cf0;margin-right:4px;"></i>
           此功能通过在 Prompt 中注入格式指令，让 AI 自主决定是否拆分及条数，每条之间加入发送延迟模拟真人。群聊模式下首条消息 @ 发言人，后续条不重复 @。<br>
           <strong>仅适用于支持自定义 Prompt 的接口</strong>（如 <strong>DusAPI</strong>）；Coze / Dify 等工作流类接口已在平台侧固化逻辑，此功能可能无效，推荐使用 DusAPI。<br>
-          💡 单条字数限制越小、最多发送条数设置越多，拆分概率越大；反之字数限制越高、条数越少，拆分为多条的概率越低。
+          💡 单条字数限制越小、最多发送条数设置越多，拆分概率越大；反之字数限制越高、条数越少，拆分为多条的概率越低。<br>
+          ⚠️ <strong>最终效果取决于模型能力与你的 Prompt</strong>：分不分开发送、怎么分，完全由模型自主决策，面板只是给出参数提示。模型智商越高、理解能力越强，少写点 Prompt 它就能领会；模型智商低，写再多也未必管用。我们无法干预模型内部的决策逻辑——<strong>想要更好的拆分效果，请在自己的 Prompt 里明确写出拆分规则和示例</strong>，反复调教、多次测试，才能找到最适合你当前模型和接口的最佳姿势。
         </div>
       </div>
     </div>
@@ -2554,6 +2566,8 @@ $(function(){
       AllListen_filter_mute:$('#AllListen_filter_mute').is(':checked'),
       group_switch:$('#group_switch').is(':checked'),
       group_reply_at:$('#group_reply_at').is(':checked'),
+      group_reply_at_msg:$('#group_reply_at_msg').is(':checked'),
+      group_reply_quote:$('#group_reply_quote').is(':checked'),
       group_welcome:$('#group_welcome').is(':checked'),
       new_friend_switch:$('#new_friend_switch').is(':checked'),
       new_friend_reply_switch:$('#new_friend_reply_switch').is(':checked'),

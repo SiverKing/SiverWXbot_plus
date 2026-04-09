@@ -529,6 +529,21 @@ function renderChapter(index, pushState = true) {
   document.querySelectorAll('#content img').forEach(img =>
     img.addEventListener('click', () => openLightbox(img.src, img.alt))
   );
+  // GA 点击追踪：安装部署页的三个关键链接
+  const GA_LINK_MAP = [
+    { pattern: 'github.com/SiverKing/SiverWXbot_plus/releases', event: 'click_down_releases' },
+    { pattern: 'lanzout.com',                                    event: 'click_down_lanzou' },
+    { pattern: 'github.com/SiverKing/SiverWXbot_plus',          event: 'click_down_source' },
+  ];
+  document.querySelectorAll('#content a[href]').forEach(a => {
+    const href = a.getAttribute('href');
+    for (const { pattern, event } of GA_LINK_MAP) {
+      if (href.includes(pattern)) {
+        a.addEventListener('click', () => { gtag('event', event); });
+        break;
+      }
+    }
+  });
   document.querySelectorAll('.sidebar-link').forEach(link =>
     link.classList.toggle('active', parseInt(link.dataset.chapter) === index)
   );

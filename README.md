@@ -1,6 +1,6 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.7.09-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
+[![Version](https://img.shields.io/badge/version-V4.7.10-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
 [![Python](https://img.shields.io/badge/python-3.9+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
@@ -101,6 +101,11 @@ python web_server.py
 ### 👥 群聊功能
 - **群新人欢迎语** - 自动检测新成员并发送欢迎消息
 - **@ 回复模式** - 支持仅被 @ 时才回复
+- **灵活的群聊回复方式** - 支持独立开关控制是否 @ 发言人、是否引用原消息（可任意组合）
+  - 仅 @ 发言人：`group_reply_at_msg=true, group_reply_quote=false`（默认）
+  - 仅引用消息：`group_reply_at_msg=false, group_reply_quote=true`（多条回复仅首条引用）
+  - 同时 @ + 引用：`group_reply_at_msg=true, group_reply_quote=true`
+  - 普通发送：`group_reply_at_msg=false, group_reply_quote=false`
 - **群关键词回复** - 不受 @ 限制的关键词回复
 - **欢迎概率配置** - 可设置欢迎语触发概率
 - **群组专属 AI 接口** - 每个监听群聊可单独绑定不同的 AI 接口
@@ -108,8 +113,9 @@ python web_server.py
 
 ### 🤝 新好友管理
 - **自动通过好友请求** - 批量处理新好友申请
+- **随机检查间隔** - 每次检查间隔在配置的最小/最大秒数之间随机，默认 60~300 秒，最大支持 3600 秒
 - **自动打招呼** - 通过后自动发送欢迎消息，支持发送图片（填写图片绝对路径即可）
-- **智能备注** - 自动设置备注（昵称_机器人备注）
+- **自定义备注规则** - 通过后自动设置备注，格式为「前缀 + 昵称 + 后缀」，前缀/后缀均可配置（默认后缀 `_机器人备注`）
 
 ### ⏰ 定时任务
 - **自定义定时消息** - 像手机闹钟一样完全自定义定时
@@ -118,6 +124,7 @@ python web_server.py
   - 每周发送 - 选择星期几发送
   - 每月发送 - 选择每月几号发送
   - 自定义日期 - 指定多个日期发送
+- **随机定时消息** - 设定时间窗口（如 09:00~21:00），在窗口内随机挑选时刻发送，支持每天/每周/每月模式，避免固定规律
 - **多目标群发** - 每个定时任务支持配置多个发送目标，同一批消息依次发给每个目标
 - **支持发送图片** - 消息内容填写图片绝对路径即可自动发送图片
 - **独立开关** - 每条定时任务可单独启用/禁用
@@ -225,6 +232,7 @@ python web_server.py
     "api_index": 0,
     "admin": "文件传输助手",
     "AllListen_switch": false,
+    "AllListen_filter_mute": true,
     "listen_list": ["用户1", "用户2"],
     "group": ["群聊1", "群聊2"],
     "group_api_map": {
@@ -244,12 +252,18 @@ python web_server.py
     "default_prompt": "默认",
     "group_switch": true,
     "group_reply_at": true,
+    "group_reply_at_msg": true,
+    "group_reply_quote": false,
     "group_welcome": true,
     "group_welcome_random": 1.0,
     "group_welcome_msg": "欢迎新朋友！",
     "new_friend_switch": true,
     "new_friend_reply_switch": false,
     "new_friend_msg": ["你好，我是机器人", "C:\\图片\\welcome.png"],
+    "new_friend_check_min": 60,
+    "new_friend_check_max": 300,
+    "new_friend_remark_prefix": "",
+    "new_friend_remark_suffix": "_机器人备注",
     "chat_keyword_switch": true,
     "group_keyword_switch": true,
     "group_keyword_at_only": false,
@@ -280,6 +294,19 @@ python web_server.py
             "weekdays": [1, 3, 5],
             "dates": [],
             "msgs": ["早安！", "C:\\图片\\morning.png"]
+        }
+    ],
+    "random_msg_switch": false,
+    "random_msg_list": [
+        {
+            "id": "abc123",
+            "enabled": true,
+            "targets": ["用户昵称", "群聊名称"],
+            "time_start": "09:00",
+            "time_end": "21:00",
+            "repeat_type": "daily",
+            "random_days_count": 1,
+            "msgs": ["随机问候！", "C:\\图片\\hi.png"]
         }
     ],
     "scheduled_moments_switch": false,
@@ -322,6 +349,7 @@ python web_server.py
 | `api_index` | integer | `0` | 当前使用的接口索引（0-based） |
 | `admin` | string | `"文件传输助手"` | 管理员昵称，可发送管理命令 |
 | `AllListen_switch` | boolean | `false` | `false`=白名单模式，`true`=黑名单（全局）模式 |
+| `AllListen_filter_mute` | boolean | `true` | 全局监听模式下是否过滤免打扰会话（`true`=跳过被静音的聊天窗口） |
 | `listen_list` | array | `[]` | 白名单/黑名单用户列表 |
 | `group` | array | `[]` | 监听的群聊列表 |
 | `group_api_map` | object | `{}` | 群组专属接口映射，格式 `{"群名": 接口索引}`；未配置的群使用默认接口 |
@@ -331,12 +359,18 @@ python web_server.py
 | `default_prompt` | string | `"默认"` | 全局默认 Prompt 文件名（不含 `.md`），对应 `config/prompt/{名称}.md` |
 | `group_switch` | boolean | `false` | 群机器人总开关 |
 | `group_reply_at` | boolean | `false` | 是否仅在被 @ 时回复群消息 |
+| `group_reply_at_msg` | boolean | `true` | 群聊回复时是否 @ 发言人 |
+| `group_reply_quote` | boolean | `false` | 群聊回复时是否引用原消息（多条回复仅首条引用） |
 | `group_welcome` | boolean | `false` | 是否开启群新人欢迎语 |
 | `group_welcome_random` | float | `1.0` | 欢迎语触发概率（0.0-1.0） |
 | `group_welcome_msg` | string | — | 群新人欢迎语内容 |
 | `new_friend_switch` | boolean | `false` | 是否自动通过新好友请求 |
 | `new_friend_reply_switch` | boolean | `false` | 通过新好友后是否自动打招呼 |
 | `new_friend_msg` | array | `[]` | 打招呼消息列表，支持文字或图片绝对路径 |
+| `new_friend_check_min` | integer | `60` | 检查新好友请求的最小间隔（秒，60~3600） |
+| `new_friend_check_max` | integer | `300` | 检查新好友请求的最大间隔（秒，≥min，上限 3600） |
+| `new_friend_remark_prefix` | string | `""` | 通过好友后自动设置备注的前缀（备注 = 前缀 + 昵称 + 后缀） |
+| `new_friend_remark_suffix` | string | `"_机器人备注"` | 通过好友后自动设置备注的后缀 |
 | `chat_keyword_switch` | boolean | `false` | 是否开启私聊关键词回复 |
 | `group_keyword_switch` | boolean | `false` | 是否开启群聊关键词回复 |
 | `group_keyword_at_only` | boolean | `false` | 群聊关键词回复是否仅在被 @ 时触发 |
@@ -345,6 +379,8 @@ python web_server.py
 | `custom_forward_list` | array | `[]` | 自定义转发规则列表，详见下方说明 |
 | `scheduled_msg_switch` | boolean | `false` | 是否开启定时消息 |
 | `scheduled_msg_list` | array | `[]` | 定时消息任务列表，详见下方说明 |
+| `random_msg_switch` | boolean | `false` | 是否开启随机定时消息 |
+| `random_msg_list` | array | `[]` | 随机定时消息任务列表，详见下方说明 |
 | `scheduled_moments_switch` | boolean | `false` | 是否开启定时朋友圈 |
 | `scheduled_moments_list` | array | `[]` | 定时朋友圈任务列表 |
 | `moments_like_switch` | boolean | `false` | 是否开启随机朋友圈点赞 |
@@ -417,6 +453,21 @@ config/prompt/
 | `repeat_type` | string | 重复类型：`once`/`daily`/`weekly`/`monthly`/`custom` |
 | `weekdays` | array | `weekly` 时使用，填写星期几（1=周一…7=周日） |
 | `dates` | array | `monthly` 时填每月几号；`once`/`custom` 时填日期字符串（如 `"2026-03-20"`） |
+| `msgs` | array | 消息内容列表，支持文字或图片绝对路径（自动识别） |
+
+### 随机定时消息任务（random_msg_list）字段说明
+
+与随机定时朋友圈类似，在设定的时间窗口内随机挑选时刻发送消息，支持多目标群发和图片。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | string | 任务唯一 ID（自动生成） |
+| `enabled` | boolean | 是否启用该任务 |
+| `targets` | array | 发送目标列表，支持多个用户/群聊名称（群发） |
+| `time_start` | string | 时间窗口开始，格式 `HH:MM` |
+| `time_end` | string | 时间窗口结束，格式 `HH:MM` |
+| `repeat_type` | string | `daily`=每天 / `weekly`=每周 / `monthly`=每月 |
+| `random_days_count` | integer | 每周/每月随机抽取的发送天数（`weekly` 时 1~7；`monthly` 时 1~本月天数） |
 | `msgs` | array | 消息内容列表，支持文字或图片绝对路径（自动识别） |
 
 ### 定时朋友圈任务（scheduled_moments_list）字段说明
