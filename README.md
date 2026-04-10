@@ -1,6 +1,6 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.7.10-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
+[![Version](https://img.shields.io/badge/version-V4.7.11-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
 [![Python](https://img.shields.io/badge/python-3.9+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
@@ -264,6 +264,7 @@ python web_server.py
     "new_friend_check_max": 300,
     "new_friend_remark_prefix": "",
     "new_friend_remark_suffix": "_机器人备注",
+    "new_friend_tags": [],
     "chat_keyword_switch": true,
     "group_keyword_switch": true,
     "group_keyword_at_only": false,
@@ -371,6 +372,7 @@ python web_server.py
 | `new_friend_check_max` | integer | `300` | 检查新好友请求的最大间隔（秒，≥min，上限 3600） |
 | `new_friend_remark_prefix` | string | `""` | 通过好友后自动设置备注的前缀（备注 = 前缀 + 昵称 + 后缀） |
 | `new_friend_remark_suffix` | string | `"_机器人备注"` | 通过好友后自动设置备注的后缀 |
+| `new_friend_tags` | array | `[]` | 通过好友后自动设置的标签列表，需填写微信中已存在的标签名 |
 | `chat_keyword_switch` | boolean | `false` | 是否开启私聊关键词回复 |
 | `group_keyword_switch` | boolean | `false` | 是否开启群聊关键词回复 |
 | `group_keyword_at_only` | boolean | `false` | 群聊关键词回复是否仅在被 @ 时触发 |

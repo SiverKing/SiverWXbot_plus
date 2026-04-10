@@ -493,7 +493,7 @@ def _coerce_bool_fields(merged_config):
                 merged_config[field] = bool(v)
 
 def _coerce_list_fields(merged_config):
-    list_fields = ['listen_list', 'group', 'new_friend_msg', 'scheduled_msg_list', 'random_msg_list', 'scheduled_moments_list', 'random_moments_list', 'custom_forward_list']
+    list_fields = ['listen_list', 'group', 'new_friend_msg', 'new_friend_tags', 'scheduled_msg_list', 'random_msg_list', 'scheduled_moments_list', 'random_moments_list', 'custom_forward_list']
     for field in list_fields:
         if field in merged_config and not isinstance(merged_config[field], list):
             if isinstance(merged_config[field], str):
@@ -1263,6 +1263,7 @@ def main():
                 "new_friend_check_max": 300,
                 "new_friend_remark_prefix": "",
                 "new_friend_remark_suffix": "_机器人备注",
+                "new_friend_tags": [],
                 "chat_keyword_switch": False,
                 "group_keyword_switch": False,
                 "group_keyword_at_only": False,

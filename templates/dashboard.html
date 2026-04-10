@@ -888,6 +888,19 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
         </div>
         <div class="col-12"><div class="cfg-hint">备注格式：前缀 + 微信昵称 + 后缀，前后缀均可留空</div></div>
       </div>
+      <div class="row g-2 mb-3">
+        <div class="col-12"><label class="cfg-label">通过后自动设置标签</label><span class="cfg-hint" style="margin-left:8px;">⚠️ 只能填写微信中已存在的标签，填写不存在的标签将无效</span></div>
+        <div id="new_friend_tags_container">
+          {% for tag in config.new_friend_tags %}
+          <div class="list-item">
+            <input type="text" class="form-control" name="new_friend_tags" value="{{ tag }}" placeholder="标签名">
+            <button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>
+          </div>
+          {% endfor %}
+        </div>
+        <button type="button" class="btn-add" data-target="#new_friend_tags_container" data-name="new_friend_tags"><i class="bi bi-plus-circle"></i> 添加标签</button>
+        <div class="col-12"><div class="cfg-hint">可添加多个标签，通过好友时自动设置</div></div>
+      </div>
       <div class="switch-row">
         <input class="form-check-input" type="checkbox" id="new_friend_reply_switch" name="new_friend_reply_switch" {% if config.new_friend_reply_switch %}checked{% endif %}>
         <label for="new_friend_reply_switch">新好友自动回复</label>
@@ -2575,6 +2588,7 @@ $(function(){
       new_friend_check_max:parseInt($('#new_friend_check_max').val())||300,
       new_friend_remark_prefix:$('#new_friend_remark_prefix').val(),
       new_friend_remark_suffix:$('#new_friend_remark_suffix').val(),
+      new_friend_tags:$('[name="new_friend_tags"]').map(function(){return $(this).val();}).get().filter(s=>s.trim()!==''),
       chat_keyword_switch:$('#chat_keyword_switch').is(':checked'),
       group_keyword_switch:$('#group_keyword_switch').is(':checked'),
       group_keyword_at_only:$('#group_keyword_at_only').is(':checked'),

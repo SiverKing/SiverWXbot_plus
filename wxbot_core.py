@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.7.10"
-version_log = "V4.7.10 - 优化面板拆分回复功能提示、群聊自动回复支持设置是否@回复、群聊自动回复支持设置是否引用回复、优化DusAPI接口调用逻辑"
+version = "V4.7.11"
+version_log = "V4.7.11 - 自动通过好友支持设置标签"
 
 # ============================================================
 # 标准库导入
@@ -248,6 +248,7 @@ class WXBotConfig:
                     "new_friend_check_max": 300,
                     "new_friend_remark_prefix": "",
                     "new_friend_remark_suffix": "_机器人备注",
+                    "new_friend_tags": [],
                     "chat_keyword_switch": False,
                     "group_keyword_switch": False,
                     "group_keyword_at_only": False,
@@ -429,6 +430,7 @@ class WXBotConfig:
         self.new_friend_check_max    = min(3600, max(self.new_friend_check_min, int(self.config.get('new_friend_check_max', 300))))
         self.new_friend_remark_prefix = self.config.get('new_friend_remark_prefix', '')
         self.new_friend_remark_suffix = self.config.get('new_friend_remark_suffix', '_机器人备注')
+        self.new_friend_tags         = self.config.get('new_friend_tags', [])
 
         # 关键词配置
         self.chat_keyword_switch   = self.config.get('chat_keyword_switch')
@@ -3432,7 +3434,8 @@ class WXBot:
             log(message="以下是新朋友：\n" + str(NewFriends))
             for new in NewFriends:
                 new_name = self.config.new_friend_remark_prefix + new.name + self.config.new_friend_remark_suffix
-                new.accept(remark=new_name)  # 接受好友请求并设置备注
+                tags = self.config.new_friend_tags if self.config.new_friend_tags else None
+                new.accept(remark=new_name, tags=tags)  # 接受好友请求并设置备注和标签
                 log(message="已通过" + new_name + "的好友请求")
                 self.wx.SwitchToChat()       # 通过请求后切换回聊天页面
                 time.sleep(5)
