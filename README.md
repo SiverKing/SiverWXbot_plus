@@ -1,6 +1,6 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.7.11-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
+[![Version](https://img.shields.io/badge/version-V4.7.12-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
 [![Python](https://img.shields.io/badge/python-3.9+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
@@ -17,7 +17,7 @@
 ### 环境要求
 - Python `3.9` ~ `3.12`
 - Windows 操作系统
-- Windows wx PC 版（`4.1.7` ~ `4.1.8.101` 版本）
+- Windows wx PC 版（`4.1.7` ~ `4.1.8.106` 版本）
 
 ### 安装步骤
 

@@ -666,6 +666,10 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
         {% endfor %}
       </div>
       <button type="button" class="btn-add" id="btn-add-listen-item"><i class="bi bi-plus-circle"></i> <span id="listenAddText">{% if config.AllListen_switch %}添加黑名单{% else %}添加监听{% endif %}</span></button>
+      <div style="margin-top:8px;padding:8px 14px;background:#FEF2F2;border:1px solid #FECACA;border-radius:6px;color:#991B1B;font-size:12.5px;line-height:1.7;">
+        <i class="bi bi-exclamation-triangle-fill" style="color:#DC2626;margin-right:4px;"></i>
+        <strong>此处只能添加私聊联系人，请勿添加群聊。</strong>群聊若添加到此处，会被当作私聊处理，不会遵循群组管理中的规则，可能导致严重错误甚至发错消息。群聊请在「群组管理」页面添加。
+      </div>
       <hr>
       <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:6px;">
         <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
@@ -733,6 +737,10 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
   <div class="config-panel" id="tab-group">
     <div class="cfg-card">
       <div class="cfg-card-header"><i class="bi bi-people"></i><h5>群组管理</h5><span class="desc">配置群聊相关功能</span></div>
+      <div style="margin-bottom:12px;padding:8px 14px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;color:#0c4a6e;font-size:12.5px;line-height:1.7;">
+        <i class="bi bi-info-circle-fill" style="color:#0284c7;margin-right:4px;"></i>
+        需要添加群组？<strong>「添加群组」按钮在本页面底部</strong>，向下滚动即可找到。
+      </div>
       <div class="switch-row">
         <input class="form-check-input" type="checkbox" id="group_switch" name="group_switch" {% if config.group_switch %}checked{% endif %}>
         <label for="group_switch">启用群聊回复</label>
