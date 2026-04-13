@@ -445,6 +445,7 @@ const CHAPTER_ICONS = {
   '管理面板使用': 'bi-display',
   '注意事项':    'bi-exclamation-triangle',
   '常见问题':    'bi-question-circle',
+  '交流':        'bi-chat-dots',
   '用户协议':    'bi-file-text',
   '隐私政策':    'bi-shield-check',
 };
@@ -480,18 +481,13 @@ function setChapterInURL(index) {
   const url = new URL(window.location.href);
   url.searchParams.set('c', chapterSlug(index));
   url.hash = '';
-  history.pushState({ chapter: index }, '', url.toString());
+  history.replaceState({ chapter: index }, '', url.toString());
 }
 
 // ── 浏览器前进/后退 ──
 window.addEventListener('popstate', e => {
   const index = e.state?.chapter ?? getChapterFromURL();
   renderChapter(index, false);
-  const anchor = e.state?.anchor ?? window.location.hash.slice(1);
-  if (anchor) {
-    const target = document.getElementById(anchor);
-    if (target) setTimeout(() => scrollToHeading(target), 80);
-  }
 });
 
 // ── 加载并解析 markdown ──
@@ -548,16 +544,12 @@ function renderChapter(index, pushState = true) {
     link.classList.toggle('active', parseInt(link.dataset.chapter) === index)
   );
   // 切换章节时先清 hash 再构建目录，防止 buildTOC 误用旧锚点滚动
-  if (pushState) setChapterInURL(index);
-  buildTOC();
-  window.scrollTo(0, 0);
-  closeDrawers();
-  // 初次加载/popstate：buildTOC 已处理 hash，用完后清掉
-  if (!pushState && window.location.hash) {
-    const url = new URL(window.location.href);
-    url.hash = '';
-    history.replaceState({ chapter: index }, '', url.toString());
+  if (pushState) {
+    setChapterInURL(index);
+    window.scrollTo(0, 0);
   }
+  buildTOC();
+  closeDrawers();
 }
 
 // ── 构建右侧目录（用标题文本 slug 作为稳定锚点）──
@@ -603,8 +595,16 @@ function buildTOC() {
     drawerList.appendChild(dli);
   });
 
-  const hash = window.location.hash.slice(1);
-  if (hash) { const t = document.getElementById(hash); if (t) setTimeout(() => scrollToHeading(t), 80); }
+  // 处理 URL 中的 hash 锚点滚动（需 decodeURIComponent 处理中文编码）
+  const hash = decodeURIComponent(window.location.hash.slice(1));
+  if (hash) {
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        const t = document.getElementById(hash);
+        if (t) scrollToHeading(t);
+      }, 100);
+    });
+  }
 }
 
 function scrollToHeading(el) {
