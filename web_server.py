@@ -879,10 +879,24 @@ def check_update():
     try:
         import requests as req
         import wxbot_core as wxbot_mod
+        import uuid
+
+        # 获取本地版本
         local_version = getattr(wxbot_mod, 'version', '')
-        r = req.get('https://wxbot.siverking.online/version.json', timeout=8)
+
+        # 获取机器码（使用 MAC 地址）
+        machine_code = hex(uuid.getnode())[2:].upper()
+
+        # 设置自定义 User-Agent: 机器码-版本号
+        headers = {
+            'User-Agent': f'{machine_code}-{local_version}'
+        }
+
+        # 请求版本信息
+        r = req.get('https://wxbot.siverking.online/version.json', headers=headers, timeout=60)
         data = r.json()
         data['local_version'] = local_version
+        data['machine_code'] = machine_code
         return jsonify({'status': 'success', 'data': data})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
