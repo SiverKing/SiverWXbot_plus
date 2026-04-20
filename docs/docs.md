@@ -1,6 +1,6 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.7.15-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
+[![Version](https://img.shields.io/badge/version-V4.7.16-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
 [![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
@@ -525,7 +525,7 @@ AI 将自主决定是否将回复拆分为多条消息逐条发送，模拟真�
 
 **联系作者**: [联系作者](https://www.siverking.online/static/img/siver_wx.jpg)
 
-**交流群**：![暂无](./img/)
+**交流群**：**拥有wxautox4授权后，可联系作者进群**
 
 ---
 

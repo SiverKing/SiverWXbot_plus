@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.7.15"
-version_log = "V4.7.15 - 适配最新客户端、优化拆分回复、优化记忆存储、优化自定义转发"
+version = "V4.7.16"
+version_log = "V4.7.16 - 适配最新客户端、优化图片识别分析、优化面板图片识别提示、优化掉线检测、优化拆分回复"
 
 # ============================================================
 # 标准库导入
@@ -96,7 +96,17 @@ SPLIT_PROMPT_TEMPLATE = """\
 
 若无需拆分则正常回复，不要添加任何分隔符。
 严禁在正文内容中出现 ||SPLIT|| 字样。
-如果你想分条回复，一定一定一定要在每个分条直接加上这个分隔符||SPLIT||，不然程序无法处理分条发送
+如果你想分条回复，一定一定一定要在每个分条直接加上这个分隔符||SPLIT||，不然程序无法处理分条发送。
+如果你要换2行来进行分段回复，那请将换两行这个操作改成用分隔符回复的分条回复，以下是示例：
+原始内容：
+好的，我来解释一下。
+
+这个问题其实很常见，主要原因是……
+
+改动后内容：
+好的，我来解释一下。
+||SPLIT||
+这个问题其实很常见，主要原因是……
 【以下是你的角色设定】
 {base_prompt}"""
 
@@ -2497,7 +2507,7 @@ class WXBot:
                             # 直接图片消息：content 已被替换为本地路径
                             rec_api = self._init_api_by_index(self.config.group_image_recognition_api)
                             reply = rec_api.chat(
-                                f"{message.sender}: 请简短描述这张图片的内容",
+                                f"{message.sender}: [这是 {message.sender} 单独发送的一条图片消息，请根据上下文语境分析这张图片和发送者发送的意图进行回复]",
                                 prompt=_effective_group_prompt,
                                 history=history,
                                 image_path=message.content
@@ -2507,7 +2517,7 @@ class WXBot:
                             text_part, img_path = content_without_at.split('+引用的图片:', 1)
                             rec_api = self._init_api_by_index(self.config.group_image_recognition_api)
                             reply = rec_api.chat(
-                                f"{message.sender}: {text_part.strip()}" if text_part.strip() else f"{message.sender}: 请简短描述这张图片的内容",
+                                f"{message.sender}: {text_part.strip()}" if text_part.strip() else f"{message.sender}: [这是 {message.sender} 单独发送的一条图片消息，请根据上下文语境分析这张图片和发送者发送的意图进行回复]",
                                 prompt=_effective_group_prompt,
                                 history=history,
                                 image_path=img_path.strip()
@@ -2711,7 +2721,7 @@ class WXBot:
                         # 直接图片消息：content 已被替换为本地路径（图片识别优先使用图片识别接口）
                         rec_api = self._init_api_by_index(self.config.chat_image_recognition_api)
                         reply = rec_api.chat(
-                            "请简短描述这张图片的内容",
+                            "[这是单独发送的一条图片消息，请根据上下文语境分析这张图片和发送者发送的意图进行回复]",
                             prompt=_effective_prompt,
                             history=history,
                             image_path=message.content
@@ -2721,7 +2731,7 @@ class WXBot:
                         text_part, img_path = message.content.split('+引用的图片:', 1)
                         rec_api = self._init_api_by_index(self.config.chat_image_recognition_api)
                         reply = rec_api.chat(
-                            text_part.strip() or "请简短描述这张图片的内容",
+                            text_part.strip() or "[这是单独发送的一条图片消息，请根据上下文语境分析这张图片和发送者发送的意图进行回复]",
                             prompt=_effective_prompt,
                             history=history,
                             image_path=img_path.strip()
@@ -3905,14 +3915,14 @@ class WXBot:
                         if not self.check_wechat_window():
                             # 微信离线，阻塞等待人工处理
                             self.is_err(self.wx.nickname + " wxbot监听出错！！微信可能已被弹出登录！！在线检查失败！！")
-                            while self.run_flag:
-                                log(level="ERROR", message=f"微信{self.wx.nickname}已被弹出登录！！请检查微信是否登录！！")
-                                time.sleep(100)
+                            self.stop_wxbot()
+                            log(level="ERROR", message=f"微信 {self.wx.nickname} 已被弹出登录！！请检查微信是否登录！！")
+                            break
                     except Exception as e:
                         self.is_err(self.wx.nickname + " wxbot监听出错！！微信可能已被弹出登录！！在线检查失败！！", e)
-                        while self.run_flag:
-                            log(level="ERROR", message=f"微信{self.wx.nickname}已被弹出登录！！请检查微信是否登录！！")
-                            time.sleep(100)
+                        self.stop_wxbot()
+                        log(level="ERROR", message=f"微信 {self.wx.nickname} 已被弹出登录！！请检查微信是否登录！！")
+                        break
                     check_counter = 0
 
                 # ---- 新好友检测模块（随机检查，间隔由配置决定）----
