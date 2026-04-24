@@ -384,6 +384,22 @@ body {
   gap: 5px;
   margin-top: 14px;
 }
+.feature-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary);
+  text-decoration: none;
+  transition: all 0.2s;
+}
+.feature-link:hover {
+  color: var(--primary-dark);
+  text-decoration: none;
+  transform: translateX(2px);
+}
 .feature-tag {
   font-size: 11.5px;
   padding: 2px 9px;
@@ -634,6 +650,24 @@ body {
           <span class="feature-tag">可视化管理</span>
           <span class="feature-tag">按需清除</span>
         </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-header">
+          <div class="feature-icon"><i class="bi bi-broadcast"></i></div>
+          <h3 class="feature-title">远程访问服务</h3>
+        </div>
+        <p class="feature-desc">可选接入 SiverPanel 远程访问服务，将本机管理面板映射为公网可访问地址。接入成功后，可在手机、公司电脑或其他浏览器中远程登录并管理当前运行中的面板。该服务与 <code>wxautox4</code> 内核库授权彼此独立，按需开通即可。</p>
+        <div class="feature-tags">
+          <span class="feature-tag">公网访问</span>
+          <span class="feature-tag">跨设备管理</span>
+          <span class="feature-tag">按需开通</span>
+        </div>
+        <a href="https://wxbot.siverking.online/docs.html?c=远程访问服务" class="feature-link">
+          <i class="bi bi-broadcast"></i>
+          <span>查看使用教程</span>
+          <i class="bi bi-arrow-right"></i>
+        </a>
       </div>
 
       <div class="feature-card">

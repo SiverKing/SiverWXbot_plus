@@ -11,6 +11,8 @@ import json
 import os
 import shutil
 from werkzeug.utils import secure_filename
+from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.security import check_password_hash, generate_password_hash
 from datetime import datetime, timedelta
 import logging
 from functools import wraps
@@ -25,6 +27,10 @@ import socket
 import email_send
 import ctypes
 import atexit
+import importlib.util
+import secrets
+from collections import defaultdict, deque
+from urllib.parse import urljoin, urlparse
 
 # fix_paths.py
 import sys
@@ -42,33 +48,93 @@ def base_dir():
 
 # 初始化 Flask 应用
 app = Flask(__name__, template_folder=resource_path('templates'), static_folder=resource_path('templates/static'))
-app.secret_key = 'your_very_long_and_random_secret_key_here'
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1, x_proto=1, x_prefix=1)
 
 # 安全配置
 app.config.update(
-    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_SECURE=False,
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
-    PERMANENT_SESSION_LIFETIME=timedelta(days=15)
+    PERMANENT_SESSION_LIFETIME=timedelta(days=1)
 )
 
 # 配置参数
-app.secret_key = 'your_secret_key_here'
 PORT = 10001
 CONFIG_FILE = os.path.join(base_dir(), 'config', 'config.json')
 ADMIN_FILE  = os.path.join(base_dir(), 'config', 'admin.json')
 EMAIL_FILE  = os.path.join(base_dir(), 'config', 'email.txt')
 PROMPT_DIR  = os.path.join(base_dir(), 'config', 'prompt')
 BACKUP_BASE = os.path.join(base_dir(), 'old_wxbot_config')
+APP_SECRET_FILE = os.path.join(base_dir(), 'config', 'panel_secret.key')
+SIVER_PANEL_BASE_URL = 'https://panel.siver.top'
+SIVER_PANEL_WS_URL = 'wss://panel.siver.top/relay/ws'
+LEGACY_SIVER_PANEL_BASE_URL = 'https://wxbot-panel.siverking.online'
+LEGACY_SIVER_PANEL_WS_URL = 'wss://wxbot-panel.siverking.online/relay/ws'
 DEFAULT_PROMPT_CONTENT = "你是一个ai回复助手，请根据用户的问题给出回答,回复尽量保持在30字以内"
 
 # 启动时确保目录存在
 os.makedirs(os.path.join(base_dir(), 'config'),      exist_ok=True)
 os.makedirs(os.path.join(base_dir(), 'panel_logs'),  exist_ok=True)
 
+
+def load_panel_secret_key():
+    """读取或生成持久化 Flask 会话密钥。"""
+    if os.path.exists(APP_SECRET_FILE):
+        try:
+            with open(APP_SECRET_FILE, 'r', encoding='utf-8') as f:
+                secret = f.read().strip()
+            if secret:
+                return secret
+        except Exception as e:
+            log('WARNING', f'读取面板会话密钥失败，将重新生成: {e}')
+
+    secret = secrets.token_urlsafe(64)
+    try:
+        with open(APP_SECRET_FILE, 'w', encoding='utf-8') as f:
+            f.write(secret)
+    except Exception as e:
+        log('ERROR', f'写入面板会话密钥失败，当前会话将使用临时密钥: {e}')
+    return secret
+
+
+app.secret_key = load_panel_secret_key()
+
+
+def hash_password(password):
+    return generate_password_hash(password, method='pbkdf2:sha256', salt_length=16)
+
+
+def verify_password(password, password_hash):
+    try:
+        return check_password_hash(password_hash, password)
+    except Exception:
+        return False
+
+
+def load_siver_panel_manager_class():
+    module_path = resource_path('siver-panel.py')
+    if not os.path.exists(module_path):
+        log('WARNING', f'SiverPanel 客户端模块不存在: {module_path}')
+        return None
+
+    try:
+        spec = importlib.util.spec_from_file_location('siver_panel_runtime', module_path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError('无法创建 SiverPanel 模块加载器')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        manager_class = getattr(module, 'SiverPanelManager', None)
+        if manager_class is None:
+            raise RuntimeError('SiverPanelManager 未在模块中定义')
+        return manager_class
+    except Exception as e:
+        log('ERROR', f'加载 SiverPanel 客户端模块失败: {e}')
+        return None
+
 def load_admin_credentials():
     """从 admin.json 读取账密，文件不存在时自动创建默认账密文件"""
-    default = {"username": "admin", "password": "123456"}
+    default_password = "123456"
+    default = {"username": "admin", "password_hash": hash_password(default_password)}
     if not os.path.exists(ADMIN_FILE):
         try:
             with open(ADMIN_FILE, 'w', encoding='utf-8') as f:
@@ -80,9 +146,22 @@ def load_admin_credentials():
     try:
         with open(ADMIN_FILE, 'r', encoding='utf-8') as f:
             data = json.load(f)
+        username = data.get("username", default["username"])
+        password_hash = str(data.get("password_hash", "")).strip()
+        plain_password = str(data.get("password", "")).strip()
+
+        if plain_password and not password_hash:
+            password_hash = hash_password(plain_password)
+            with open(ADMIN_FILE, 'w', encoding='utf-8') as fw:
+                json.dump({"username": username, "password_hash": password_hash}, fw, ensure_ascii=False, indent=4)
+            log('WARNING', '检测到旧版明文密码配置，已自动迁移为哈希存储')
+
+        if not password_hash:
+            password_hash = default["password_hash"]
+
         return {
-            "username": data.get("username", default["username"]),
-            "password": data.get("password", default["password"]),
+            "username": username,
+            "password_hash": password_hash,
         }
     except Exception as e:
         log('ERROR', f'读取账密文件失败: {e}，使用默认账密')
@@ -90,6 +169,150 @@ def load_admin_credentials():
 
 # 用户认证信息（从 admin.json 加载）
 USERS = load_admin_credentials()
+
+LOGIN_FAIL_LIMIT = 8
+LOGIN_FAIL_WINDOW_SEC = 15 * 60
+LOGIN_BAN_SEC = 30 * 60
+login_failures = defaultdict(deque)
+login_bans = {}
+panel_server_port = None
+DEFAULT_ADMIN_USERNAME = "admin"
+DEFAULT_ADMIN_PASSWORD = "123456"
+FORCE_ADMIN_CHANGE_ALLOWED_PATHS = {
+    "/dashboard",
+    "/logout",
+    "/api/check_auth",
+    "/get_admin_config",
+    "/save_admin_config",
+}
+
+
+def get_client_ip():
+    forwarded_for = request.headers.get('X-Forwarded-For', '')
+    if forwarded_for:
+        return forwarded_for.split(',')[0].strip()
+    real_ip = request.headers.get('X-Real-IP', '').strip()
+    if real_ip:
+        return real_ip
+    return request.remote_addr or 'unknown'
+
+
+def is_remote_panel_request():
+    if request.headers.get('X-Siver-Remote', '').strip() == '1':
+        return True
+    forwarded_prefix = request.headers.get('X-Forwarded-Prefix', '').strip()
+    return forwarded_prefix.startswith('/panel/')
+
+
+def is_default_admin_credentials():
+    return (
+        USERS.get("username") == DEFAULT_ADMIN_USERNAME
+        and verify_password(DEFAULT_ADMIN_PASSWORD, USERS.get("password_hash", ""))
+    )
+
+
+def is_force_admin_change_required():
+    if not session.get('logged_in'):
+        return False
+    if not is_remote_panel_request():
+        return False
+    return is_default_admin_credentials()
+
+
+def get_remote_connect_block_reason(*, manual: bool) -> tuple[str, str] | None:
+    if not is_default_admin_credentials():
+        return None
+    message = '当前后台仍在使用默认账号密码 admin / 123456。为安全起见，请先在“账号密码”里修改后台账号密码后，再连接远程访问服务。'
+    log('WARNING', message)
+    return ('default_admin_credentials_block_remote_connect', message)
+
+
+def is_remote_connect_block_required():
+    config = read_config() or {}
+    return bool(config.get('siver_panel_enabled') and is_default_admin_credentials())
+
+
+def is_login_ip_banned(ip):
+    expire_ts = login_bans.get(ip)
+    if not expire_ts:
+        return False, 0
+    now = time.time()
+    if expire_ts <= now:
+        login_bans.pop(ip, None)
+        return False, 0
+    return True, int(expire_ts - now)
+
+
+def record_login_failure(ip):
+    now = time.time()
+    bucket = login_failures[ip]
+    while bucket and now - bucket[0] > LOGIN_FAIL_WINDOW_SEC:
+        bucket.popleft()
+    bucket.append(now)
+    if len(bucket) >= LOGIN_FAIL_LIMIT:
+        login_bans[ip] = now + LOGIN_BAN_SEC
+        bucket.clear()
+        return True
+    return False
+
+
+def clear_login_failures(ip):
+    login_failures.pop(ip, None)
+    login_bans.pop(ip, None)
+
+
+def is_safe_redirect_target(target):
+    if not target:
+        return False
+    ref_url = urlparse(request.host_url)
+    test_url = urlparse(urljoin(request.host_url, target))
+    return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
+
+
+def absolute_url_for(endpoint, **values):
+    return url_for(endpoint, _external=True, **values)
+
+
+@app.after_request
+def apply_panel_security_headers(response):
+    session_cookie_name = app.config.get('SESSION_COOKIE_NAME', 'session')
+    cookies = response.headers.getlist('Set-Cookie')
+    if request.is_secure and cookies:
+        rewritten = []
+        changed = False
+        for cookie in cookies:
+            if cookie.startswith(f'{session_cookie_name}=') and 'Secure' not in cookie:
+                cookie = f'{cookie}; Secure'
+                changed = True
+            rewritten.append(cookie)
+        if changed:
+            del response.headers['Set-Cookie']
+            for cookie in rewritten:
+                response.headers.add('Set-Cookie', cookie)
+    response.headers.setdefault('X-Frame-Options', 'SAMEORIGIN')
+    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    return response
+
+
+def get_panel_server_port():
+    return panel_server_port
+
+
+SIVER_PANEL_MANAGER_CLASS = load_siver_panel_manager_class()
+siver_panel_manager = None
+if SIVER_PANEL_MANAGER_CLASS is not None:
+    try:
+        siver_panel_manager = SIVER_PANEL_MANAGER_CLASS(
+            config_path=CONFIG_FILE,
+            client_version=BOT_VERSION,
+            log_func=log,
+        )
+        siver_panel_manager.set_connect_guard(get_remote_connect_block_reason)
+    except Exception as e:
+        log('ERROR', f'初始化 SiverPanel 客户端失败: {e}')
+
+if siver_panel_manager is not None:
+    atexit.register(siver_panel_manager.shutdown)
 
 # 日志颜色映射
 LOG_COLORS = {
@@ -108,7 +331,21 @@ def login_required(f):
         if not session.get('logged_in'):
             if request.path.startswith('/api/') or request.accept_mimetypes.accept_json:
                 return jsonify({'status': 'error', 'message': '未登录'}), 401
-            return redirect(url_for('login', next=request.url))
+            return redirect(absolute_url_for('login', next=request.url))
+        if is_force_admin_change_required() and request.path not in FORCE_ADMIN_CHANGE_ALLOWED_PATHS:
+            message = '当前为远程访问，且仍在使用默认账号密码，请先修改后台账号密码后再继续使用'
+            wants_json = (
+                request.path.startswith('/api/')
+                or request.accept_mimetypes.accept_json
+                or request.headers.get('X-Requested-With', '') == 'XMLHttpRequest'
+            )
+            if wants_json:
+                return jsonify({
+                    'status': 'error',
+                    'message': message,
+                    'error_code': 'force_admin_credential_change_required',
+                }), 403
+            return redirect(absolute_url_for('dashboard'))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -305,30 +542,32 @@ def check_auth():
 @app.route('/', methods=['GET', 'POST'])
 def login():
     if session.get('logged_in'):
-        return redirect(url_for('dashboard'))
+        return redirect(absolute_url_for('dashboard'))
     logout_success = request.args.get('logout') == 'success'
     error = None
 
     if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
+        client_ip = get_client_ip()
+        blocked, remaining = is_login_ip_banned(client_ip)
+        if blocked:
+            log('WARNING', f'登录被拒绝：IP {client_ip} 仍处于封禁期，剩余 {remaining}s')
+            return render_template('login.html', error=f'登录失败次数过多，请 {remaining} 秒后再试', logout_success=logout_success)
 
-        def safe_str_cmp(a, b):
-            if len(a) != len(b):
-                return False
-            result = 0
-            for x, y in zip(a, b):
-                result |= ord(x) ^ ord(y)
-            return result == 0
+        username = (request.form.get('username') or '').strip()
+        password = request.form.get('password') or ''
 
-        if username == USERS['username'] and safe_str_cmp(USERS['password'], password):
+        if username == USERS['username'] and verify_password(password, USERS['password_hash']):
+            clear_login_failures(client_ip)
             session['logged_in'] = True
             session['username'] = username
             session.permanent = True
             log('SUCCESS', f'用户 {username} 登录成功')
-            next_page = request.args.get('next') or url_for('dashboard')
+            next_page = request.args.get('next') or absolute_url_for('dashboard')
+            if not is_safe_redirect_target(next_page):
+                next_page = absolute_url_for('dashboard')
             return redirect(next_page)
         else:
+            record_login_failure(client_ip)
             log('WARNING', f'登录失败: 用户名或密码错误 (用户名: {username})')
             return render_template('login.html', error='用户名或密码错误')
 
@@ -339,7 +578,7 @@ def logout():
     session.clear()
     session.pop('logged_in', None)
     session.pop('username', None)
-    return redirect(url_for('login'))
+    return redirect(absolute_url_for('login'))
 
 # 仪表盘
 @app.route('/dashboard')
@@ -436,6 +675,24 @@ def dashboard():
     config.setdefault('custom_forward_list', [])                 # 自定义转发规则列表
 
     # 多 Prompt：迁移旧 prompt 字段 + 补充新字段默认值
+    config.setdefault('siver_panel_enabled', False)
+    config.setdefault('siver_panel_activation_code', '')
+    config.setdefault('siver_panel_slug', '')
+    config.setdefault('siver_panel_install_id', '')
+    config.setdefault('siver_panel_machine_fingerprint', '')
+    config.setdefault('siver_panel_device_id', '')
+    config.setdefault('siver_panel_device_secret', '')
+    if config.get('siver_panel_base_url') == LEGACY_SIVER_PANEL_BASE_URL:
+        config['siver_panel_base_url'] = SIVER_PANEL_BASE_URL
+    if config.get('siver_panel_ws_url') == LEGACY_SIVER_PANEL_WS_URL:
+        config['siver_panel_ws_url'] = SIVER_PANEL_WS_URL
+    config.setdefault('siver_panel_base_url', SIVER_PANEL_BASE_URL)
+    config.setdefault('siver_panel_ws_url', SIVER_PANEL_WS_URL)
+    config.setdefault('siver_panel_panel_url', '')
+    config.setdefault('siver_panel_service_expire_at', '')
+    config.setdefault('siver_panel_last_error_code', '')
+    config.setdefault('siver_panel_last_error_message', '')
+
     if _migrate_prompt_from_config(config):
         try:
             with open(CONFIG_FILE, 'w', encoding='utf-8') as _f:
@@ -459,12 +716,27 @@ def dashboard():
     config.setdefault('group_split_max_chars', 100)       # 群聊单条最大字数
     config.setdefault('group_split_max_count', 4)         # 群聊最多条数
 
-    return render_template('dashboard.html', config=config, logs=log_messages[-50:], prompts=prompts)
+    force_admin_change_required = is_force_admin_change_required()
+    return render_template(
+        'dashboard.html',
+        config=config,
+        logs=logger.get_recent_logs(limit=50),
+        prompts=prompts,
+        force_admin_change_required=force_admin_change_required,
+        remote_connect_block_required=is_remote_connect_block_required(),
+    )
 
 @app.route('/get_logs')
 @login_required
 def get_logs():
-    return jsonify({'logs': logger.log_messages[-50:]})
+    after_id_raw = str(request.args.get('after_id', '') or '').strip()
+    after_id = None
+    if after_id_raw:
+        try:
+            after_id = max(0, int(after_id_raw))
+        except ValueError:
+            after_id = None
+    return jsonify(logger.get_logs_after(after_id, limit=50))
 
 def _coerce_bool_fields(merged_config):
     boolean_fields = [
@@ -494,6 +766,7 @@ def _coerce_bool_fields(merged_config):
         'custom_forward_switch',            # 自定义转发总开关
         'chat_split_reply_switch',          # 私聊拆分多条回复开关
         'group_split_reply_switch',         # 群聊拆分多条回复开关
+        'siver_panel_enabled',
     ]
     for field in boolean_fields:
         if field in merged_config:
@@ -926,6 +1199,47 @@ def get_status():
     else:
         return jsonify({'status': 'success', 'data': {'bot_running': False}})
 
+
+@app.route('/api/siver-panel/status')
+@login_required
+def get_siver_panel_status():
+    if siver_panel_manager is None:
+        return jsonify({'status': 'error', 'message': 'SiverPanel 客户端未初始化'})
+    return jsonify({'status': 'success', 'data': siver_panel_manager.get_status()})
+
+
+@app.route('/api/siver-panel/connect', methods=['POST'])
+@login_required
+def connect_siver_panel():
+    if siver_panel_manager is None:
+        return jsonify({'status': 'error', 'message': 'SiverPanel 客户端未初始化'})
+    try:
+        status = siver_panel_manager.connect(manual=True)
+        if status.get('state') == 'error' and status.get('last_error_code') == 'default_admin_credentials_block_remote_connect':
+            return jsonify({
+                'status': 'error',
+                'message': status.get('last_message') or '远程连接已被安全策略拦截',
+                'error_code': status.get('last_error_code') or 'default_admin_credentials_block_remote_connect',
+                'data': status,
+            })
+        return jsonify({'status': 'success', 'message': status.get('last_message') or '正在发起远程连接', 'data': status})
+    except Exception as e:
+        log('ERROR', f'SiverPanel 手动连接失败: {e}')
+        return jsonify({'status': 'error', 'message': str(e)})
+
+
+@app.route('/api/siver-panel/disconnect', methods=['POST'])
+@login_required
+def disconnect_siver_panel():
+    if siver_panel_manager is None:
+        return jsonify({'status': 'error', 'message': 'SiverPanel 客户端未初始化'})
+    try:
+        status = siver_panel_manager.disconnect(reason='manual_disconnect')
+        return jsonify({'status': 'success', 'message': status.get('last_message') or '远程访问服务已断开', 'data': status})
+    except Exception as e:
+        log('ERROR', f'SiverPanel 断开连接失败: {e}')
+        return jsonify({'status': 'error', 'message': str(e)})
+
 @app.route('/load_config')
 @login_required
 def load_config():
@@ -940,7 +1254,11 @@ def get_admin_config():
     try:
         with open(ADMIN_FILE, 'r', encoding='utf-8') as f:
             data = json.load(f)
-        return jsonify({'status': 'success', 'username': data.get('username', '')})
+        return jsonify({
+            'status': 'success',
+            'username': data.get('username', ''),
+            'force_admin_change_required': is_force_admin_change_required(),
+        })
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
 
@@ -949,17 +1267,30 @@ def get_admin_config():
 def save_admin_config():
     global USERS
     try:
+        was_force_required = is_force_admin_change_required()
         data = request.get_json()
         username = data.get('username', '').strip()
         password = data.get('password', '').strip()
         if not username or not password:
             return jsonify({'status': 'error', 'message': '用户名和密码不能为空'})
-        new_creds = {'username': username, 'password': password}
+        if is_force_admin_change_required() and username == DEFAULT_ADMIN_USERNAME and password == DEFAULT_ADMIN_PASSWORD:
+            return jsonify({'status': 'error', 'message': '远程访问时不能继续使用默认账号密码，请修改后再保存'})
+        new_creds = {'username': username, 'password_hash': hash_password(password)}
         with open(ADMIN_FILE, 'w', encoding='utf-8') as f:
             json.dump(new_creds, f, ensure_ascii=False, indent=4)
         USERS = new_creds
+        session['username'] = username
         log('SUCCESS', f'后台账号已更新，用户名：{username}')
-        return jsonify({'status': 'success', 'message': '账号密码已保存，下次登录生效'})
+        message = '账号密码已保存，下次登录生效'
+        force_admin_change_required = is_force_admin_change_required()
+        if was_force_required and not force_admin_change_required:
+            message = '账号密码已保存，当前会话限制已解除'
+        return jsonify({
+            'status': 'success',
+            'message': message,
+            'force_admin_change_required': force_admin_change_required,
+            'username': username,
+        })
     except Exception as e:
         log('ERROR', f'保存账号密码失败: {e}')
         return jsonify({'status': 'error', 'message': str(e)})
@@ -1273,7 +1604,7 @@ def find_free_port(start_port=10001, max_port=11000):
     for port in range(start_port, max_port):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             try:
-                s.bind(("0.0.0.0", port))
+                s.bind(("127.0.0.1", port))
                 return port
             except OSError:
                 continue
@@ -1358,6 +1689,19 @@ def main():
                 "group_split_reply_switch": False,
                 "group_split_max_chars": 100,
                 "group_split_max_count": 4,
+                "siver_panel_enabled": False,
+                "siver_panel_activation_code": "",
+                "siver_panel_slug": "",
+                "siver_panel_install_id": "",
+                "siver_panel_machine_fingerprint": "",
+                "siver_panel_device_id": "",
+                "siver_panel_device_secret": "",
+                "siver_panel_base_url": SIVER_PANEL_BASE_URL,
+                "siver_panel_ws_url": SIVER_PANEL_WS_URL,
+                "siver_panel_panel_url": "",
+                "siver_panel_service_expire_at": "",
+                "siver_panel_last_error_code": "",
+                "siver_panel_last_error_message": "",
             }
             with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
                 json.dump(default_config, f, ensure_ascii=False, indent=4)
@@ -1369,14 +1713,19 @@ def main():
         except Exception as _backup_e:
             log('ERROR', f'自动备份检查失败: {_backup_e}')
         # 动态选择端口
+        global panel_server_port
         free_port = find_free_port(10001, 11000)
+        panel_server_port = free_port
         log('INFO', f'请访问 http://localhost:{free_port} 或者 http://127.0.0.1:{free_port} 进行登录')
         # 启动后自动打开浏览器
         webbrowser.open(f"http://127.0.0.1:{free_port}")
         # 定时启停
         time_start_stop()
+        if siver_panel_manager is not None:
+            siver_panel_manager.set_local_port_provider(get_panel_server_port)
+            siver_panel_manager.start()
         # 启动服务器
-        app.run(host='0.0.0.0', port=free_port, debug=False)
+        app.run(host='127.0.0.1', port=free_port, debug=False, threaded=True)
     except Exception as e:
         log('ERROR', f'服务器启动失败: {str(e)}')
     finally:

@@ -17,6 +17,7 @@ UI3/
 build/
 dist/
 __pycache__/
+.pycache_verify/
 /releases/
 /config/
 logs/

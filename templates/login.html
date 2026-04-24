@@ -6,7 +6,66 @@
 <title>WXBot 管理面板 - 登录</title>
 <link rel="icon" href="https://wxbot.siverking.online/favicon.ico" type="image/x-icon">
 <link href="https://s4.zstatic.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-<link href="https://s4.zstatic.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+<script>
+window.__BOOTSTRAP_ICONS_CDN_CSS__ = "https://wxbot.siverking.online/panel/static/bootstrap-icons.css";
+window.__BOOTSTRAP_ICONS_LOCAL_CSS__ = {{ url_for('static', filename='bootstrap-icons.css') | tojson }};
+window.__BOOTSTRAP_ICONS_USE_LOCAL_FIRST__ = /^(127\.0\.0\.1|localhost)$/i.test(location.hostname);
+window.__BOOTSTRAP_ICONS_PRIMARY_CSS__ = window.__BOOTSTRAP_ICONS_USE_LOCAL_FIRST__
+  ? window.__BOOTSTRAP_ICONS_LOCAL_CSS__
+  : window.__BOOTSTRAP_ICONS_CDN_CSS__;
+window.__BOOTSTRAP_ICONS_FALLBACK_CSS__ = window.__BOOTSTRAP_ICONS_USE_LOCAL_FIRST__
+  ? window.__BOOTSTRAP_ICONS_CDN_CSS__
+  : window.__BOOTSTRAP_ICONS_LOCAL_CSS__;
+window.__bootstrapIconsCssFallback = function(linkEl){
+  if(!linkEl || linkEl.dataset.fallbackApplied === '1'){
+    return;
+  }
+  linkEl.dataset.fallbackApplied = '1';
+  linkEl.href = window.__BOOTSTRAP_ICONS_FALLBACK_CSS__;
+};
+document.documentElement.classList.add(window.__BOOTSTRAP_ICONS_USE_LOCAL_FIRST__ ? 'icons-pref-local' : 'icons-pref-cdn');
+(function(){
+  var link = document.createElement('link');
+  link.id = 'bootstrap-icons-link';
+  link.rel = 'stylesheet';
+  link.href = window.__BOOTSTRAP_ICONS_PRIMARY_CSS__;
+  link.onerror = function(){ window.__bootstrapIconsCssFallback(link); };
+  document.head.appendChild(link);
+})();
+</script>
+<style>
+@font-face {
+  font-display: block;
+  font-family: "bootstrap-icons-pref-cdn";
+  src:
+    url("https://wxbot.siverking.online/panel/static/fonts/bootstrap-icons.woff2") format("woff2"),
+    url("{{ url_for('static', filename='fonts/bootstrap-icons.woff2') }}") format("woff2"),
+    url("https://wxbot.siverking.online/panel/static/fonts/bootstrap-icons.woff") format("woff"),
+    url("{{ url_for('static', filename='fonts/bootstrap-icons.woff') }}") format("woff");
+}
+
+@font-face {
+  font-display: block;
+  font-family: "bootstrap-icons-pref-local";
+  src:
+    url("{{ url_for('static', filename='fonts/bootstrap-icons.woff2') }}") format("woff2"),
+    url("https://wxbot.siverking.online/panel/static/fonts/bootstrap-icons.woff2") format("woff2"),
+    url("{{ url_for('static', filename='fonts/bootstrap-icons.woff') }}") format("woff"),
+    url("https://wxbot.siverking.online/panel/static/fonts/bootstrap-icons.woff") format("woff");
+}
+
+html.icons-pref-cdn .bi::before,
+html.icons-pref-cdn [class^="bi-"]::before,
+html.icons-pref-cdn [class*=" bi-"]::before {
+  font-family: bootstrap-icons-pref-cdn !important;
+}
+
+html.icons-pref-local .bi::before,
+html.icons-pref-local [class^="bi-"]::before,
+html.icons-pref-local [class*=" bi-"]::before {
+  font-family: bootstrap-icons-pref-local !important;
+}
+</style>
 <style>
 * { box-sizing: border-box; }
 body {
@@ -136,7 +195,7 @@ body {
     <div class="login-header">
       <i class="bi bi-robot brand-icon"></i>
       <h5>WXBot 管理面板</h5>
-      <p>请登录以继续 默认账号:admin 密码:123456</p>
+      <p>默认账号：admin　默认密码：123456　登录后请尽快修改</p>
     </div>
     <div class="login-body">
       {% if logout_success %}
@@ -153,7 +212,7 @@ body {
       </div>
       {% endif %}
 
-      <form method="POST" action="/">
+      <form method="POST" action="{{ url_for('login') }}">
         <div class="mb-3">
           <label for="username" class="form-label">用户名</label>
           <div class="input-icon-wrap">

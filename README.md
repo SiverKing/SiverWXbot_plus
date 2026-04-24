@@ -1,6 +1,6 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.7.17-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
+[![Version](https://img.shields.io/badge/version-V4.7.18-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
 [![Python](https://img.shields.io/badge/python-3.9+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
@@ -15,7 +15,7 @@
 ## 📦 安装部署
 
 ### 环境要求
-- Python `3.9` ~ `3.12`
+- Python `3.9` ~ `3.13`
 - Windows 操作系统
 - Windows wx PC 版（`4.1.7` ~ `4.1.9.23` 版本）
 
@@ -195,6 +195,14 @@ python web_server.py
 - **配置管理** - 在线修改所有配置，保存即生效
 - **自动检查更新** - 页面加载时自动检查新版本，有更新时置顶显示，每 6 小时自动重检
 - **开发者广播通知** - 检查更新时同步拉取开发者通知，有内容时在页面顶部显示公告卡片
+
+### ☁️ 远程访问服务
+- **远程面板访问** - 可选接入 SiverPanel 远程访问服务，将本机面板映射为公网可访问地址，例如 `https://panel.siver.top/panel/你的安全入口`
+- **跨设备管理** - 接入成功后，可在手机、公司电脑或其他浏览器中远程登录并管理当前运行中的本地面板
+- **独立激活体系** - 远程访问服务激活码与 `wxautox4` 内核库授权激活码彼此独立，不是同一个东西，也分别计费
+- **按需开通** - 不开通远程访问服务也完全不影响本地面板正常使用；只有确实有跨设备远程访问需求时再按需开通即可
+- **面板内一键配置** - 在左侧 **远程访问服务** 页面中填写激活码和安全入口、开启开关并点击连接即可完成接入
+- **文档说明** - 详细使用教程可查看 [SiverWXbot_docs](https://wxbot.siverking.online/docs.html?c=远程访问服务) 中的“远程访问服务”章节
 
 ### 📧 告警通知
 - **邮件告警** - 发生错误时自动发送邮件通知

@@ -6,7 +6,66 @@
 <title>SiverWXBot 管理面板</title>
 <link rel="icon" href="https://wxbot.siverking.online/favicon.ico" type="image/x-icon">
 <link href="https://s4.zstatic.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-<link href="/static/bootstrap-icons.css" rel="stylesheet">
+<script>
+window.__BOOTSTRAP_ICONS_CDN_CSS__ = "https://wxbot.siverking.online/panel/static/bootstrap-icons.css";
+window.__BOOTSTRAP_ICONS_LOCAL_CSS__ = {{ url_for('static', filename='bootstrap-icons.css') | tojson }};
+window.__BOOTSTRAP_ICONS_USE_LOCAL_FIRST__ = /^(127\.0\.0\.1|localhost)$/i.test(location.hostname);
+window.__BOOTSTRAP_ICONS_PRIMARY_CSS__ = window.__BOOTSTRAP_ICONS_USE_LOCAL_FIRST__
+  ? window.__BOOTSTRAP_ICONS_LOCAL_CSS__
+  : window.__BOOTSTRAP_ICONS_CDN_CSS__;
+window.__BOOTSTRAP_ICONS_FALLBACK_CSS__ = window.__BOOTSTRAP_ICONS_USE_LOCAL_FIRST__
+  ? window.__BOOTSTRAP_ICONS_CDN_CSS__
+  : window.__BOOTSTRAP_ICONS_LOCAL_CSS__;
+window.__bootstrapIconsCssFallback = function(linkEl){
+  if(!linkEl || linkEl.dataset.fallbackApplied === '1'){
+    return;
+  }
+  linkEl.dataset.fallbackApplied = '1';
+  linkEl.href = window.__BOOTSTRAP_ICONS_FALLBACK_CSS__;
+};
+document.documentElement.classList.add(window.__BOOTSTRAP_ICONS_USE_LOCAL_FIRST__ ? 'icons-pref-local' : 'icons-pref-cdn');
+(function(){
+  var link = document.createElement('link');
+  link.id = 'bootstrap-icons-link';
+  link.rel = 'stylesheet';
+  link.href = window.__BOOTSTRAP_ICONS_PRIMARY_CSS__;
+  link.onerror = function(){ window.__bootstrapIconsCssFallback(link); };
+  document.head.appendChild(link);
+})();
+</script>
+<style>
+@font-face {
+  font-display: block;
+  font-family: "bootstrap-icons-pref-cdn";
+  src:
+    url("https://wxbot.siverking.online/panel/static/fonts/bootstrap-icons.woff2") format("woff2"),
+    url("{{ url_for('static', filename='fonts/bootstrap-icons.woff2') }}") format("woff2"),
+    url("https://wxbot.siverking.online/panel/static/fonts/bootstrap-icons.woff") format("woff"),
+    url("{{ url_for('static', filename='fonts/bootstrap-icons.woff') }}") format("woff");
+}
+
+@font-face {
+  font-display: block;
+  font-family: "bootstrap-icons-pref-local";
+  src:
+    url("{{ url_for('static', filename='fonts/bootstrap-icons.woff2') }}") format("woff2"),
+    url("https://wxbot.siverking.online/panel/static/fonts/bootstrap-icons.woff2") format("woff2"),
+    url("{{ url_for('static', filename='fonts/bootstrap-icons.woff') }}") format("woff"),
+    url("https://wxbot.siverking.online/panel/static/fonts/bootstrap-icons.woff") format("woff");
+}
+
+html.icons-pref-cdn .bi::before,
+html.icons-pref-cdn [class^="bi-"]::before,
+html.icons-pref-cdn [class*=" bi-"]::before {
+  font-family: bootstrap-icons-pref-cdn !important;
+}
+
+html.icons-pref-local .bi::before,
+html.icons-pref-local [class^="bi-"]::before,
+html.icons-pref-local [class*=" bi-"]::before {
+  font-family: bootstrap-icons-pref-local !important;
+}
+</style>
 <link href="https://s4.zstatic.net/npm/summernote@0.8.18/dist/summernote-lite.min.css" rel="stylesheet">
 <style>
 :root {
@@ -43,12 +102,31 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
   display: flex; align-items: center; justify-content: space-between; padding: 0 24px;
   position: fixed; top: 0; left: 0; right: 0; z-index: 100; border-bottom: 1px solid #3a3a3a;
 }
+.topbar-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.mobile-menu-btn {
+  display: none;
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.16);
+  background: rgba(255,255,255,.08);
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+  transition: all .18s;
+}
+.mobile-menu-btn:hover { background: rgba(255,255,255,.14); }
 .topbar .brand { color: #fff; font-weight: 700; font-size: 16px; display: flex; align-items: center; gap: 8px; }
 .topbar .brand i { font-size: 20px; color: var(--primary); }
 .topbar .user-area { display: flex; align-items: center; gap: 12px; }
 .topbar .user-area span { color: rgba(255,255,255,.75); font-size: 13px; }
 .topbar .user-area a { color: rgba(255,255,255,.75); font-size: 13px; text-decoration: none; border: 1px solid rgba(255,255,255,.2); padding: 4px 12px; border-radius: 6px; transition: all .2s; }
 .topbar .user-area a:hover { background: rgba(255,255,255,.1); color: #fff; }
+.topbar-link-text { display: inline; }
+.topbar-username { display: inline; }
 .topbar-notice {
   position: absolute; left: 50%; transform: translateX(-50%);
   display: flex; align-items: center; gap: 7px;
@@ -74,6 +152,14 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
 .sidebar .nav-link.active { background: var(--primary); color: #fff; }
 .sidebar .nav-link.active i { color: #fff; }
 .sidebar .nav-divider { height: 1px; background: #3a3a3a; margin: 12px 16px; }
+.mobile-sidebar-head { display: none; }
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: var(--topbar-h) 0 0 0;
+  background: rgba(0,0,0,.42);
+  z-index: 89;
+}
 
 /* ===== Main Content ===== */
 .main { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 24px 28px 340px 28px; min-height: calc(100vh - var(--topbar-h)); overflow-y: auto; }
@@ -146,11 +232,14 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
 .log-toolbar { height: var(--logbar-h); display: flex; align-items: center; justify-content: space-between; padding: 0 16px; cursor: pointer; user-select: none; }
 .log-toolbar .log-title { color: #888; font-size: 12.5px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .log-toolbar .log-title i { font-size: 14px; }
+.log-title-main { display: inline; }
+.log-title-sub { display: none; }
 .log-toolbar .log-actions { display: flex; align-items: center; gap: 8px; }
 .log-toolbar .log-actions .filter-btn { padding: 2px 10px; border-radius: 4px; border: 1px solid #444; background: transparent; color: #888; font-size: 11px; cursor: pointer; transition: all .15s; }
 .log-toolbar .log-actions .filter-btn:hover, .log-toolbar .log-actions .filter-btn.active { background: #2a2a2a; color: #ddd; border-color: #666; }
 .log-toolbar .log-actions .icon-btn { background: none; border: none; color: #888; font-size: 14px; cursor: pointer; padding: 4px; }
 .log-toolbar .log-actions .icon-btn:hover { color: #ddd; }
+.mobile-log-preview { display: none; }
 .log-body { height: calc(100% - var(--logbar-h)); overflow-y: auto; padding: 0 16px 12px; font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace; font-size: 12px; line-height: 1.7; }
 .log-body::-webkit-scrollbar { width: 6px; }
 .log-body::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
@@ -172,13 +261,6 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
 .sub-switch-row { display: flex; align-items: center; gap: 10px; padding: 8px 14px 8px 36px; background: var(--muted-bg); border-radius: 6px; margin-bottom: 12px; border-left: 3px solid var(--border); opacity: 0.85; }
 .sub-switch-row .form-check-input { margin: 0; }
 .sub-switch-row label { margin: 0; font-size: 13px; font-weight: 400; color: var(--muted); }
-
-/* ===== Responsive ===== */
-@media (max-width: 768px) {
-  .sidebar { display: none; }
-  .main { margin-left: 0; padding: 16px; }
-  .log-panel { left: 0; }
-}
 
 /* ===== Memory Panel ===== */
 .memory-layout { display: flex; gap: 0; height: 560px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
@@ -214,12 +296,404 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
 .detail-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--muted-bg); border-radius: 6px; border: 1px solid var(--border); }
 .detail-key { font-size: 12.5px; color: var(--muted); font-weight: 500; }
 .detail-val { font-size: 13px; color: var(--card-fg); font-weight: 600; max-width: 55%; text-align: right; word-break: break-all; }
+body.mobile-nav-open { overflow: hidden; }
+
+/* ===== Responsive ===== */
+@media (max-width: 900px) {
+  .topbar {
+    padding: 0 12px;
+    gap: 10px;
+  }
+  .mobile-menu-btn {
+    display: inline-flex;
+  }
+  .topbar-left {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .topbar .brand {
+    font-size: 14px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .topbar .user-area {
+    gap: 6px;
+    max-width: none;
+    overflow: visible;
+    white-space: nowrap;
+    flex: 0 0 auto;
+  }
+  .topbar .user-area a {
+    min-width: 34px;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9px;
+    justify-content: center;
+    font-size: 14px;
+    line-height: 1;
+  }
+  .topbar .user-area a i {
+    margin: 0;
+    display: block;
+    line-height: 1;
+  }
+  .topbar-link-text,
+  .topbar-username {
+    display: none;
+  }
+  .topbar-notice {
+    display: none !important;
+  }
+
+  .sidebar {
+    top: var(--topbar-h);
+    left: 0;
+    bottom: 0;
+    width: min(82vw, 300px);
+    height: auto;
+    padding: 12px 0 16px;
+    display: block;
+    overflow-y: auto;
+    overflow-x: hidden;
+    transform: translateX(-108%);
+    transition: transform .22s ease;
+    box-shadow: 0 16px 40px rgba(0,0,0,.28);
+  }
+  .sidebar.mobile-open { transform: translateX(0); }
+  .sidebar .nav-item {
+    padding: 0 12px;
+    margin-bottom: 2px;
+  }
+  .sidebar .nav-link {
+    padding: 11px 12px;
+    white-space: normal;
+    border: none;
+    background: transparent;
+  }
+  .sidebar .nav-link i {
+    width: 20px;
+  }
+  .sidebar .nav-divider {
+    display: block;
+  }
+  .mobile-sidebar-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 16px 12px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid #3a3a3a;
+    color: #fff;
+  }
+  .mobile-sidebar-head .title {
+    font-size: 14px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .mobile-sidebar-head .close-btn {
+    width: 34px;
+    height: 34px;
+    border: 1px solid rgba(255,255,255,.16);
+    background: rgba(255,255,255,.08);
+    color: #fff;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .sidebar-overlay.active {
+    display: block;
+  }
+
+  .main {
+    margin-left: 0;
+    margin-top: var(--topbar-h);
+    padding: 16px 14px 240px;
+    min-height: calc(100vh - var(--topbar-h));
+  }
+
+  .action-bar {
+    gap: 8px;
+    margin-bottom: 18px;
+  }
+  .action-bar > div[style*="flex:1"] {
+    display: none;
+  }
+  .action-bar .btn {
+    flex: 1 1 calc(50% - 8px);
+    justify-content: center;
+    padding: 10px 12px;
+  }
+
+  .cfg-card {
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .cfg-card-header {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .cfg-card-header .desc {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .list-item,
+  .keyword-item {
+    flex-wrap: wrap;
+  }
+
+  .prompt-two-col {
+    flex-direction: column;
+    min-height: 0;
+  }
+  .prompt-list-panel {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding-right: 0;
+    margin-right: 0;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    max-height: 180px;
+  }
+
+  .memory-layout {
+    flex-direction: column;
+    height: auto;
+    min-height: 0;
+  }
+  .memory-list-panel {
+    width: 100%;
+    min-width: 0;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    max-height: 180px;
+  }
+  .memory-chat-area {
+    min-height: 320px;
+  }
+
+  .detail-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .detail-val {
+    max-width: 100%;
+    text-align: left;
+  }
+  #status-main-card > div:last-child {
+    grid-template-columns: 1fr !important;
+  }
+
+  .log-panel {
+    left: 0;
+    border-top-color: #2f2f2f;
+    background: linear-gradient(180deg, rgba(22,22,22,.98), rgba(12,12,12,.98));
+  }
+  .log-panel.collapsed {
+    height: 108px;
+  }
+  .log-panel.collapsed .log-body {
+    display: none;
+  }
+  .log-panel.collapsed .mobile-log-preview {
+    display: grid;
+    height: calc(100% - var(--logbar-h));
+    overflow: hidden;
+    padding: 6px 8px 8px;
+    gap: 5px;
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    align-content: start;
+  }
+  .mobile-log-card {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 6px;
+    min-height: 0;
+    overflow: hidden;
+    padding: 4px 7px;
+    border-radius: 8px;
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.06);
+  }
+  .mobile-log-meta {
+    display: contents;
+  }
+  .mobile-log-card .log-badge {
+    min-width: 38px;
+    padding: 0 4px;
+    font-size: 8.5px;
+    letter-spacing: .2px;
+    border-radius: 999px;
+  }
+  .mobile-log-time {
+    color: #7c8595;
+    font-size: 8.5px;
+    white-space: nowrap;
+    line-height: 1;
+  }
+  .mobile-log-msg {
+    color: #e5e7eb;
+    font-size: 9.5px;
+    line-height: 1.2;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    word-break: break-word;
+  }
+  .mobile-log-empty {
+    padding: 14px 10px;
+    color: #9ca3af;
+    font-size: 11.5px;
+    text-align: center;
+  }
+  .log-panel.expanded {
+    height: 42vh;
+  }
+  .log-panel.expanded .mobile-log-preview {
+    display: none;
+  }
+  .log-toolbar {
+    padding: 0 12px;
+    height: 34px;
+    border-bottom: 1px solid rgba(255,255,255,.06);
+  }
+  .log-toolbar .log-title {
+    color: #d1d5db;
+    font-size: 11.5px;
+    gap: 6px;
+  }
+  .log-title-sub {
+    display: inline;
+    margin-left: 4px;
+    color: #6b7280;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .log-toolbar .log-actions {
+    gap: 4px;
+  }
+  .log-toolbar .log-actions .filter-btn,
+  #btnClearLog {
+    display: none;
+  }
+  .log-entry {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.06);
+  }
+  .log-entry .log-time {
+    min-width: 0;
+    width: auto;
+    color: #7c8595;
+    font-size: 10.5px;
+    order: 2;
+    margin-left: auto;
+  }
+  .log-entry .log-badge {
+    order: 1;
+    min-width: 48px;
+  }
+  .log-entry .log-msg {
+    order: 3;
+    width: 100%;
+    color: #e5e7eb;
+    font-size: 11.5px;
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .log-panel.expanded .log-body {
+    padding: 8px 10px 12px;
+  }
+  .log-panel.expanded .log-entry .log-msg {
+    -webkit-line-clamp: unset;
+    display: block;
+  }
+}
+
+@media (max-width: 560px) {
+  .topbar {
+    padding: 0 10px;
+  }
+  .topbar .brand {
+    font-size: 13px;
+  }
+  .topbar .user-area {
+    gap: 4px;
+  }
+  .topbar .user-area a:nth-child(2) {
+    display: none;
+  }
+  .main {
+    padding: 14px 10px 220px;
+  }
+  .action-bar .btn {
+    flex-basis: 100%;
+  }
+  .sidebar {
+    width: min(88vw, 280px);
+  }
+  .log-panel.collapsed {
+    height: 102px;
+  }
+  .log-toolbar .log-title {
+    font-size: 11.5px;
+  }
+  .log-title-main {
+    display: inline;
+  }
+  .mobile-log-card {
+    padding: 4px 6px;
+  }
+  .mobile-log-msg {
+    font-size: 9px;
+  }
+  .mobile-log-time {
+    font-size: 8px;
+  }
+  .mobile-log-card .log-badge {
+    min-width: 34px;
+    font-size: 8px;
+  }
+  .stat-val {
+    font-size: 20px;
+  }
+  .memory-chat-area {
+    padding: 12px;
+  }
+  .msg-bubble-wrap {
+    max-width: 88%;
+  }
+}
 </style>
 </head>
 <body>
 <!-- ===== Topbar ===== -->
 <div class="topbar">
-  <div class="brand"><i class="bi bi-robot"></i> SiverWXBot 管理面板</div>
+  <div class="topbar-left">
+    <button type="button" class="mobile-menu-btn" id="mobileMenuBtn" aria-label="打开菜单">
+      <i class="bi bi-list"></i>
+    </button>
+    <div class="brand"><i class="bi bi-robot"></i> SiverWXBot 管理面板</div>
+  </div>
   <div class="topbar-notice" id="topbar-notice" style="display:none;">
     <i class="bi bi-exclamation-triangle-fill"></i>
     机器人运行中，若在面板修改了配置请关闭后重新启动
@@ -229,28 +703,37 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
        style="display:inline-flex;align-items:center;gap:5px;color:rgba(255,255,255,.75);font-size:13px;text-decoration:none;border:1px solid rgba(255,255,255,.2);padding:4px 12px;border-radius:6px;transition:all .2s;"
        onmouseover="this.style.background='rgba(255,255,255,.1)';this.style.color='#fff';"
        onmouseout="this.style.background='';this.style.color='rgba(255,255,255,.75)';">
-      <i class="bi bi-file-text"></i> 使用文档
+      <i class="bi bi-file-text"></i><span class="topbar-link-text">使用文档</span>
     </a>
     <a href="https://github.com/SiverKing/SiverWXbot_plus/blob/main/docs/docs.md" target="_blank" rel="noopener"
        style="display:inline-flex;align-items:center;gap:5px;color:rgba(255,255,255,.75);font-size:13px;text-decoration:none;border:1px solid rgba(255,255,255,.2);padding:4px 12px;border-radius:6px;transition:all .2s;"
        onmouseover="this.style.background='rgba(255,255,255,.1)';this.style.color='#fff';"
        onmouseout="this.style.background='';this.style.color='rgba(255,255,255,.75)';">
-      <i class="bi bi-file-text"></i> 备用文档
+      <i class="bi bi-file-text"></i><span class="topbar-link-text">备用文档</span>
     </a>
     <a href="https://github.com/SiverKing/SiverWXbot_plus" target="_blank" rel="noopener"
        style="display:inline-flex;align-items:center;gap:5px;color:rgba(255,255,255,.75);font-size:13px;text-decoration:none;border:1px solid rgba(255,255,255,.2);padding:4px 12px;border-radius:6px;transition:all .2s;"
        onmouseover="this.style.background='rgba(255,255,255,.1)';this.style.color='#fff';"
        onmouseout="this.style.background='';this.style.color='rgba(255,255,255,.75)';">
-      <i class="bi bi-star-fill" style="color:#FFC300;font-size:12px;"></i> Github Star
+      <i class="bi bi-star-fill" style="color:#FFC300;font-size:12px;"></i><span class="topbar-link-text">Github Star</span>
     </a>
-    <span>{{ session.username }}</span>
-    <a href="/logout"><i class="bi bi-box-arrow-right"></i> 退出</a>
+    <span class="topbar-username">{{ session.username }}</span>
+    <a href="{{ url_for('logout') }}"><i class="bi bi-box-arrow-right"></i><span class="topbar-link-text">退出</span></a>
   </div>
 </div>
 
+<div class="sidebar-overlay" id="mobileSidebarOverlay"></div>
+
 <!-- ===== Sidebar ===== -->
 <nav class="sidebar">
+  <div class="mobile-sidebar-head">
+    <div class="title"><i class="bi bi-grid-1x2"></i> 页面导航</div>
+    <button type="button" class="close-btn" id="mobileSidebarClose" aria-label="关闭菜单">
+      <i class="bi bi-x-lg"></i>
+    </button>
+  </div>
   <div class="nav-item"><a class="nav-link active" data-tab="tab-status"><i class="bi bi-speedometer2"></i> 状态面板</a></div>
+  <div class="nav-item"><a class="nav-link" data-tab="tab-siver-panel"><i class="bi bi-router"></i> 远程访问服务</a></div>
   <div class="nav-divider"></div>
   <div class="nav-item"><a class="nav-link" data-tab="tab-api"><i class="bi bi-cloud"></i> 模型配置</a></div>
   <div class="nav-item"><a class="nav-link" data-tab="tab-prompt"><i class="bi bi-chat-square-text"></i> Prompt</a></div>
@@ -474,6 +957,145 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
         <div class="detail-row"><span class="detail-key">最近发送者</span><span class="detail-val" id="dv-lastsender">-</span></div>
         <div class="detail-row"><span class="detail-key">群词@触发</span><span class="detail-val" id="dv-kw-at">-</span></div>
         <div class="detail-row"><span class="detail-key">记忆上下文</span><span class="detail-val" id="dv-mem-ctx">-</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="config-panel" id="tab-siver-panel">
+    <div class="cfg-card" id="siver-panel-card" data-base-url="{{ config.get('siver_panel_base_url', 'https://panel.siver.top') }}">
+      <div class="cfg-card-header">
+        <i class="bi bi-router"></i>
+        <h5>远程访问服务</h5>
+        <span class="desc">接入 SiverPanel 远程连接访问服务</span>
+      </div>
+      <div style="display:grid;gap:14px;">
+        <div style="display:flex;gap:14px;align-items:flex-start;padding:16px 18px;background:linear-gradient(135deg,#f5f9ff 0%,#eef6ff 100%);border:1px solid #cfe2ff;border-radius:12px;">
+          <i class="bi bi-globe2" style="font-size:24px;color:#0d6efd;flex-shrink:0;margin-top:2px;"></i>
+          <div style="display:grid;gap:8px;">
+            <div style="font-size:14px;font-weight:700;color:#0f172a;">接入 SiverPanel 后，可用最轻量的方式远程访问你的面板, 免服务器免穿透 官方安全直连跨设备访问</div>
+            <div style="font-size:12.8px;line-height:1.9;color:#334155;">
+              只需在当前 Windows 设备运行本地面板并完成接入，你就可以在手机、公司电脑或其他浏览器中，通过一个网址直接访问并管理你的机器人面板。
+            </div>
+            <div style="font-size:12.5px;color:#0f4c81;line-height:1.8;">
+              例如安全入口设置为 <code>siver</code> 后，远程访问地址会是
+              <a href="https://panel.siver.top/panel/siver" target="_blank" rel="noopener" style="color:#0d6efd;font-weight:600;">https://panel.siver.top/panel/siver</a>
+            </div>
+            <div style="padding:10px 12px;background:rgba(255,255,255,.72);border:1px solid #bfdbfe;border-radius:10px;font-size:12.5px;line-height:1.9;color:#1f2937;">
+              不开通远程访问服务，你依然可以继续正常使用本地面板；只有在你确实有跨设备远程访问和管理面板的需求时，再按需开通即可。
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid;gap:10px;padding:15px 16px;background:linear-gradient(135deg,#fff7ed 0%,#fff1f2 100%);border:1px solid #fdba74;border-radius:12px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+            <div style="font-size:14px;font-weight:800;color:#9a3412;">
+              <i class="bi bi-bag-heart-fill" style="margin-right:8px;"></i>先获取远程访问服务激活码，再填写下面的激活码
+            </div>
+            <a href="https://panel.siver.top" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:10px;background:#ea580c;color:#fff;text-decoration:none;font-size:12.8px;font-weight:700;box-shadow:0 8px 18px rgba(234,88,12,.18);">
+              <i class="bi bi-box-arrow-up-right"></i> 前往购买/获取
+            </a>
+          </div>
+          <div style="font-size:12.8px;line-height:1.9;color:#9a3412;">
+            远程访问服务激活码可在 <a href="https://panel.siver.top" target="_blank" rel="noopener" style="font-weight:800;color:#c2410c;">https://panel.siver.top</a> 获取。
+            这里使用的是 <strong>远程访问服务激活码</strong>，和 <code>wxautox4</code> 内核库的授权激活码不是同一个东西，两者彼此独立，也分别计费。
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;">
+          <div>
+            <label class="cfg-label" for="siver_panel_activation_code">激活码</label>
+            <input type="text" class="form-control" id="siver_panel_activation_code" value="{{ config.get('siver_panel_activation_code', '') }}" placeholder="请输入远程访问激活码" autocomplete="off">
+            <div style="display:grid;gap:6px;margin-top:8px;">
+              <div class="cfg-hint">将从 SiverPanel 获取到的远程访问服务激活码完整粘贴到这里。</div>
+              <div style="padding:9px 10px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;font-size:12.4px;line-height:1.8;color:#475569;font-weight:600;">请确认这里填写的是 <strong>远程访问服务激活码</strong>，不是 <code style="font-weight:800;color:#334155;">wxautox4</code> 内核库激活码。</div>
+            </div>
+          </div>
+          <div>
+            <label class="cfg-label" for="siver_panel_slug">安全入口</label>
+            <input type="text" class="form-control" id="siver_panel_slug" value="{{ config.get('siver_panel_slug', '') }}" placeholder="例如：siver" autocomplete="off" spellcheck="false">
+            <div class="cfg-hint">
+              安全入口用于远程连接访问。格式限制与服务端一致：5-32 位，仅支持小写字母、数字和连字符，且不能以连字符开头或结尾。
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:12px 14px;background:var(--muted-bg);border:1px solid var(--border);border-radius:10px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <input class="form-check-input" type="checkbox" id="siver_panel_enabled" {% if config.get('siver_panel_enabled', False) %}checked{% endif %} style="margin:0;">
+            <div>
+              <div style="font-size:13.5px;font-weight:700;color:var(--card-fg);">开启远程访问服务</div>
+              <div style="font-size:12px;color:var(--muted);">开启后，面板启动时会自动尝试使用当前激活码和安全入口连接远程服务。</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:center;padding:18px 20px;border:1px solid #bfdbfe;border-radius:14px;background:linear-gradient(135deg,#eff6ff 0%,#f8fbff 100%);">
+          <div style="display:grid;gap:10px;justify-items:center;max-width:560px;text-align:center;">
+            <div style="font-size:13px;color:#1d4ed8;font-weight:700;">完成激活码和安全入口配置后，再点击下面按钮发起连接</div>
+            <button type="button" id="btn-siver-panel-connect" class="btn btn-save" style="min-width:220px;padding:12px 24px;border-radius:12px;font-size:15px;font-weight:800;box-shadow:0 10px 24px rgba(34,197,94,.20);">
+              <i class="bi bi-plug" style="margin-right:6px;"></i> 连接远程服务
+            </button>
+            <div style="font-size:12px;color:var(--muted);line-height:1.8;">
+              连接成功后，下方会显示当前远程地址、状态反馈和授权信息。
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;">
+          <div class="stat-card">
+            <div class="stat-label">连接状态</div>
+            <div class="stat-val" id="siver-panel-quick-state" style="font-size:15px;">-</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">设备凭据</div>
+            <div class="stat-val" id="siver-panel-quick-bind" style="font-size:15px;">-</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">授权到期</div>
+            <div class="stat-val" id="siver-panel-quick-expire" style="font-size:13px;">-</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">自动重试</div>
+            <div class="stat-val" id="siver-panel-quick-retry" style="font-size:13px;">-</div>
+          </div>
+        </div>
+
+        <div style="display:grid;gap:10px;">
+          <div style="padding:12px 14px;background:#fffbe6;border:1px solid #fde68a;border-radius:10px;font-size:12.8px;line-height:1.9;color:#854d0e;">
+            <div style="font-weight:700;margin-bottom:4px;"><i class="bi bi-receipt-cutoff" style="margin-right:6px;"></i>服务说明</div>
+            该服务需要持续承担服务器资源和公网流量开销，因此会以较轻量的方式收取一定服务费用，用于长期稳定地提供远程连接访问服务。
+          </div>
+          <div style="padding:12px 14px;background:#fff5f5;border:1px solid #fecaca;border-radius:10px;font-size:12.8px;line-height:1.9;color:#991b1b;">
+            <div style="font-weight:700;margin-bottom:4px;"><i class="bi bi-shield-lock-fill" style="margin-right:6px;"></i>安全提醒</div>
+            如果你准备启用远程访问，请务必先修改面板默认账号和密码。否则一旦安全入口泄露，他人就可能直接尝试登录你的面板。
+          </div>
+        </div>
+
+        <div id="siver-panel-status-box" style="padding:14px 16px;border:1px solid var(--border);border-radius:12px;background:var(--card);">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div id="siver-panel-status-dot" style="width:12px;height:12px;border-radius:50%;background:#9ca3af;flex-shrink:0;"></div>
+            <div style="flex:1;min-width:0;">
+              <div id="siver-panel-status-text" style="font-size:14px;font-weight:700;color:var(--card-fg);">未启用</div>
+              <div id="siver-panel-status-sub" style="font-size:12px;color:var(--muted);margin-top:2px;">关闭开关后不会自动连接。</div>
+            </div>
+            <div id="siver-panel-last-sync" style="font-size:12px;color:var(--muted);flex-shrink:0;">-</div>
+          </div>
+          <div style="display:grid;gap:10px;margin-top:12px;">
+            <div>
+              <div style="font-size:12px;color:var(--muted);margin-bottom:4px;">服务反馈</div>
+              <div id="siver-panel-last-message" style="font-size:13px;line-height:1.8;color:var(--card-fg);word-break:break-word;">等待连接。</div>
+            </div>
+            <div>
+              <div style="font-size:12px;color:var(--muted);margin-bottom:4px;">当前远程地址 - 可在其他设备访问此地址尝试远程连接你的面板</div>
+              <div id="siver-panel-current-url" style="font-size:13px;line-height:1.8;word-break:break-all;color:#0d6efd;">-</div>
+            </div>
+            <div>
+              <div style="font-size:12px;color:var(--muted);margin-bottom:4px;">安全入口预览 - 可在其他设备访问此地址尝试远程连接你的面板</div>
+              <div id="siver-panel-url-preview" style="font-size:13px;line-height:1.8;word-break:break-all;color:var(--card-fg);">-</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1639,7 +2261,7 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
 <!-- ===== Log Panel ===== -->
 <div class="log-panel expanded" id="logPanel">
   <div class="log-toolbar" id="logToolbar">
-    <div class="log-title"><i class="bi bi-terminal"></i> 运行日志</div>
+    <div class="log-title"><i class="bi bi-terminal"></i><span class="log-title-main">运行日志</span><span class="log-title-sub">最近两条</span></div>
     <div class="log-actions">
       <button class="filter-btn active" data-level="ALL">ALL</button>
       <button class="filter-btn" data-level="INFO">INFO</button>
@@ -1650,6 +2272,7 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
       <button class="icon-btn" id="btnToggleLog" title="展开/收起"><i class="bi bi-chevron-up"></i></button>
     </div>
   </div>
+  <div class="mobile-log-preview" id="mobileLogPreview"></div>
   <div class="log-body" id="logBody">
     {% for log in logs %}
     {% set lvl = log.level|upper %}
@@ -1659,7 +2282,7 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
     {% elif lvl == 'ERROR' %}{% set badge_cls = 'log-error' %}
     {% elif lvl == 'DEBUG' %}{% set badge_cls = 'log-debug' %}
     {% endif %}
-    <div class="log-entry" data-level="{{ lvl }}">
+    <div class="log-entry" data-level="{{ lvl }}" data-log-id="{{ log.id|default(0) }}">
       <span class="log-time">{{ log.time }}</span>
       <span class="log-badge {{ badge_cls }}">{{ lvl }}</span>
       <span class="log-msg">{{ log.message }}</span>
@@ -1673,6 +2296,25 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
 <script src="https://s4.zstatic.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://s4.zstatic.net/npm/summernote@0.8.18/dist/summernote-lite.min.js"></script>
 <script src="https://s4.zstatic.net/npm/summernote@0.8.18/dist/lang/summernote-zh-CN.min.js"></script>
+<script>
+window.__BASE_PATH__ = {{ (request.script_root or '') | tojson }};
+window.__FORCE_REMOTE_ADMIN_CHANGE__ = {{ force_admin_change_required | default(false) | tojson }};
+window.__REMOTE_CONNECT_BLOCK_REQUIRED__ = {{ remote_connect_block_required | default(false) | tojson }};
+window.withBase = function(path){
+  var base = window.__BASE_PATH__ || '';
+  if(!path) return base || '';
+  if(/^https?:\/\//i.test(path) || /^wss?:\/\//i.test(path) || path.indexOf('//') === 0) return path;
+  if(path.indexOf(base + '/') === 0) return path;
+  return path.charAt(0) === '/' ? (base + path) : path;
+};
+if(window.jQuery){
+  $.ajaxPrefilter(function(options){
+    if(options && typeof options.url === 'string'){
+      options.url = window.withBase(options.url);
+    }
+  });
+}
+</script>
 <script>
 // ===== svModal：自定义弹窗工具（替代浏览器 alert/confirm） =====
 var svModal = (function(){
@@ -1754,6 +2396,182 @@ $(function(){
     if (!key) return '';
     if (key.length <= 10) return key;
     return key.slice(0, 5) + '*'.repeat(key.length - 10) + key.slice(-5);
+  }
+
+  function getSiverPanelBaseUrl(){
+    return String($('#siver-panel-card').data('baseUrl') || 'https://panel.siver.top').replace(/\/+$/, '');
+  }
+
+  function normalizeSiverPanelSlug(value){
+    return String(value || '').trim().toLowerCase();
+  }
+
+  function isValidSiverPanelSlug(slug){
+    return /^[a-z0-9](?:[a-z0-9-]{3,30}[a-z0-9])?$/.test(slug);
+  }
+
+  function buildSiverPanelUrl(slug){
+    slug = normalizeSiverPanelSlug(slug);
+    return slug ? (getSiverPanelBaseUrl() + '/panel/' + slug) : '';
+  }
+
+  function updateSiverPanelUrlPreview(){
+    var slug = normalizeSiverPanelSlug($('#siver_panel_slug').val());
+    $('#siver_panel_slug').val(slug);
+    var previewUrl = buildSiverPanelUrl(slug);
+    $('#siver-panel-url-preview').text(previewUrl || '填写安全入口后，这里会显示远程访问地址');
+  }
+
+  function renderSiverPanelStatus(data){
+    data = data || {};
+    var state = data.state || (data.enabled ? 'idle' : 'disabled');
+    var stateMap = {
+      disabled:   {text:'已关闭', color:'#9ca3af', sub:'关闭后不会自动连接远程服务。'},
+      idle:       {text:'待连接', color:'#94a3b8', sub:'已保存配置，等待手动连接或下次启动自动连接。'},
+      connecting: {text:'连接中', color:'#3b82f6', sub:'正在连接远程服务，请稍候。'},
+      connected:  {text:'已连接', color:'#10b981', sub:'远程访问服务已建立连接，可通过公网地址访问面板。'},
+      retrying:   {text:'重试中', color:'#f59e0b', sub:'检测到网络异常，正在按策略自动重试。'},
+      disconnected:{text:'已断开', color:'#f97316', sub:'远程访问服务已断开，可重新点击连接。'},
+      error:      {text:'连接失败', color:'#ef4444', sub:'本次连接未成功，请根据服务反馈检查配置。'}
+    };
+    var current = stateMap[state] || stateMap.idle;
+    var slug = data.slug || normalizeSiverPanelSlug($('#siver_panel_slug').val());
+    var exampleUrl = data.example_url || buildSiverPanelUrl(slug);
+    var currentUrl = data.panel_url || exampleUrl;
+    var retryText = data.enabled ? ((data.retry_count || 0) + ' / ' + (data.retry_max || 3)) : '未启用';
+    var bindText = data.device_bound ? '已绑定' : '未绑定';
+
+    $('#siver-panel-status-dot').css('background', current.color);
+    $('#siver-panel-status-text').text(current.text);
+    $('#siver-panel-status-sub').text(current.sub);
+    $('#siver-panel-last-message').text(data.last_message || current.sub);
+    $('#siver-panel-current-url').html(currentUrl ? '<a href="' + currentUrl + '" target="_blank" rel="noopener">' + currentUrl + '</a>' : '未生成');
+    $('#siver-panel-last-sync').text(data.updated_at ? ('更新于 ' + data.updated_at) : '-');
+
+    $('#siver-panel-quick-state').text(current.text).css('color', current.color);
+    $('#siver-panel-quick-bind').text(bindText);
+    $('#siver-panel-quick-expire').text(data.service_expire_at || '未获取');
+    $('#siver-panel-quick-retry').text(retryText);
+
+    updateSiverPanelUrlPreview();
+    if(state === 'connecting' || state === 'retrying'){
+      $('#btn-siver-panel-connect').prop('disabled', true).html('<i class="bi bi-hourglass-split"></i> 连接中...');
+    } else {
+      $('#btn-siver-panel-connect').prop('disabled', false).html('<i class="bi bi-plug"></i> ' + (state === 'connected' ? '重新连接' : '连接远程服务'));
+    }
+  }
+
+  function refreshSiverPanelStatus(){
+    return $.getJSON('/api/siver-panel/status')
+      .done(function(res){
+        if(res.status === 'success' && res.data){
+          renderSiverPanelStatus(res.data);
+        } else {
+          renderSiverPanelStatus({
+            state:'error',
+            enabled: $('#siver_panel_enabled').is(':checked'),
+            last_message: res.message || '无法获取远程服务状态'
+          });
+        }
+      })
+      .fail(function(xhr){
+        renderSiverPanelStatus({
+          state:'error',
+          enabled: $('#siver_panel_enabled').is(':checked'),
+          last_message: '远程服务状态获取失败：' + xhr.status
+        });
+      });
+  }
+
+  function pollSiverPanelStatusForModal(options){
+    options = options || {};
+    var maxAttempts = options.maxAttempts || 36;
+    var intervalMs = options.intervalMs || 700;
+    var attempt = 0;
+
+    function doneWithStatus(data){
+      renderSiverPanelStatus(data || {});
+      var state = (data && data.state) || 'idle';
+      var message = (data && data.last_message) || '远程服务状态已更新';
+      var panelUrl = (data && data.panel_url) || '';
+
+      if(state === 'connected'){
+        var body = message;
+        if(panelUrl){
+          body += '<br><br><a href="' + panelUrl + '" target="_blank" rel="noopener">' + panelUrl + '</a>';
+        }
+        svModal.success(body, '连接成功');
+      } else if(state === 'error' || state === 'disconnected' || state === 'disabled'){
+        svModal.error(message, '连接结果');
+      } else {
+        svModal.alert(message, '连接处理中');
+      }
+    }
+
+    function requestStatus(){
+      attempt += 1;
+      $.getJSON('/api/siver-panel/status')
+        .done(function(res){
+          var data = (res.status === 'success' && res.data) ? res.data : {
+            state:'error',
+            last_message:(res && res.message) || '无法获取远程服务状态'
+          };
+          var state = data.state || 'idle';
+          renderSiverPanelStatus(data);
+
+          if(state === 'connecting' || (state === 'retrying' && attempt < maxAttempts)){
+            setTimeout(requestStatus, intervalMs);
+            return;
+          }
+
+          doneWithStatus(data);
+        })
+        .fail(function(xhr){
+          if(attempt < maxAttempts){
+            setTimeout(requestStatus, intervalMs);
+            return;
+          }
+          var data = {
+            state:'error',
+            last_message:'远程服务状态获取失败：' + xhr.status
+          };
+          doneWithStatus(data);
+        });
+    }
+
+    requestStatus();
+  }
+
+  function connectSiverPanel(){
+    var enabled = $('#siver_panel_enabled').is(':checked');
+    var activationCode = $('#siver_panel_activation_code').val().trim();
+    var slug = normalizeSiverPanelSlug($('#siver_panel_slug').val()).replace(/[^a-z0-9-]/g, '');
+    $('#siver_panel_slug').val(slug);
+    updateSiverPanelUrlPreview();
+
+    if(!enabled){
+      svModal.error('请先开启远程访问服务开关。');
+      return;
+    }
+    if(!activationCode){
+      svModal.error('请先填写远程访问激活码。');
+      return;
+    }
+    if(!isValidSiverPanelSlug(slug)){
+      svModal.error('安全入口格式不正确，请使用 5-32 位的小写字母、数字或连字符，且不能以连字符开头或结尾。');
+      return;
+    }
+
+    renderSiverPanelStatus({
+      state:'connecting',
+      enabled:true,
+      slug:slug,
+      last_message:'正在保存配置并发起远程连接，请稍候...'
+    });
+
+    saveConfig(function(){
+      requestRemoteConnect({showConnectingState:false});
+    });
   }
   // 聚焦：若正显示遮罩值则清空，方便输入新 Key
   $(document).on('focus', '.api-key-input', function(){
@@ -1869,11 +2687,68 @@ $(function(){
   });
 
   // ===== Sidebar Tab Switch =====
-  $('.sidebar .nav-link').click(function(){
+  function isMobileLayout(){
+    return window.matchMedia('(max-width: 900px)').matches;
+  }
+  function getActiveTabId(){
+    return $('.config-panel.active').attr('id') || '';
+  }
+  function isPageVisible(){
+    return typeof document.hidden === 'boolean' ? !document.hidden : true;
+  }
+  function setMobileSidebar(open){
+    $('body').toggleClass('mobile-nav-open', !!open);
+    $('.sidebar').toggleClass('mobile-open', !!open);
+    $('#mobileSidebarOverlay').toggleClass('active', !!open);
+  }
+  function activateTab(tabId){
     $('.sidebar .nav-link').removeClass('active');
-    $(this).addClass('active');
+    $('.sidebar .nav-link[data-tab="'+tabId+'"]').addClass('active');
     $('.config-panel').removeClass('active');
-    $('#'+$(this).data('tab')).addClass('active');
+    $('#'+tabId).addClass('active');
+    if(typeof syncStatusPolling === 'function'){
+      syncStatusPolling(tabId === 'tab-status');
+    }
+    if(typeof syncSiverPanelPolling === 'function'){
+      syncSiverPanelPolling(tabId === 'tab-siver-panel');
+    }
+  }
+  $('#mobileMenuBtn').on('click', function(e){
+    e.preventDefault();
+    setMobileSidebar(true);
+  });
+  $('#mobileSidebarClose, #mobileSidebarOverlay').on('click', function(){
+    setMobileSidebar(false);
+  });
+  $('.sidebar .nav-link').click(function(){
+    var targetTabId = $(this).data('tab');
+    activateTab(targetTabId);
+    if(isMobileLayout()){
+      setMobileSidebar(false);
+    }
+  });
+  $(window).on('resize', function(){
+    if(!isMobileLayout()){
+      setMobileSidebar(false);
+    }
+    if(typeof syncMobileLogTitle === 'function'){
+      syncMobileLogTitle();
+    }
+    if(typeof syncMobileRecentLogs === 'function'){
+      syncMobileRecentLogs();
+    }
+    if(typeof syncLogViewport === 'function'){
+      syncLogViewport();
+    }
+    if(typeof syncLogPolling === 'function'){
+      syncLogPolling(false);
+    }
+    if(typeof syncStatusPolling === 'function'){
+      syncStatusPolling(false);
+    }
+    if(typeof syncSiverPanelPolling === 'function'){
+      syncSiverPanelPolling(false);
+    }
   });
 
   // ===== Listen Mode Toggle =====
@@ -2641,6 +3516,9 @@ $(function(){
       group_split_reply_switch:$('#group_split_reply_switch').is(':checked'),
       group_split_max_chars:Math.max(1,parseInt($('#group_split_max_chars').val())||100),
       group_split_max_count:Math.max(1,parseInt($('#group_split_max_count').val())||4),
+      siver_panel_enabled:$('#siver_panel_enabled').is(':checked'),
+      siver_panel_activation_code:$('#siver_panel_activation_code').val().trim(),
+      siver_panel_slug:normalizeSiverPanelSlug($('#siver_panel_slug').val()),
       custom_forward_switch:$('#custom_forward_switch').is(':checked'),
       custom_forward_list:[]
     };
@@ -2803,6 +3681,25 @@ $(function(){
   $('#btnLoad').click(function(){
     svModal.confirm('加载配置将覆盖当前未保存的修改，确定？', function(){ location.reload(); }, '加载配置', '确定加载', '取消');
   });
+  $('#siver_panel_slug').on('input', function(){
+    this.value = normalizeSiverPanelSlug(this.value).replace(/[^a-z0-9-]/g, '');
+    updateSiverPanelUrlPreview();
+  });
+  $('#siver_panel_enabled').on('change', function(){
+    updateSiverPanelUrlPreview();
+    if(!this.checked){
+      $.post('/api/siver-panel/disconnect').always(function(){ refreshSiverPanelStatus(); });
+    } else {
+      renderSiverPanelStatus({
+        state:'idle',
+        enabled:true,
+        slug:normalizeSiverPanelSlug($('#siver_panel_slug').val()),
+        last_message:'已开启远程访问服务，保存后可手动连接，或等待面板下次启动自动连接。'
+      });
+    }
+  });
+  $('#btn-siver-panel-connect').on('click', function(){ connectSiverPanel(); });
+  updateSiverPanelUrlPreview();
 
   function _doStartBot(){
     $.post('/start_bot', function(res){
@@ -2869,6 +3766,60 @@ $(function(){
   var $logPanel=$('#logPanel'), $logBody=$('#logBody');
   var currentFilter='ALL';
 
+  function syncMobileLogTitle(){
+    if(!window.matchMedia('(max-width: 900px)').matches) return;
+    $('.log-title-sub').text($logPanel.hasClass('expanded') ? '查看全部' : '最近两条');
+  }
+
+  function syncMobileRecentLogs(){
+    var $preview = $('#mobileLogPreview');
+    if(!window.matchMedia('(max-width: 900px)').matches || !$logPanel.hasClass('collapsed')){
+      $preview.empty();
+      return;
+    }
+    var $entries = $logBody.find('.log-entry');
+    var $eligible = currentFilter === 'ALL'
+      ? $entries
+      : $entries.filter(function(){
+          return $(this).data('level') === currentFilter;
+        });
+    var html = '';
+    $eligible.slice(-2).each(function(){
+      var $entry = $(this);
+      var badge = $entry.find('.log-badge').prop('outerHTML') || '';
+      var time = $entry.find('.log-time').text();
+      var msg = $entry.find('.log-msg').text();
+      html += '<div class="mobile-log-card">' +
+        '<div class="mobile-log-meta">' + badge + '<span class="mobile-log-time">' + time + '</span></div>' +
+        '<div class="mobile-log-msg">' + msg + '</div>' +
+      '</div>';
+    });
+    if(!html){
+      html = '<div class="mobile-log-empty">暂无日志</div>';
+    }
+    $preview.html(html);
+  }
+
+  function syncLogViewport(){
+    var body = $logBody[0];
+    if(!body) return;
+    if(window.matchMedia('(max-width: 900px)').matches && $logPanel.hasClass('collapsed')){
+      body.scrollTop = 0;
+      return;
+    }
+    if($logPanel.hasClass('expanded')){
+      body.scrollTop = body.scrollHeight;
+    }
+  }
+
+  if(window.matchMedia('(max-width: 900px)').matches){
+    $logPanel.removeClass('expanded').addClass('collapsed');
+    $('#btnToggleLog i').attr('class','bi bi-chevron-up');
+    syncMobileLogTitle();
+    syncMobileRecentLogs();
+    syncLogViewport();
+  }
+
   function toggleLogPanel(){
     if($logPanel.hasClass('expanded')){
       $logPanel.removeClass('expanded').addClass('collapsed');
@@ -2876,7 +3827,12 @@ $(function(){
     } else {
       $logPanel.removeClass('collapsed').addClass('expanded');
       $('#btnToggleLog i').attr('class','bi bi-chevron-down');
-      $logBody.scrollTop($logBody[0].scrollHeight);
+    }
+    syncMobileLogTitle();
+    syncMobileRecentLogs();
+    syncLogViewport();
+    if(typeof syncLogPolling === 'function'){
+      syncLogPolling(true);
     }
   }
 
@@ -2898,12 +3854,16 @@ $(function(){
       if(currentFilter==='ALL') $(this).show();
       else $(this).toggle($(this).data('level')===currentFilter);
     });
+    syncMobileRecentLogs();
+    syncLogViewport();
   }
 
   $('#btnClearLog').click(function(e){
     e.stopPropagation();
     $logBody.empty();
-    lastLogCount=0;
+    lastLogId=0;
+    syncMobileRecentLogs();
+    syncLogViewport();
   });
 
   // ===== 版本更新检查 =====
@@ -2998,7 +3958,7 @@ $(function(){
 
   // ===== Status Panel =====
   function refreshStatus(){
-    $.getJSON('/get_status', function(res){
+    return $.getJSON('/get_status', function(res){
       if(!res || res.status !== 'success') return;
       var d = res.data;
       if(d.bot_running){
@@ -3054,8 +4014,196 @@ $(function(){
       }
     });
   }
-  refreshStatus();
-  setInterval(refreshStatus, 5000);
+  var STATUS_POLL_VISIBLE_MS = 5500;
+  var STATUS_POLL_HIDDEN_MS = 20000;
+  var SIVER_PANEL_POLL_VISIBLE_MS = 5000;
+  var SIVER_PANEL_POLL_HIDDEN_MS = 20000;
+  var LOG_POLL_VISIBLE_MS = 5000;
+  var LOG_POLL_MOBILE_PREVIEW_MS = 6000;
+  var LOG_POLL_HIDDEN_MS = 15000;
+
+  var statusPollTimer = null;
+  var statusPollInFlight = false;
+  var siverPanelPollTimer = null;
+  var siverPanelPollInFlight = false;
+  var logPollTimer = null;
+  var logPollInFlight = false;
+
+  function isForceAdminChangeRequired(){
+    return !!window.__FORCE_REMOTE_ADMIN_CHANGE__;
+  }
+
+  function shouldPromptAdminChangeForRemoteConnect(){
+    return !!window.__REMOTE_CONNECT_BLOCK_REQUIRED__;
+  }
+
+  function isStatusTabActive(){
+    return getActiveTabId() === 'tab-status';
+  }
+
+  function isSiverPanelTabActive(){
+    return getActiveTabId() === 'tab-siver-panel';
+  }
+
+  function isMobileLogPreviewActive(){
+    return isMobileLayout() && $logPanel.hasClass('collapsed');
+  }
+
+  function shouldPollLogFeed(){
+    return $logPanel.hasClass('expanded') || isMobileLogPreviewActive();
+  }
+
+  function getStatusPollDelay(){
+    if(isForceAdminChangeRequired()){
+      return null;
+    }
+    if(!isStatusTabActive()){
+      return null;
+    }
+    return isPageVisible() ? STATUS_POLL_VISIBLE_MS : STATUS_POLL_HIDDEN_MS;
+  }
+
+  function getSiverPanelPollDelay(){
+    if(isForceAdminChangeRequired()){
+      return null;
+    }
+    if(!isSiverPanelTabActive()){
+      return null;
+    }
+    return isPageVisible() ? SIVER_PANEL_POLL_VISIBLE_MS : SIVER_PANEL_POLL_HIDDEN_MS;
+  }
+
+  function getLogPollDelay(){
+    if(isForceAdminChangeRequired()){
+      return null;
+    }
+    if(!shouldPollLogFeed()){
+      return null;
+    }
+    if(!isPageVisible()){
+      return LOG_POLL_HIDDEN_MS;
+    }
+    if($logPanel.hasClass('expanded')){
+      return LOG_POLL_VISIBLE_MS;
+    }
+    if(isMobileLogPreviewActive()){
+      return LOG_POLL_MOBILE_PREVIEW_MS;
+    }
+    return null;
+  }
+
+  function scheduleStatusPolling(delay){
+    clearTimeout(statusPollTimer);
+    if(delay == null){
+      return;
+    }
+    statusPollTimer = setTimeout(function(){
+      triggerStatusPolling(false);
+    }, delay);
+  }
+
+  function triggerStatusPolling(immediate){
+    clearTimeout(statusPollTimer);
+    if(statusPollInFlight){
+      scheduleStatusPolling(getStatusPollDelay());
+      return;
+    }
+    statusPollInFlight = true;
+    refreshStatus().always(function(){
+      statusPollInFlight = false;
+      scheduleStatusPolling(getStatusPollDelay());
+    });
+  }
+
+  function syncStatusPolling(immediate){
+    if(immediate && isStatusTabActive()){
+      triggerStatusPolling(true);
+      return;
+    }
+    scheduleStatusPolling(getStatusPollDelay());
+  }
+
+  function scheduleSiverPanelPolling(delay){
+    clearTimeout(siverPanelPollTimer);
+    if(delay == null){
+      return;
+    }
+    siverPanelPollTimer = setTimeout(function(){
+      triggerSiverPanelPolling(false);
+    }, delay);
+  }
+
+  function triggerSiverPanelPolling(immediate){
+    clearTimeout(siverPanelPollTimer);
+    var delay = getSiverPanelPollDelay();
+    if(delay == null){
+      return;
+    }
+    if(siverPanelPollInFlight){
+      scheduleSiverPanelPolling(delay);
+      return;
+    }
+    siverPanelPollInFlight = true;
+    refreshSiverPanelStatus().always(function(){
+      siverPanelPollInFlight = false;
+      scheduleSiverPanelPolling(getSiverPanelPollDelay());
+    });
+  }
+
+  function syncSiverPanelPolling(immediate){
+    if(immediate && isSiverPanelTabActive()){
+      triggerSiverPanelPolling(true);
+      return;
+    }
+    scheduleSiverPanelPolling(getSiverPanelPollDelay());
+  }
+
+  function scheduleLogPolling(delay){
+    clearTimeout(logPollTimer);
+    if(delay == null){
+      return;
+    }
+    logPollTimer = setTimeout(function(){
+      triggerLogPolling(false);
+    }, delay);
+  }
+
+  function triggerLogPolling(immediate){
+    clearTimeout(logPollTimer);
+    var delay = getLogPollDelay();
+    if(delay == null){
+      return;
+    }
+    if(logPollInFlight){
+      scheduleLogPolling(delay);
+      return;
+    }
+    logPollInFlight = true;
+    refreshLogFeed().always(function(){
+      logPollInFlight = false;
+      scheduleLogPolling(getLogPollDelay());
+    });
+  }
+
+  function syncLogPolling(immediate){
+    var delay = getLogPollDelay();
+    if(immediate && delay != null){
+      triggerLogPolling(true);
+      return;
+    }
+    scheduleLogPolling(delay);
+  }
+
+  document.addEventListener('visibilitychange', function(){
+    var immediate = isPageVisible();
+    syncStatusPolling(immediate);
+    syncSiverPanelPolling(immediate);
+    syncLogPolling(immediate);
+  });
+
+  syncStatusPolling(true);
+  syncSiverPanelPolling(true);
+  syncLogPolling(true);
   checkUpdate(false); // 页面加载时自动检查一次
   setInterval(function(){ checkUpdate(false); }, 6 * 60 * 60 * 1000); // 每 6 小时自动检查一次
 
@@ -3063,7 +4211,10 @@ $(function(){
   // 进入 tab 时加载当前用户名
   $(document).on('click', '[data-tab="tab-account"]', function(){
     $.getJSON('/get_admin_config', function(res){
-      if(res.status === 'success') $('#acc-username').val(res.username);
+      if(res.status === 'success'){
+        $('#acc-username').val(res.username);
+        $('#force-acc-username').val(res.username);
+      }
     });
   });
   function showMsg(id, msg, ok){
@@ -3075,6 +4226,101 @@ $(function(){
        .show();
     setTimeout(function(){ $el.hide(); }, 3500);
   }
+  function showForceAdminChangeMsg(msg, ok){
+    var $el = $('#force-admin-change-msg');
+    $el.text(msg)
+       .css({
+         'background': ok ? '#F0FBF5' : '#FFF0F0',
+         'border': '1px solid ' + (ok ? '#B7EBD0' : '#FECACA'),
+        'color': ok ? '#06AD56' : '#DC2626'
+      })
+       .show();
+  }
+  function setPendingRemoteConnectAfterAdminChange(value){
+    window.__PENDING_REMOTE_CONNECT_AFTER_ADMIN_CHANGE__ = !!value;
+  }
+  function syncAccountUsername(username){
+    if(typeof username !== 'string') return;
+    $('#acc-username').val(username);
+    $('#force-acc-username').val(username);
+    $('.topbar-username').text(username);
+  }
+  function unlockForceAdminChange(){
+    window.__FORCE_REMOTE_ADMIN_CHANGE__ = false;
+    window.__REMOTE_CONNECT_BLOCK_REQUIRED__ = false;
+    setPendingRemoteConnectAfterAdminChange(false);
+    $('#force-admin-change-overlay').hide();
+    $('#force-admin-change-msg').hide();
+    syncStatusPolling(true);
+    syncSiverPanelPolling(true);
+    syncLogPolling(true);
+  }
+  function requestRemoteConnect(options){
+    options = options || {};
+    var pollAfterSuccess = options.pollAfterSuccess !== false;
+    var showConnectingState = options.showConnectingState !== false;
+    if(showConnectingState){
+      renderSiverPanelStatus({
+        state:'connecting',
+        enabled: $('#siver_panel_enabled').is(':checked'),
+        slug: normalizeSiverPanelSlug($('#siver_panel_slug').val()),
+        last_message:'正在发起远程连接，请稍候...'
+      });
+    }
+    $.ajax({
+      url:'/api/siver-panel/connect',
+      type:'POST',
+      contentType:'application/json',
+      data: JSON.stringify({}),
+      success:function(res){
+        if(res.status !== 'success'){
+          if((res.error_code || '') === 'default_admin_credentials_block_remote_connect' || (res.data && res.data.last_error_code === 'default_admin_credentials_block_remote_connect')){
+            window.__REMOTE_CONNECT_BLOCK_REQUIRED__ = true;
+            setPendingRemoteConnectAfterAdminChange(true);
+            openForceAdminChangeOverlay();
+            return;
+          }
+          setPendingRemoteConnectAfterAdminChange(false);
+          svModal.error(res.message || '远程连接发起失败');
+        } else {
+          setPendingRemoteConnectAfterAdminChange(false);
+          if(pollAfterSuccess){
+            pollSiverPanelStatusForModal();
+          }
+        }
+        setTimeout(refreshSiverPanelStatus, 250);
+      },
+      error:function(xhr){
+        setPendingRemoteConnectAfterAdminChange(false);
+        svModal.error('远程连接请求失败：' + xhr.status);
+        setTimeout(refreshSiverPanelStatus, 250);
+      }
+    });
+  }
+  function saveAdminCredentials(options){
+    options = options || {};
+    var username = String(options.username || '').trim();
+    var password = options.password || '';
+    var onSuccess = options.onSuccess || function(){};
+    var onError = options.onError || function(msg){ showMsg('acc-msg', msg, false); };
+    $.ajax({
+      url:'/save_admin_config',
+      type:'POST',
+      contentType:'application/json',
+      data: JSON.stringify({username: username, password: password}),
+      success: function(res){
+        if(res.status === 'success'){
+          syncAccountUsername(res.username || username);
+          onSuccess(res);
+          return;
+        }
+        onError(res.message || '保存失败');
+      },
+      error: function(xhr){
+        onError('请求失败: ' + xhr.responseText);
+      }
+    });
+  }
   $('#btn-save-account').click(function(){
     var u = $('#acc-username').val().trim();
     var p = $('#acc-password').val();
@@ -3083,10 +4329,96 @@ $(function(){
     if(p !== p2){ showMsg('acc-msg','两次输入的密码不一致',false); return; }
     $.ajax({ url:'/save_admin_config', type:'POST', contentType:'application/json',
       data: JSON.stringify({username:u, password:p}),
-      success: function(res){ showMsg('acc-msg', res.message, res.status==='success'); if(res.status==='success'){ $('#acc-password').val(''); $('#acc-password2').val(''); } },
+      success: function(res){
+        showMsg('acc-msg', res.message, res.status==='success');
+        if(res.status==='success'){
+          syncAccountUsername(res.username || u);
+          $('#acc-password').val('');
+          $('#acc-password2').val('');
+          window.__REMOTE_CONNECT_BLOCK_REQUIRED__ = false;
+          if(!res.force_admin_change_required){
+            unlockForceAdminChange();
+          }
+        }
+      },
       error: function(xhr){ showMsg('acc-msg','请求失败: '+xhr.responseText, false); }
     });
   });
+  function openForceAdminChangeOverlay(){
+    var requireRemoteLoginChange = isForceAdminChangeRequired();
+    var requireRemoteConnectChange = shouldPromptAdminChangeForRemoteConnect();
+    if(!(requireRemoteLoginChange || requireRemoteConnectChange)){
+      return;
+    }
+    $('#sv-modal-overlay').hide();
+    activateTab('tab-account');
+    $('#force-acc-password').val('');
+    $('#force-acc-password2').val('');
+    $('#force-admin-change-msg').hide();
+    if(requireRemoteLoginChange){
+      setPendingRemoteConnectAfterAdminChange(false);
+      $('#force-admin-change-title').text('远程访问禁止使用默认账号密码');
+      $('#force-admin-change-body').html('当前是通过远程访问链接登录，且仍在使用默认账号 <code>admin</code> / 密码 <code>123456</code>。<br>为了安全，必须先修改后台账号密码，修改完成后才可以继续使用面板。');
+    } else {
+      setPendingRemoteConnectAfterAdminChange(true);
+      $('#force-admin-change-title').text('连接远程服务前必须先修改默认账号密码');
+      $('#force-admin-change-body').html('当前后台仍在使用默认账号 <code>admin</code> / 密码 <code>123456</code>。<br>为了安全，必须先修改后台账号密码，修改完成后才可以继续连接远程访问服务。');
+    }
+    $.getJSON('/get_admin_config', function(res){
+      if(res.status === 'success'){
+        syncAccountUsername(res.username || '');
+      }
+      $('#force-admin-change-overlay').css('display', 'flex');
+      setTimeout(function(){ $('#force-acc-username').focus(); }, 100);
+    }).fail(function(){
+      $('#force-admin-change-overlay').css('display', 'flex');
+      setTimeout(function(){ $('#force-acc-username').focus(); }, 100);
+    });
+  }
+  $('#force-admin-change-submit').on('click', function(){
+    var u = $('#force-acc-username').val().trim();
+    var p = $('#force-acc-password').val();
+    var p2 = $('#force-acc-password2').val();
+    if(!u || !p){
+      showForceAdminChangeMsg('用户名和密码不能为空', false);
+      return;
+    }
+    if(p !== p2){
+      showForceAdminChangeMsg('两次输入的密码不一致', false);
+      return;
+    }
+    var $btn = $(this);
+    $btn.prop('disabled', true).text('保存中...');
+    showForceAdminChangeMsg('正在保存新的账号密码...', true);
+    saveAdminCredentials({
+      username: u,
+      password: p,
+      onSuccess: function(res){
+        $btn.prop('disabled', false).text('保存并继续使用');
+        $('#acc-password').val('');
+        $('#acc-password2').val('');
+        $('#force-acc-password').val('');
+        $('#force-acc-password2').val('');
+        showForceAdminChangeMsg(res.message || '账号密码已保存', true);
+        if(!res.force_admin_change_required){
+          var shouldReconnectRemote = !!window.__PENDING_REMOTE_CONNECT_AFTER_ADMIN_CHANGE__;
+          unlockForceAdminChange();
+          if(shouldReconnectRemote){
+            requestRemoteConnect({showConnectingState:true});
+          }
+        }
+      },
+      onError: function(msg){
+        $btn.prop('disabled', false).text('保存并继续使用');
+        showForceAdminChangeMsg(msg, false);
+      }
+    });
+  });
+  if(isForceAdminChangeRequired()){
+    openForceAdminChangeOverlay();
+  } else if(shouldPromptAdminChangeForRemoteConnect()){
+    openForceAdminChangeOverlay();
+  }
 
   // ===== Email Panel =====
   $(document).on('click', '[data-tab="tab-email"]', function(){
@@ -3267,46 +4599,46 @@ $(function(){
   });
 
   // ===== Log Polling =====
-  // 用最后一条日志的 time+message 做标识，避免服务端 50 条上限导致 count 比较失效
-  var lastLogKey = (function(){
+  function parseLogId(value){
+    var logId = parseInt(value, 10);
+    return isNaN(logId) ? 0 : logId;
+  }
+  function buildLogEntryHtml(log){
+    var lvl = (log.level||'INFO').toUpperCase();
+    var levelMap={INFO:'log-info',SUCCESS:'log-success',WARNING:'log-warning',ERROR:'log-error',DEBUG:'log-debug'};
+    var cls = levelMap[lvl]||'log-info';
+    var logId = parseLogId(log.id);
+    return '<div class="log-entry" data-level="'+lvl+'" data-log-id="'+logId+'">'+
+      '<span class="log-time">'+log.time+'</span>'+
+      '<span class="log-badge '+cls+'">'+lvl+'</span>'+
+      '<span class="log-msg">'+log.message+'</span></div>';
+  }
+  var lastLogId = (function(){
     var last = $logBody.find('.log-entry').last();
-    return last.length ? (last.find('.log-time').text() + last.find('.log-msg').text()) : '';
+    return last.length ? parseLogId(last.attr('data-log-id')) : 0;
   })();
-  setInterval(function(){
-    $.getJSON('/get_logs',function(data){
+  function refreshLogFeed(){
+    var query = {};
+    if(lastLogId > 0){
+      query.after_id = lastLogId;
+    }
+    return $.getJSON('/get_logs', query, function(data){
+      if(data.reset){
+        $logBody.empty();
+        lastLogId = 0;
+      }
       if(!data.logs || !data.logs.length) return;
-      var levelMap={INFO:'log-info',SUCCESS:'log-success',WARNING:'log-warning',ERROR:'log-error',DEBUG:'log-debug'};
-      var lastLog = data.logs[data.logs.length - 1];
-      var newKey = (lastLog.time || '') + (lastLog.message || '');
-      if(newKey === lastLogKey) return;  // 内容无变化，跳过
-
-      // 找到新日志的起始索引
-      var startIdx = 0;
-      if(lastLogKey){
-        for(var i = data.logs.length - 1; i >= 0; i--){
-          var k = (data.logs[i].time || '') + (data.logs[i].message || '');
-          if(k === lastLogKey){ startIdx = i + 1; break; }
-        }
-        // startIdx===0 且 lastLogKey 有值，说明缓冲区翻滚，清空后全量渲染
-        if(startIdx === 0) $logBody.empty();
-      }
-      for(var i = startIdx; i < data.logs.length; i++){
+      for(var i = 0; i < data.logs.length; i++){
         var log = data.logs[i];
-        var lvl = (log.level||'INFO').toUpperCase();
-        var cls = levelMap[lvl]||'log-info';
-        var entry='<div class="log-entry" data-level="'+lvl+'">'+
-          '<span class="log-time">'+log.time+'</span>'+
-          '<span class="log-badge '+cls+'">'+lvl+'</span>'+
-          '<span class="log-msg">'+log.message+'</span></div>';
-        $logBody.append(entry);
+        $logBody.append(buildLogEntryHtml(log));
+        lastLogId = Math.max(lastLogId, parseLogId(log.id));
       }
-      lastLogKey = newKey;
       filterLogs();
       if($logPanel.hasClass('expanded')){
         $logBody.scrollTop($logBody[0].scrollHeight);
       }
     });
-  },3000);
+  }
 
   // ===== checkActivate =====
   var _activateStatus = null; // null=未知, true=已激活, false=未激活
@@ -3383,6 +4715,36 @@ function toggleGroupSplitReply(checked) {
 <style>
 @keyframes svModalIn { from { opacity:0; transform:scale(.94) translateY(8px); } to { opacity:1; transform:scale(1) translateY(0); } }
 </style>
+
+<!-- ===== 远程默认账号强制修改弹层 ===== -->
+<div id="force-admin-change-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.58);z-index:10001;align-items:center;justify-content:center;padding:18px;">
+  <div style="background:var(--card);border-radius:16px;padding:30px 28px 24px;max-width:460px;width:100%;box-shadow:0 12px 48px rgba(0,0,0,.28);animation:svModalIn .18s ease;">
+    <div style="text-align:center;font-size:38px;margin-bottom:12px;"><i class="bi bi-shield-lock-fill" style="color:#FA5151;"></i></div>
+    <div id="force-admin-change-title" style="font-size:16px;font-weight:800;color:var(--card-fg);margin-bottom:8px;text-align:center;">远程访问禁止使用默认账号密码</div>
+    <div id="force-admin-change-body" style="font-size:13px;color:var(--muted);text-align:center;line-height:1.8;margin-bottom:18px;">
+      当前是通过远程访问链接登录，且仍在使用默认账号 <code>admin</code> / 密码 <code>123456</code>。<br>
+      为了安全，必须先修改后台账号密码，修改完成后才可以继续使用面板。
+    </div>
+    <div style="display:grid;gap:12px;">
+      <div>
+        <label class="cfg-label" for="force-acc-username">新用户名</label>
+        <input id="force-acc-username" type="text" class="form-control" placeholder="请输入新的后台用户名" autocomplete="off">
+      </div>
+      <div>
+        <label class="cfg-label" for="force-acc-password">新密码</label>
+        <input id="force-acc-password" type="password" class="form-control" placeholder="请输入新的后台密码" autocomplete="new-password">
+      </div>
+      <div>
+        <label class="cfg-label" for="force-acc-password2">确认新密码</label>
+        <input id="force-acc-password2" type="password" class="form-control" placeholder="请再次输入新的后台密码" autocomplete="new-password">
+      </div>
+    </div>
+    <div id="force-admin-change-msg" style="display:none;font-size:12.5px;text-align:center;margin-top:14px;border-radius:6px;padding:8px 10px;"></div>
+    <div style="display:flex;justify-content:center;margin-top:16px;">
+      <button id="force-admin-change-submit" style="padding:9px 24px;border-radius:8px;font-weight:700;font-size:13.5px;cursor:pointer;border:none;background:#07C160;color:#fff;transition:opacity .15s;">保存并继续使用</button>
+    </div>
+  </div>
+</div>
 
 <!-- ===== 激活码输入弹窗 ===== -->
 <div id="activate-dialog-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.48);z-index:10000;align-items:center;justify-content:center;">

@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.7.17"
-version_log = "V4.7.17 - 适配最新4.1.9.23客户端(源码用户需更新wxautox4内核库至最新)、优化图片下载兼容嵌入式打开图片、内核库更新优化"
+version = "V4.7.18"
+version_log = "V4.7.18 - 新增提供远程访问服务、适配最新4.1.9.23客户端(源码用户需更新wxautox4内核库至最新)"
 
 # ============================================================
 # 标准库导入
@@ -301,6 +301,19 @@ class WXBotConfig:
                     "group_split_reply_switch": False,
                     "group_split_max_chars": 100,
                     "group_split_max_count": 4,
+                    "siver_panel_enabled": False,
+                    "siver_panel_activation_code": "",
+                    "siver_panel_slug": "",
+                    "siver_panel_install_id": "",
+                    "siver_panel_machine_fingerprint": "",
+                    "siver_panel_device_id": "",
+                    "siver_panel_device_secret": "",
+                    "siver_panel_base_url": "https://panel.siver.top",
+                    "siver_panel_ws_url": "wss://panel.siver.top/relay/ws",
+                    "siver_panel_panel_url": "",
+                    "siver_panel_service_expire_at": "",
+                    "siver_panel_last_error_code": "",
+                    "siver_panel_last_error_message": "",
                 }
                 with open(self.CONFIG_FILE, "w", encoding="utf-8") as f:
                     json.dump(base_config, f, ensure_ascii=False, indent=4)
@@ -543,6 +556,33 @@ class WXBotConfig:
         self.group_split_reply_switch = bool(self.config.get('group_split_reply_switch', False))
         self.group_split_max_chars    = max(1, int(self.config.get('group_split_max_chars', 100)))
         self.group_split_max_count    = max(1, int(self.config.get('group_split_max_count', 4)))
+        _siver_panel_defaults = {
+            'siver_panel_enabled': False,
+            'siver_panel_activation_code': '',
+            'siver_panel_slug': '',
+            'siver_panel_install_id': '',
+            'siver_panel_machine_fingerprint': '',
+            'siver_panel_device_id': '',
+            'siver_panel_device_secret': '',
+            'siver_panel_base_url': 'https://panel.siver.top',
+            'siver_panel_ws_url': 'wss://panel.siver.top/relay/ws',
+            'siver_panel_panel_url': '',
+            'siver_panel_service_expire_at': '',
+            'siver_panel_last_error_code': '',
+            'siver_panel_last_error_message': '',
+        }
+        _siver_panel_needs_save = any(k not in self.config for k in _siver_panel_defaults)
+        if self.config.get('siver_panel_base_url') == 'https://wxbot-panel.siverking.online':
+            self.config['siver_panel_base_url'] = 'https://panel.siver.top'
+            _siver_panel_needs_save = True
+        if self.config.get('siver_panel_ws_url') == 'wss://wxbot-panel.siverking.online/relay/ws':
+            self.config['siver_panel_ws_url'] = 'wss://panel.siver.top/relay/ws'
+            _siver_panel_needs_save = True
+        for k, v in _siver_panel_defaults.items():
+            self.config.setdefault(k, v)
+        if _siver_panel_needs_save:
+            self.save_config()
+            log(message='已自动补充 SiverPanel 远程访问配置默认值')
 
         log(message="全局配置更新完成")
 
