@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.7.18"
-version_log = "V4.7.18 - 新增提供远程访问服务、适配最新4.1.9.23客户端(源码用户需更新wxautox4内核库至最新)"
+version = "V4.7.19"
+version_log = "V4.7.19 - 新增提供远程访问服务(免服务器免穿透，官方直连服务)、适配最新客户端、内核库更新(源码用户需更新wxautox4内核库至最新) 修复转发消息bug、优化监听初始化、优化远程服务"
 
 # ============================================================
 # 标准库导入
@@ -1810,6 +1810,7 @@ class WXBot:
         self.wx.StartListening()
 
         # 添加管理员账号监听（管理员始终监听，不受白名单模式限制）
+        time.sleep(0.5)
         result = self.wx.AddListenChat(nickname=self.config.cmd, callback=self.message_handle_callback)
         if result:
             log(message=f"添加管理员 {self.config.cmd} 监听完成")
@@ -1820,6 +1821,7 @@ class WXBot:
         if not self.config.AllListen_switch:
             log(message="白名单模式开启")
             for user in self.config.listen_list:
+                time.sleep(0.5)
                 result = self.wx.AddListenChat(nickname=user, callback=self.message_handle_callback)
                 if result:
                     log(message=f"添加用户 {user} 监听完成")
@@ -1829,6 +1831,7 @@ class WXBot:
         # 若群机器人开关开启，则添加群聊监听
         if self.config.group_switch:
             for user in self.config.group:
+                time.sleep(0.5)
                 result = self.wx.AddListenChat(nickname=user, callback=self.message_handle_callback)
                 if result:
                     log(message=f"添加群组 {user} 监听完成")
@@ -1849,6 +1852,7 @@ class WXBot:
                         _fwd_sources.add(_src)
             for _source in _fwd_sources:
                 if _source and _source not in _already_listened:
+                    time.sleep(0.5)
                     _res = self.wx.AddListenChat(nickname=_source, callback=self.message_handle_callback)
                     if _res:
                         log(message=f"添加自定义转发监听源 {_source} 完成")

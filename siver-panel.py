@@ -34,8 +34,9 @@ HOP_BY_HOP_HEADERS = {
     "transfer-encoding",
     "upgrade",
 }
-INITIAL_NETWORK_RETRY_DELAYS = (5, 15, 30)
-RECONNECT_NETWORK_RETRY_DELAYS = (8, 18, 30, 60, 120)
+INITIAL_NETWORK_RETRY_DELAYS = (5, 15, 30, 60, 120, 300, 600, 900, 1200, 1800)
+RECONNECT_NETWORK_RETRY_DELAYS = (8, 18, 30, 60, 120, 300, 600, 900, 1200, 1800)
+TRANSIENT_HTTP_STATUS_CODES = {502, 503, 504}
 API_TIMEOUT = 30
 WS_OPEN_TIMEOUT = 30
 WS_AUTH_TIMEOUT = 25
@@ -665,6 +666,7 @@ class SiverPanelManager:
 
     def _fetch_device_status(self, config: dict[str, Any]) -> dict[str, Any]:
         response = self._request("GET", "/api/client/status", headers=self._device_headers(config))
+        self._raise_transient_http_error(response, "远程状态查询暂时不可用")
         if response.status_code == 401:
             raise ServiceIssue("invalid_device_credentials", "现有设备凭据已失效，请重新恢复或绑定")
         if response.status_code == 403:
@@ -685,6 +687,7 @@ class SiverPanelManager:
             "client_version": self.client_version,
         }
         response = self._request("POST", "/api/client/register", json_data=payload)
+        self._raise_transient_http_error(response, "远程绑定服务暂时不可用")
         if response.status_code >= 400:
             raise ServiceIssue("register_failed", self._response_message(response, "远程绑定请求失败"))
         return self._response_json(response)
@@ -697,6 +700,7 @@ class SiverPanelManager:
             "client_version": self.client_version,
         }
         response = self._request("POST", "/api/client/recover-device", json_data=payload)
+        self._raise_transient_http_error(response, "设备凭据恢复服务暂时不可用")
         if response.status_code >= 400:
             raise ServiceIssue("recover_failed", self._response_message(response, "设备凭据恢复失败"))
         return self._response_json(response)
@@ -708,6 +712,7 @@ class SiverPanelManager:
             json_data={"panel_slug": slug},
             headers=self._device_headers(config),
         )
+        self._raise_transient_http_error(response, "安全入口更新服务暂时不可用")
         if response.status_code == 400:
             raise ServiceIssue("invalid_slug", self._response_message(response, "安全入口格式不正确"))
         if response.status_code == 403:
@@ -761,6 +766,18 @@ class SiverPanelManager:
             return str(payload["message"])
         text = (response.text or "").strip()
         return text or fallback
+
+    def _raise_transient_http_error(self, response: Response, fallback: str) -> None:
+        if response.status_code not in TRANSIENT_HTTP_STATUS_CODES:
+            return
+        payload = self._response_json(response)
+        if payload.get("message"):
+            message = str(payload["message"])
+        else:
+            reason = (response.reason or "").strip()
+            suffix = f" {reason}" if reason else ""
+            message = f"{fallback}: HTTP {response.status_code}{suffix}"
+        raise NetworkIssue("remote_unavailable", message)
 
     def _load_config(self) -> dict[str, Any]:
         try:
