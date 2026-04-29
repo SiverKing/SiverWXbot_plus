@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.7.19"
-version_log = "V4.7.19 - 新增提供远程访问服务(免服务器免穿透，官方直连服务)、适配最新客户端、内核库更新(源码用户需更新wxautox4内核库至最新) 修复转发消息bug、优化监听初始化、优化远程服务"
+version = "V4.7.20"
+version_log = "V4.7.20 - 新增提供远程访问服务(免服务器免穿透，官方直连服务)、适配最新4.1.9.30客户端、新增适配国际版微信(语言设置需为中文)"
 
 # ============================================================
 # 标准库导入
@@ -1785,7 +1785,14 @@ class WXBot:
         # 若尚未实例化微信客户端则进行初始化
         if not self.wx:
             log(message="本次未获取客户端，正在初始化微信客户端...")
-            self.wx = WeChat()
+            try:
+                self.wx = WeChat(version='微信')
+            except Exception:
+                try:
+                    log(level='WARNING', message="初始化出错，尝试国际版")
+                    self.wx = WeChat(version='WeChat')
+                except Exception:
+                    raise   # 第二次也失败，抛出异常，由外层 try 接住
             # self.wx.Show()  # 首次强制弹出主窗口以获取焦点
 
         # 绑定 @ 标识（格式："@机器人昵称"）
@@ -3939,9 +3946,9 @@ class WXBot:
             log(level="ERROR", message=str(e) + "\n 初始化微信监听器失败，请检查微信是否启动登录正确，微信主窗口是否开着")
             log(level="ERROR", message=str(e) + "\n 请尝试退出wx再重新登录后再启动")
             log(level="ERROR", message=str(e) + "\n 请尝试退出wx再重新登录后再启动")
-            log(level="ERROR", message=str(e) + "\n 若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配,4.1.7 ~ 4.1.9.23")
-            log(level="ERROR", message=str(e) + "\n 若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配,4.1.7 ~ 4.1.9.23")
-            log(level="ERROR", message=str(e) + "\n 若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配,4.1.7 ~ 4.1.9.23")
+            log(level="ERROR", message=str(e) + "\n 若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配,4.1.7 ~ 4.1.9.30")
+            log(level="ERROR", message=str(e) + "\n 若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配,4.1.7 ~ 4.1.9.30")
+            log(level="ERROR", message=str(e) + "\n 若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配,4.1.7 ~ 4.1.9.30")
             self.run_flag = False
 
         # 主循环

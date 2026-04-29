@@ -1,6 +1,6 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.7.19-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
+[![Version](https://img.shields.io/badge/version-V4.7.20-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
 [![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
@@ -27,7 +27,7 @@
 
 **环境要求：**
 - Windows 操作系统
-- Windows wx PC 版（`4.1.7` ~ `4.1.9.23` 版本）
+- Windows wx PC 版（`4.1.7` ~ `4.1.9.30` 版本）
 
 **下载地址（二选一）：**
 
@@ -44,7 +44,7 @@
 **环境要求：**
 - Python `3.9` - `3.13`
 - Windows 操作系统
-- Windows wx PC 版（`4.1.7` ~ `4.1.9.23` 版本）
+- Windows wx PC 版（`4.1.7` ~ `4.1.9.30` 版本）
 - wxautox4内核库 设备授权（需购买，购买地址：https://www.siverking.online/static/img/siver_wx.jpg ）
 
 **安装步骤：**
@@ -427,7 +427,7 @@ SiverPanel 为 SiverWXbot 提供安全远程入口。不开服务器，不配穿
 2. 电脑自动休眠 黑屏都设为**从不**（一般情况程序会自动阻止不用手动调整）。
 3. 如需离线邮件提醒，请在配置面板修改设置邮件。
 4. 关闭wx自动更新。
-5. 适配 Windows wx `4.1.7` - `4.1.9.23`。
+5. 适配 Windows wx `4.1.7` - `4.1.9.30`。
 6. 程序接管wx运行时，请勿手动干预，避免影响自动化操作。
 7. **各 SDK 接口填写说明：**
    - **DusAPI**：填写 Key 和模型 ID，模型 ID 可从 https://docs.dusapi.com 查看
