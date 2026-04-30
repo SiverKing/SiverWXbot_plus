@@ -677,6 +677,8 @@ def dashboard():
     # 多 Prompt：迁移旧 prompt 字段 + 补充新字段默认值
     config.setdefault('siver_panel_enabled', False)
     config.setdefault('siver_panel_activation_code', '')
+    config.setdefault('siver_panel_activation_code_applied_hash', '')
+    config.setdefault('siver_panel_activation_code_failed_hash', '')
     config.setdefault('siver_panel_slug', '')
     config.setdefault('siver_panel_install_id', '')
     config.setdefault('siver_panel_machine_fingerprint', '')
@@ -1691,6 +1693,8 @@ def main():
                 "group_split_max_count": 4,
                 "siver_panel_enabled": False,
                 "siver_panel_activation_code": "",
+                "siver_panel_activation_code_applied_hash": "",
+                "siver_panel_activation_code_failed_hash": "",
                 "siver_panel_slug": "",
                 "siver_panel_install_id": "",
                 "siver_panel_machine_fingerprint": "",

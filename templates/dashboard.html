@@ -980,6 +980,7 @@ body.mobile-nav-open { overflow: hidden; }
             <div style="font-size:12.5px;color:#0f4c81;line-height:1.8;">
               例如安全入口设置为 <code>siver</code> 后，远程访问地址会是
               <a href="https://panel.siver.top/panel/siver" target="_blank" rel="noopener" style="color:#0d6efd;font-weight:600;">https://panel.siver.top/panel/siver</a>
+                然后你在任意设备的浏览器访问这个地址就可以远程管理你的机器人面板。安全入口支持您自己完全自定义
             </div>
             <div style="padding:10px 12px;background:rgba(255,255,255,.72);border:1px solid #bfdbfe;border-radius:10px;font-size:12.5px;line-height:1.9;color:#1f2937;">
               不开通远程访问服务，你依然可以继续正常使用本地面板；只有在你确实有跨设备远程访问和管理面板的需求时，再按需开通即可。
@@ -1015,7 +1016,7 @@ body.mobile-nav-open { overflow: hidden; }
             <label class="cfg-label" for="siver_panel_slug">安全入口</label>
             <input type="text" class="form-control" id="siver_panel_slug" value="{{ config.get('siver_panel_slug', '') }}" placeholder="例如：siver" autocomplete="off" spellcheck="false">
             <div class="cfg-hint">
-              安全入口用于远程连接访问。格式限制与服务端一致：5-32 位，仅支持小写字母、数字和连字符，且不能以连字符开头或结尾。
+              安全入口用于远程连接访问，由您自己自定义设置。格式限制与服务端一致：5-32 位，仅支持小写字母、数字和连字符，且不能以连字符开头或结尾。
             </div>
           </div>
         </div>

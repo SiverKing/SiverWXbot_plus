@@ -400,10 +400,26 @@ class SiverPanelManager:
             try:
                 status_data = self._fetch_device_status(config)
             except ServiceIssue as exc:
-                if exc.code != "invalid_device_credentials" or not activation_code:
+                if not activation_code:
                     raise
-                self._log("WARNING", "检测到现有设备凭据失效，开始尝试恢复设备凭据")
-                return self._recover_credentials(config)
+                if exc.code == "service_expired":
+                    self._log("WARNING", "当前设备授权已过期，开始尝试使用新激活码续期")
+                    return self._activate_with_new_code(config, failure_prefix="使用新激活码续期失败")
+                if exc.code == "invalid_device_credentials":
+                    self._log("WARNING", "检测到现有设备凭据失效，开始尝试恢复设备凭据")
+                    return self._recover_credentials(config)
+                raise
+
+            if activation_code and self._should_attempt_activation_refresh(config):
+                try:
+                    return self._activate_with_new_code(config, failure_prefix="新激活码激活失败")
+                except NetworkIssue as exc:
+                    self._log("WARNING", f"新激活码激活暂时不可用，继续使用现有授权: {exc.message}")
+                except ServiceIssue as exc:
+                    self._persist_config_updates(
+                        siver_panel_activation_code_failed_hash=self._activation_code_hash(activation_code),
+                    )
+                    self._log("WARNING", f"新激活码激活失败，继续使用现有授权: {exc.message}")
 
             remote_slug = self._normalize_slug(status_data.get("panel_slug") or slug)
             panel_url = status_data.get("panel_url") or self._build_panel_url(remote_slug)
@@ -472,6 +488,10 @@ class SiverPanelManager:
             "siver_panel_last_error_code": "",
             "siver_panel_last_error_message": "",
         }
+        activation_code = (config.get("siver_panel_activation_code") or "").strip()
+        if activation_code:
+            updates["siver_panel_activation_code_applied_hash"] = self._activation_code_hash(activation_code)
+            updates["siver_panel_activation_code_failed_hash"] = ""
         self._persist_config_updates(**updates)
         config.update(updates)
         self._set_state(
@@ -482,6 +502,30 @@ class SiverPanelManager:
             device_bound=True,
         )
         return config
+
+    def _activate_with_new_code(self, config: dict[str, Any], *, failure_prefix: str) -> dict[str, Any]:
+        activation_data = self._register_device(config)
+        if activation_data.get("success"):
+            self._log("INFO", "新激活码激活成功，已更新设备凭据和授权期限")
+            return self._store_bound_credentials(config, activation_data)
+
+        error_code = activation_data.get("error_code") or "register_failed"
+        message = activation_data.get("message") or "远程服务未接受新的激活码"
+        raise ServiceIssue(error_code, f"{failure_prefix}: {message}")
+
+    def _should_attempt_activation_refresh(self, config: dict[str, Any]) -> bool:
+        activation_code = (config.get("siver_panel_activation_code") or "").strip()
+        if not activation_code:
+            return False
+        code_hash = self._activation_code_hash(activation_code)
+        if code_hash and code_hash == config.get("siver_panel_activation_code_applied_hash"):
+            return False
+        if code_hash and code_hash == config.get("siver_panel_activation_code_failed_hash"):
+            return False
+        return True
+
+    def _activation_code_hash(self, activation_code: str) -> str:
+        return hashlib.sha256(activation_code.strip().encode("utf-8")).hexdigest() if activation_code.strip() else ""
 
     def _open_websocket(self, config: dict[str, Any]) -> None:
         ws_url = (config.get("siver_panel_ws_url") or self._derive_ws_url(config)).strip()
