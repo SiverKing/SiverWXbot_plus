@@ -3,6 +3,6 @@ pywin32
 openai
 requests
 schedule
-wxautox4
+wxautox4>=40.1.14
 cozepy
 websockets

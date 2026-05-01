@@ -3888,7 +3888,7 @@ $(function(){
       url: '/check_update',
       method: 'GET',
       dataType: 'json',
-      timeout: 8000,
+      timeout: 60000,
       success: function(res) {
         retryCount = 0;
         clearTimeout(retryTimer);
@@ -4653,7 +4653,7 @@ $(function(){
       url: '/check_activate',
       method: 'GET',
       dataType: 'json',
-      timeout: 8000,
+      timeout: 60000,
       success: function(res) {
         $('#activate-checking').hide();
         if (res.status !== 'success') { $('#activate-error').show(); return; }
