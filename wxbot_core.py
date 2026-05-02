@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.7.22"
-version_log = "V4.7.22 - 新增提供远程访问服务(免服务器免穿透，官方直连服务)、修复检查接口超时bug"
+version = "V4.7.23"
+version_log = "V4.7.23 - 提供远程访问服务(免服务器免穿透，官方直连服务)、修复自定义转发无法转发小程序的bug、优化远程访问服务重连"
 
 # ============================================================
 # 标准库导入
@@ -2717,12 +2717,12 @@ class WXBot:
                     if target:
                         time.sleep(1)
                         if src_msg:
-                            if message.type in ['image', 'video', 'file', 'location', 'link', 'emotion', 'merge', 'personal_card', 'note']:
+                            if message.type in ['image', 'video', 'file', 'location', 'link', 'emotion', 'merge', 'personal_card', 'note', 'miniapp']:
                                 message.forward(target, message=src_msg)
                             else:
                                 self.wx.SendMsg(who=target, msg=message.content+"\n"+src_msg)
                         else:
-                            if message.type in ['image', 'video', 'file', 'location', 'link', 'emotion', 'merge', 'personal_card', 'note']:
+                            if message.type in ['image', 'video', 'file', 'location', 'link', 'emotion', 'merge', 'personal_card', 'note', 'miniapp']:
                                 message.forward(target)
                             else:
                                 self.wx.SendMsg(who=target, msg=message.content)

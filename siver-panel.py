@@ -36,7 +36,19 @@ HOP_BY_HOP_HEADERS = {
 }
 INITIAL_NETWORK_RETRY_DELAYS = (5, 15, 30, 60, 120, 300, 600, 900, 1200, 1800)
 RECONNECT_NETWORK_RETRY_DELAYS = (8, 18, 30, 60, 120, 300, 600, 900, 1200, 1800)
-TRANSIENT_HTTP_STATUS_CODES = {502, 503, 504}
+TRANSIENT_HTTP_STATUS_CODES = {
+    500,
+    502,
+    503,
+    504,
+    520,
+    521,
+    522,
+    523,
+    524,
+    525,
+    526,
+}
 API_TIMEOUT = 30
 WS_OPEN_TIMEOUT = 30
 WS_AUTH_TIMEOUT = 25
@@ -595,6 +607,12 @@ class SiverPanelManager:
             raise NetworkIssue("ws_closed", exc.reason or "远程连接意外中断") from exc
         except OSError as exc:
             raise NetworkIssue("ws_connect_failed", f"无法建立远程连接: {exc}") from exc
+        except ServiceIssue:
+            raise
+        except Exception as exc:
+            if self._is_transient_ws_error(exc):
+                raise NetworkIssue("ws_connect_failed", f"无法建立远程连接: {exc}") from exc
+            raise
         finally:
             self._websocket = None
             if not self._manual_stop.is_set():
@@ -808,7 +826,7 @@ class SiverPanelManager:
         payload = self._response_json(response)
         if payload.get("message"):
             return str(payload["message"])
-        text = (response.text or "").strip()
+        text = self._response_text_summary(response)
         return text or fallback
 
     def _raise_transient_http_error(self, response: Response, fallback: str) -> None:
@@ -822,6 +840,41 @@ class SiverPanelManager:
             suffix = f" {reason}" if reason else ""
             message = f"{fallback}: HTTP {response.status_code}{suffix}"
         raise NetworkIssue("remote_unavailable", message)
+
+    def _response_text_summary(self, response: Response) -> str:
+        text = (response.text or "").strip()
+        if not text:
+            return ""
+        title_match = re.search(r"<title[^>]*>(.*?)</title>", text, flags=re.IGNORECASE | re.DOTALL)
+        if title_match:
+            text = title_match.group(1)
+        text = re.sub(r"\s+", " ", text).strip()
+        if len(text) > 300:
+            text = f"{text[:300]}..."
+        return text
+
+    def _is_transient_ws_error(self, exc: Exception) -> bool:
+        status_code = self._exception_status_code(exc)
+        if status_code in TRANSIENT_HTTP_STATUS_CODES:
+            return True
+        message = str(exc)
+        class_name = exc.__class__.__name__.lower()
+        if "invalidstatus" in class_name or "invalidhandshake" in class_name:
+            return any(str(code) in message for code in TRANSIENT_HTTP_STATUS_CODES)
+        return False
+
+    def _exception_status_code(self, exc: Exception) -> int | None:
+        for attr in ("status_code", "status"):
+            value = getattr(exc, attr, None)
+            if isinstance(value, int):
+                return value
+        response = getattr(exc, "response", None)
+        if response is not None:
+            for attr in ("status_code", "status"):
+                value = getattr(response, attr, None)
+                if isinstance(value, int):
+                    return value
+        return None
 
     def _load_config(self) -> dict[str, Any]:
         try:
