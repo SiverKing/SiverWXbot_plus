@@ -54,6 +54,7 @@ is_wxautox = True  # 标识当前使用的是 wxautox Plus 版本
 # 本地模块导入
 # ============================================================
 import email_send
+import webhook_send
 from logger import log
 
 # ============================================================
@@ -1737,17 +1738,24 @@ class WXBot:
 
     def is_err(self, id, err="无"):
         """
-        记录错误信息并发送告警邮件。
+        记录错误信息并发送告警通知。
 
         :param id:  错误标题（邮件主题）
         :param err: 错误详情（可为异常对象或字符串）
         """
         print(traceback.format_exc())
         log(level="ERROR", message=f"出现错误：{err}")
-        email_send.send_email(
-            subject=id,
-            content='错误信息：\n' + traceback.format_exc() + "\nerr信息：\n" + str(err),
-        )
+        content = '错误信息：\n' + traceback.format_exc() + "\nerr信息：\n" + str(err)
+        try:
+            email_send.send_email(subject=id, content=content)
+        except Exception as e:
+            log(level="ERROR", message=f"发送告警邮件失败：{e}")
+        try:
+            ok, message = webhook_send.send_message(id, content)
+            if not ok:
+                log(level="ERROR", message=f"发送 Webhook 告警失败：{message}")
+        except Exception as e:
+            log(level="ERROR", message=f"发送 Webhook 告警异常：{e}")
 
     def key_pass(self, year, month, day, hour, minute, second):
         """

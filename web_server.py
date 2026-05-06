@@ -25,6 +25,7 @@ import webbrowser
 import time
 import socket
 import email_send
+import webhook_send
 import ctypes
 import atexit
 import importlib.util
@@ -63,6 +64,7 @@ PORT = 10001
 CONFIG_FILE = os.path.join(base_dir(), 'config', 'config.json')
 ADMIN_FILE  = os.path.join(base_dir(), 'config', 'admin.json')
 EMAIL_FILE  = os.path.join(base_dir(), 'config', 'email.txt')
+WEBHOOK_FILE = os.path.join(base_dir(), 'config', 'webhook.json')
 PROMPT_DIR  = os.path.join(base_dir(), 'config', 'prompt')
 BACKUP_BASE = os.path.join(base_dir(), 'old_wxbot_config')
 APP_SECRET_FILE = os.path.join(base_dir(), 'config', 'panel_secret.key')
@@ -1338,6 +1340,39 @@ def save_email_config():
 import threading
 
 _tk_lock = threading.Lock()  # 确保同一时刻只弹一个文件选择框
+
+
+@app.route('/get_webhook_config')
+@login_required
+def get_webhook_config():
+    try:
+        config = webhook_send.load_config(WEBHOOK_FILE)
+        return jsonify({'status': 'success', **config})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/save_webhook_config', methods=['POST'])
+@login_required
+def save_webhook_config():
+    try:
+        data = request.get_json() or {}
+        config = webhook_send.save_config(data, WEBHOOK_FILE)
+        log('SUCCESS', f"Webhook 配置已更新，启用状态: {config.get('enabled')}")
+        return jsonify({'status': 'success', 'message': 'Webhook 配置已保存', 'config': config})
+    except Exception as e:
+        log('ERROR', f'保存 Webhook 配置失败: {e}')
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/test_webhook', methods=['POST'])
+@login_required
+def test_webhook():
+    try:
+        data = request.get_json() or {}
+        ok, message = webhook_send.send_webhook('SiverWXbot_plus 测试通知', '这是一条 Webhook 测试消息。', data)
+        return jsonify({'status': 'success' if ok else 'error', 'message': message})
+    except Exception as e:
+        log('ERROR', f'测试 Webhook 失败: {e}')
+        return jsonify({'status': 'error', 'message': str(e)})
 
 @app.route('/pick_image_file', methods=['GET'])
 @login_required

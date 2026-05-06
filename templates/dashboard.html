@@ -754,6 +754,7 @@ body.mobile-nav-open { overflow: hidden; }
   <div class="nav-item"><a class="nav-link" data-tab="tab-other"><i class="bi bi-sliders"></i> 其他配置</a></div>
   <div class="nav-item"><a class="nav-link" data-tab="tab-account"><i class="bi bi-person-gear"></i> 账号密码</a></div>
   <div class="nav-item"><a class="nav-link" data-tab="tab-email"><i class="bi bi-envelope-at"></i> 报错邮箱</a></div>
+  <div class="nav-item"><a class="nav-link" data-tab="tab-webhook"><i class="bi bi-broadcast-pin"></i> Webhook 通知</a></div>
   <div class="nav-divider"></div>
   <div class="nav-item"><a class="nav-link" data-tab="tab-backup"><i class="bi bi-shield-check"></i> 数据备份</a></div>
 </nav>
@@ -2170,6 +2171,61 @@ body.mobile-nav-open { overflow: hidden; }
       <div id="email-msg" style="display:none;font-size:13px;margin-bottom:12px;padding:8px 12px;border-radius:6px;"></div>
       <button type="button" id="btn-save-email" class="btn btn-save" style="font-size:13.5px;padding:8px 24px;border-radius:6px;border:none;cursor:pointer;"><i class="bi bi-save"></i> 保存邮箱配置</button>
       <div class="cfg-hint" style="margin-top:10px;">配置保存在 <code>email.txt</code> 中，保存后立即生效。</div>
+    </div>
+  </div>
+
+
+
+  <!-- ===== Tab: Webhook ===== -->
+  <div class="config-panel" id="tab-webhook">
+    <div class="cfg-card">
+      <div class="cfg-card-header"><i class="bi bi-broadcast-pin"></i><h5>Webhook 通知配置</h5><span class="desc">机器人出错时通过 HTTP Webhook 发送告警</span></div>
+      <div style="display:flex;gap:10px;align-items:flex-start;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:6px;padding:12px 14px;margin-bottom:20px;">
+        <i class="bi bi-info-circle-fill" style="color:#2563EB;font-size:16px;flex-shrink:0;margin-top:1px;"></i>
+        <div style="font-size:12.5px;color:#1E3A8A;line-height:1.7;">
+          支持飞书、钉钉、企业微信、Discord 等通用 HTTP Webhook。请求头和请求体中可使用 <code>$title</code>、<code>$content</code> 占位符。
+        </div>
+      </div>
+      <div class="switch-row">
+        <input class="form-check-input" type="checkbox" id="webhook-enabled">
+        <label class="form-check-label" for="webhook-enabled">启用 Webhook 通知</label>
+        <span class="switch-desc">关闭时不会发送 Webhook</span>
+      </div>
+      <div class="mb-3">
+        <label class="cfg-label" for="webhook-url">Webhook URL</label>
+        <input type="url" class="form-control" id="webhook-url" placeholder="https://example.com/webhook">
+      </div>
+      <div class="row">
+        <div class="col-4 mb-3">
+          <label class="cfg-label" for="webhook-method">Method</label>
+          <select class="form-control" id="webhook-method">
+            <option value="POST">POST</option>
+            <option value="PUT">PUT</option>
+            <option value="PATCH">PATCH</option>
+          </select>
+        </div>
+        <div class="col-5 mb-3">
+          <label class="cfg-label" for="webhook-content-type">Content-Type</label>
+          <input type="text" class="form-control" id="webhook-content-type" placeholder="application/json">
+        </div>
+        <div class="col-3 mb-3">
+          <label class="cfg-label" for="webhook-timeout">超时（秒）</label>
+          <input type="number" class="form-control" id="webhook-timeout" min="1" max="60" placeholder="5">
+        </div>
+      </div>
+      <div class="mb-3">
+        <label class="cfg-label" for="webhook-headers">Headers（JSON，可选）</label>
+        <textarea class="form-control" id="webhook-headers" rows="4" placeholder='{"Authorization":"Bearer token"}'></textarea>
+      </div>
+      <div class="mb-4">
+        <label class="cfg-label" for="webhook-body">Body</label>
+        <textarea class="form-control" id="webhook-body" rows="7" placeholder='{"title":"$title","content":"$content"}'></textarea>
+        <div class="cfg-hint">JSON 类型会按 JSON 发送；其他 Content-Type 会按原始文本发送。</div>
+      </div>
+      <div id="webhook-msg" style="display:none;font-size:13px;margin-bottom:12px;padding:8px 12px;border-radius:6px;"></div>
+      <button type="button" id="btn-save-webhook" class="btn btn-save" style="font-size:13.5px;padding:8px 24px;border-radius:6px;border:none;cursor:pointer;"><i class="bi bi-save"></i> 保存 Webhook 配置</button>
+      <button type="button" id="btn-test-webhook" class="btn btn-load" style="font-size:13.5px;padding:8px 24px;border-radius:6px;border:none;cursor:pointer;margin-left:8px;"><i class="bi bi-send"></i> 发送测试</button>
+      <div class="cfg-hint" style="margin-top:10px;">配置保存在 <code>webhook.json</code> 中，保存后立即生效。</div>
     </div>
   </div>
 
@@ -4440,6 +4496,62 @@ $(function(){
       data: JSON.stringify(d),
       success: function(res){ showMsg('email-msg', res.message, res.status==='success'); },
       error: function(xhr){ showMsg('email-msg','请求失败: '+xhr.responseText, false); }
+    });
+  });
+
+
+
+  // ===== Webhook Panel =====
+  function collectWebhookConfig(){
+    var headers = {};
+    var headerText = $('#webhook-headers').val().trim();
+    if(headerText){
+      try { headers = JSON.parse(headerText); }
+      catch(e){ showMsg('webhook-msg','Headers 不是合法 JSON: '+e.message,false); return null; }
+    }
+    return {
+      enabled: $('#webhook-enabled').is(':checked'),
+      url: $('#webhook-url').val().trim(),
+      method: $('#webhook-method').val(),
+      content_type: $('#webhook-content-type').val().trim() || 'application/json',
+      headers: headers,
+      body: $('#webhook-body').val(),
+      timeout: parseInt($('#webhook-timeout').val() || '5', 10)
+    };
+  }
+  function loadWebhookConfig(){
+    $.getJSON('/get_webhook_config', function(res){
+      if(res.status === 'success'){
+        $('#webhook-enabled').prop('checked', !!res.enabled);
+        $('#webhook-url').val(res.url || '');
+        $('#webhook-method').val(res.method || 'POST');
+        $('#webhook-content-type').val(res.content_type || 'application/json');
+        $('#webhook-timeout').val(res.timeout || 5);
+        $('#webhook-headers').val(JSON.stringify(res.headers || {}, null, 2));
+        $('#webhook-body').val(res.body || '{"title":"$title","content":"$content"}');
+      } else {
+        showMsg('webhook-msg', res.message || '加载 Webhook 配置失败', false);
+      }
+    });
+  }
+  $(document).on('click', '[data-tab="tab-webhook"]', loadWebhookConfig);
+  $('#btn-save-webhook').click(function(){
+    var d = collectWebhookConfig(); if(!d) return;
+    if(d.enabled && !d.url){ showMsg('webhook-msg','启用 Webhook 时 URL 不能为空',false); return; }
+    $.ajax({ url:'/save_webhook_config', type:'POST', contentType:'application/json',
+      data: JSON.stringify(d),
+      success: function(res){ showMsg('webhook-msg', res.message, res.status==='success'); },
+      error: function(xhr){ showMsg('webhook-msg','请求失败: '+xhr.responseText, false); }
+    });
+  });
+  $('#btn-test-webhook').click(function(){
+    var d = collectWebhookConfig(); if(!d) return;
+    d.enabled = true;
+    if(!d.url){ showMsg('webhook-msg','测试 Webhook 时 URL 不能为空',false); return; }
+    $.ajax({ url:'/test_webhook', type:'POST', contentType:'application/json',
+      data: JSON.stringify(d),
+      success: function(res){ showMsg('webhook-msg', res.message, res.status==='success'); },
+      error: function(xhr){ showMsg('webhook-msg','请求失败: '+xhr.responseText, false); }
     });
   });
 
