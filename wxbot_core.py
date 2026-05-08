@@ -19,6 +19,9 @@ import threading
 import traceback
 from datetime import datetime, timedelta
 
+THINK_BLOCK_RE = re.compile(r'<think\b[^>]*>.*?</think>', re.IGNORECASE | re.DOTALL)
+LEADING_THINK_RE = re.compile(r'^\s*<think\b[^>]*>', re.IGNORECASE)
+
 # ============================================================
 # 第三方库导入
 # ============================================================
@@ -109,6 +112,31 @@ SPLIT_PROMPT_TEMPLATE = """\
 这个问题其实很常见，主要原因是……
 【以下是你的角色设定】
 {base_prompt}"""
+
+
+def clean_ai_reply_text(text):
+    """清理模型回复中的思考标签，避免把推理过程发送给用户。"""
+    if text is None:
+        return ""
+    text = str(text)
+    cleaned = THINK_BLOCK_RE.sub("", text)
+    removed_think = cleaned != text
+
+    # 未闭合的开头 <think> 视为不安全输出：只保留空行后的正文。
+    # 不处理中间出现的未闭合示例，降低误伤普通文本的概率。
+    if LEADING_THINK_RE.search(cleaned):
+        tail_match = re.search(r'\n\s*\n', cleaned)
+        if tail_match:
+            cleaned = cleaned[tail_match.end():]
+        else:
+            cleaned = ""
+
+    lines = [line.rstrip() for line in cleaned.splitlines()]
+    cleaned = "\n".join(lines).strip()
+    if removed_think:
+        cleaned = re.sub(r'\n\s*\n+', '\n', cleaned)
+    return cleaned
+
 
 # ============================================================
 # 配置管理类
@@ -204,6 +232,7 @@ class WXBotConfig:
         self.reply_delay_switch = True  # 模拟人工操作延迟开关（默认开启）
         self.reply_delay_min    = 1     # 最小延迟秒数
         self.reply_delay_max    = 5     # 最大延迟秒数
+        self.clean_ai_reply_switch = True  # AI 回复清洗开关
 
         # 初始化时自动加载配置并同步到属性
         self.load_config()
@@ -290,6 +319,7 @@ class WXBotConfig:
                     "reply_delay_switch": True,
                     "reply_delay_min": 1,
                     "reply_delay_max": 5,
+                    "clean_ai_reply_switch": True,
                     "chat_image_recognition_switch": False,
                     "chat_image_recognition_api": 0,
                     "group_image_recognition_switch": False,
@@ -528,6 +558,7 @@ class WXBotConfig:
         self.reply_delay_switch = bool(self.config.get('reply_delay_switch', True))
         self.reply_delay_min    = max(1, int(self.config.get('reply_delay_min', 1)))
         self.reply_delay_max    = max(1, int(self.config.get('reply_delay_max', 5)))
+        self.clean_ai_reply_switch = bool(self.config.get('clean_ai_reply_switch', True))
 
         # 图片识别配置
         self.chat_image_recognition_switch  = bool(self.config.get('chat_image_recognition_switch', False))
@@ -2591,6 +2622,8 @@ class WXBot:
                 # 接口调用失败时替换为配置的固定回复
                 if reply == "API返回错误，请稍后再试":
                     reply = self.config.api_error_reply
+                else:
+                    reply = self._clean_reply_for_send(reply)
 
                 # 拆分多条回复：首条 @ 发言人，后续条不 @
                 if self.config.group_split_reply_switch:
@@ -2675,6 +2708,16 @@ class WXBot:
         """按 ||SPLIT|| 分隔符解析回复，过滤空白，截断到 max_count 条"""
         parts = [p.strip() for p in reply.split(SPLIT_SEPARATOR) if p.strip()]
         return parts[:max_count] if parts else [reply]
+
+    def _clean_reply_for_send(self, reply):
+        """按配置清洗即将发送给用户的 AI 回复。"""
+        if not self.config.clean_ai_reply_switch:
+            return reply
+        cleaned = clean_ai_reply_text(reply)
+        if cleaned:
+            return cleaned
+        log(level="WARNING", message="AI 回复清洗后为空，已使用接口失败固定回复兜底")
+        return self.config.api_error_reply
 
     def _is_custom_forward_source(self, chat_who):
         """判断某个会话是否是任意自定义转发规则的监听来源"""
@@ -2803,6 +2846,8 @@ class WXBot:
         # 接口调用失败时替换为配置的固定回复
         if reply == "API返回错误，请稍后再试":
             reply = self.config.api_error_reply
+        else:
+            reply = self._clean_reply_for_send(reply)
 
         # 拆分多条回复：仅在开关开启且回复包含分隔符时生效
         if self.config.chat_split_reply_switch:

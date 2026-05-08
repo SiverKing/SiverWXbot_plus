@@ -1158,9 +1158,14 @@ body.mobile-nav-open { overflow: hidden; }
         </div>
         {% endfor %}
       </div>
-      <button type="button" id="btn-add-api-config" style="width:100%;background:var(--muted-bg);border:1px dashed var(--border);color:var(--muted);padding:10px;border-radius:6px;font-size:13px;margin-top:4px;cursor:pointer;">
-        <i class="bi bi-plus-circle"></i> 添加接口配置
-      </button>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:4px;flex-wrap:wrap;">
+        <button type="button" id="btn-test-api-config" style="flex:0 0 180px;background:var(--card);border:1px solid var(--border);color:var(--card-fg);padding:10px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">
+          <i class="bi bi-activity"></i> 测试可用性
+        </button>
+        <button type="button" id="btn-add-api-config" style="flex:1;min-width:220px;background:var(--muted-bg);border:1px dashed var(--border);color:var(--muted);padding:10px;border-radius:6px;font-size:13px;cursor:pointer;">
+          <i class="bi bi-plus-circle"></i> 添加接口配置
+        </button>
+      </div>
       <div class="cfg-hint" style="margin-top:8px;">点击左侧单选框选择当前使用的接口 · 选择 DusAPI 时接口地址自动填写 · <a href="https://dusapi.com" target="_blank" style="color:#07C160;">dusapi.com 获取 Key</a></div>
     </div>
   </div>
@@ -2107,6 +2112,11 @@ body.mobile-nav-open { overflow: hidden; }
                placeholder="在忙，我稍后回复您">
         <div class="cfg-hint" style="margin-top:6px;">当调用 AI / 模型接口失败时，机器人将发送此固定回复，而非原始报错提示。</div>
       </div>
+      <div class="switch-row">
+        <input class="form-check-input" type="checkbox" id="clean_ai_reply_switch" {% if config.get('clean_ai_reply_switch', True) %}checked{% endif %}>
+        <label for="clean_ai_reply_switch">屏蔽模型思考过程</label>
+        <span class="switch-desc">自动移除模型返回的思考标签，避免将推理过程发送给用户</span>
+      </div>
     </div>
   </div>
 
@@ -2589,6 +2599,20 @@ $(function(){
     }
   });
 
+  function getApiConfigFromItem($item){
+    var $k = $item.find('.api-key-input');
+    var typedKey = $k.val();
+    var maskedKey = $k.data('masked') || '';
+    var realKey = $k.data('real-key') || '';
+    var keyToUse = (typedKey === maskedKey || typedKey === '') ? realKey : typedKey;
+    return {
+      sdk: $item.find('.api-sdk-select').val(),
+      model: $item.find('.api-model-input').val(),
+      url: $item.find('.api-url-input').val(),
+      key: keyToUse
+    };
+  }
+
   // ===== 接口配置：SDK 变更自动填写 URL + 显示 DusAPI 提示 =====
   $(document).on('change', '.api-sdk-select', function(){
     var $item = $(this).closest('.api-config-item');
@@ -2613,6 +2637,55 @@ $(function(){
     if($('.api-config-item').length <= 2){ svModal.alert('至少保留 2 个接口配置'); return; }
     $(this).closest('.api-config-item').remove();
     renumberApiConfigs();
+  });
+
+  // ===== 接口配置：测试当前选中接口 =====
+  $('#btn-test-api-config').click(function(){
+    var $btn = $(this);
+    var $item = $('.api-config-item').has('.api-radio:checked').first();
+    if(!$item.length){
+      svModal.error('请先选择一个接口配置');
+      return;
+    }
+    var apiConfig = getApiConfigFromItem($item);
+    if(!apiConfig.key || !apiConfig.url || !apiConfig.model){
+      svModal.error('请先填写当前选中接口的 API Key、Base URL 和模型名称');
+      return;
+    }
+    var idx = $('.api-config-item').index($item) + 1;
+    $btn.prop('disabled', true).html('<i class="bi bi-hourglass-split"></i> 测试中...');
+    $.ajax({
+      url: '/test_api_config',
+      method: 'POST',
+      contentType: 'application/json',
+      dataType: 'json',
+      timeout: 70000,
+      data: JSON.stringify({api_config: apiConfig}),
+      success: function(res){
+        if(res.status === 'success'){
+          var d = res.data || {};
+          var cleanedHint = d.cleaned ? '<br><br>检测到思考标签，已按当前清洗规则处理测试返回。' : '';
+          svModal.success(
+            '接口 ' + idx + ' 可用<br>' +
+            '耗时：' + (d.elapsed_ms || '-') + ' ms<br>' +
+            '返回：<code>' + $('<div>').text(d.reply || '').html() + '</code>' +
+            cleanedHint,
+            '测试成功'
+          );
+        } else {
+          svModal.error(res.message || '接口测试失败', '测试失败');
+        }
+      },
+      error: function(xhr){
+        var msg = '接口测试请求失败';
+        if(xhr.responseJSON && xhr.responseJSON.message) msg = xhr.responseJSON.message;
+        else if(xhr.status) msg += '：HTTP ' + xhr.status;
+        svModal.error(msg, '测试失败');
+      },
+      complete: function(){
+        $btn.prop('disabled', false).html('<i class="bi bi-activity"></i> 测试可用性');
+      }
+    });
   });
 
   // ===== 接口配置：添加 =====
@@ -3511,6 +3584,7 @@ $(function(){
       group_image_recognition_switch:$('#group_image_recognition_switch').is(':checked'),
       group_image_recognition_api:parseInt($('#group_image_recognition_api').val())||0,
       api_error_reply:$('#api_error_reply').val().trim()||'在忙，我稍后回复您',
+      clean_ai_reply_switch:$('#clean_ai_reply_switch').is(':checked'),
       chat_split_reply_switch:$('#chat_split_reply_switch').is(':checked'),
       chat_split_max_chars:Math.max(1,parseInt($('#chat_split_max_chars').val())||100),
       chat_split_max_count:Math.max(1,parseInt($('#chat_split_max_count').val())||4),

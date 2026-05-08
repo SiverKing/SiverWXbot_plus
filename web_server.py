@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 import logging
 from functools import wraps
 import threading
-from wxbot_core import WXBot, version as BOT_VERSION
+from wxbot_core import CozeAPI, DifyAPI, DusAPI, OpenAIAPI, WXBot, clean_ai_reply_text, version as BOT_VERSION
 from logger import log
 import logger
 import pythoncom
@@ -667,6 +667,7 @@ def dashboard():
     config.setdefault('reply_delay_switch', True)
     config.setdefault('reply_delay_min', 1)
     config.setdefault('reply_delay_max', 5)
+    config.setdefault('clean_ai_reply_switch', True)
     config.setdefault('chat_image_recognition_switch', False)   # 私聊图片识别开关
     config.setdefault('chat_image_recognition_api',    0)        # 私聊识别接口索引
     config.setdefault('group_image_recognition_switch', False)  # 群组图片识别开关
@@ -763,6 +764,7 @@ def _coerce_bool_fields(merged_config):
         'everyday_start_stop_bot_switch',   # 新增
         'memory_switch',                    # 记忆开关
         'reply_delay_switch',               # 发送延迟开关
+        'clean_ai_reply_switch',            # AI 回复清洗开关
         'chat_image_recognition_switch',    # 私聊图片识别开关
         'group_image_recognition_switch',   # 群组图片识别开关
         'custom_forward_switch',            # 自定义转发总开关
@@ -967,6 +969,75 @@ def save_config_route():
     except Exception as e:
         log('ERROR', f'保存配置出错: {str(e)}')
         return jsonify({'status': 'error', 'message': str(e)})
+
+
+class _TempAPIConfig:
+    """用于测试单个接口配置的轻量配置对象，不读写 config.json。"""
+
+    def __init__(self, cfg):
+        self.api_sdk = str(cfg.get('sdk', '')).strip()
+        self.api_key = str(cfg.get('key', '')).strip()
+        self.base_url = str(cfg.get('url', '')).strip().rstrip('/')
+        self.model1 = str(cfg.get('model', '')).strip()
+        self.prompt = "你是接口连通性测试助手。请只回复 OK。"
+
+
+def _build_test_api_client(tmp_config):
+    sdk = tmp_config.api_sdk
+    if sdk == "OpenAI SDK":
+        return OpenAIAPI(tmp_config)
+    if sdk == "Dify":
+        return DifyAPI(tmp_config)
+    if sdk == "Coze":
+        return CozeAPI(tmp_config)
+    return DusAPI(tmp_config)
+
+
+@app.route('/test_api_config', methods=['POST'])
+@login_required
+def test_api_config_route():
+    started = time.time()
+    try:
+        data = request.get_json() or {}
+        cfg = data.get('api_config') or {}
+        if not isinstance(cfg, dict):
+            return jsonify({'status': 'error', 'message': '接口配置格式无效'})
+
+        tmp_config = _TempAPIConfig(cfg)
+        if not tmp_config.api_key:
+            return jsonify({'status': 'error', 'message': 'API Key 不能为空'})
+        if not tmp_config.base_url:
+            return jsonify({'status': 'error', 'message': 'Base URL 不能为空'})
+        if not tmp_config.model1:
+            return jsonify({'status': 'error', 'message': '模型名称不能为空'})
+
+        api = _build_test_api_client(tmp_config)
+        reply = api.chat("请只回复 OK", stream=False, prompt=tmp_config.prompt, history=[])
+        raw_reply = str(reply or "")
+        cleaned_reply = clean_ai_reply_text(raw_reply)
+        cleaned = cleaned_reply != raw_reply
+
+        if not raw_reply or raw_reply == "API返回错误，请稍后再试":
+            return jsonify({
+                'status': 'error',
+                'message': '接口有响应，但未返回有效文本，请检查模型名称、接口地址或服务商兼容性'
+            })
+
+        elapsed_ms = int((time.time() - started) * 1000)
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'reply': cleaned_reply or '（清洗后为空：接口可能只返回了思考内容）',
+                'raw_length': len(raw_reply),
+                'cleaned': cleaned,
+                'elapsed_ms': elapsed_ms,
+            }
+        })
+    except Exception as e:
+        msg = str(e)
+        if len(msg) > 800:
+            msg = msg[:800] + '...'
+        return jsonify({'status': 'error', 'message': f'接口测试失败：{msg}'})
 
 # ----------------------------------------------------------
 # Prompt 文件管理路由
@@ -1674,6 +1745,7 @@ def main():
                 "reply_delay_switch": True,
                 "reply_delay_min": 1,
                 "reply_delay_max": 5,
+                "clean_ai_reply_switch": True,
                 "chat_image_recognition_switch": False,
                 "chat_image_recognition_api": 0,
                 "group_image_recognition_switch": False,
