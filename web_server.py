@@ -708,8 +708,15 @@ def dashboard():
     config.setdefault('default_prompt', '默认')
     config.setdefault('chat_prompt_map', {})
     config.setdefault('chat_api_map', {})
+    config.setdefault('chat_max_round_map', {})
     config.setdefault('group_prompt_map', {})
     config.setdefault('api_error_reply', '在忙，我稍后回复您')   # 接口调用失败时的固定回复
+    config.setdefault('api_error_reply_once', False)       # 接口失败固定回复是否同一用户只发一次
+    config.setdefault('chat_max_round_switch', False)      # 单用户最大回复轮数限制开关
+    config.setdefault('chat_max_round_default', 99)        # 默认最多回复次数
+    config.setdefault('chat_max_round_reset_days', 0)      # 计数重置周期，0=不重置
+    config.setdefault('chat_max_round_reply', '')          # 超限后固定话术
+    config.setdefault('chat_max_round_reply_once', False)  # 超限话术是否同一用户只发一次
     config.setdefault('chat_split_reply_switch', False)   # 私聊拆分多条回复开关
     config.setdefault('chat_split_max_chars', 100)        # 私聊单条最大字数
     config.setdefault('chat_split_max_count', 4)          # 私聊最多条数
@@ -771,6 +778,9 @@ def _coerce_bool_fields(merged_config):
         'chat_split_reply_switch',          # 私聊拆分多条回复开关
         'group_split_reply_switch',         # 群聊拆分多条回复开关
         'siver_panel_enabled',
+        'api_error_reply_once',             # API错误只回复一次
+        'chat_max_round_switch',            # 单用户最大回复轮数限制开关
+        'chat_max_round_reply_once',        # 超限后只回复一次
     ]
     for field in boolean_fields:
         if field in merged_config:
@@ -808,6 +818,8 @@ def _coerce_int_range_fields(merged_config):
     int_range_fields = {
         'new_friend_check_min': (60, 3600, 60),
         'new_friend_check_max': (60, 3600, 300),
+        'chat_max_round_default': (1, 99999, 99),
+        'chat_max_round_reset_days': (0, 365, 0),
     }
     for field, (lo, hi, default) in int_range_fields.items():
         if field in merged_config:
@@ -826,13 +838,13 @@ def _coerce_dict_fields(merged_config):
     if 'keyword_dict' in merged_config:
         kd = merged_config['keyword_dict']
         if isinstance(kd, dict):
-            return
+            pass
         if isinstance(kd, str):
             try:
                 obj = json.loads(kd)
                 if isinstance(obj, dict):
                     merged_config['keyword_dict'] = obj
-                    return
+                    kd = obj
             except Exception:
                 pass
         if isinstance(kd, list):
@@ -844,9 +856,10 @@ def _coerce_dict_fields(merged_config):
                     if key:
                         out[key] = val
             merged_config['keyword_dict'] = out
-            return
+            kd = out
         # 其他情况回退空 dict
-        merged_config['keyword_dict'] = {}
+        if not isinstance(kd, dict):
+            merged_config['keyword_dict'] = {}
 
     # group_api_map: 值必须为 int 接口索引，非法值自动过滤
     if 'group_api_map' in merged_config:
@@ -881,6 +894,23 @@ def _coerce_dict_fields(merged_config):
             merged_config['chat_api_map'] = clean
         else:
             merged_config['chat_api_map'] = {}
+
+    # chat_max_round_map: 白名单模式下私聊用户专属回复次数上限，范围 1~99999
+    if 'chat_max_round_map' in merged_config:
+        cmrm = merged_config['chat_max_round_map']
+        if isinstance(cmrm, dict):
+            clean = {}
+            for k, v in cmrm.items():
+                k = str(k).strip()
+                try:
+                    vi = int(v)
+                    if k:
+                        clean[k] = max(1, min(99999, vi))
+                except (ValueError, TypeError):
+                    pass
+            merged_config['chat_max_round_map'] = clean
+        else:
+            merged_config['chat_max_round_map'] = {}
 
     # chat_prompt_map: 值为非空字符串（prompt 文件名）
     if 'chat_prompt_map' in merged_config:
@@ -1755,8 +1785,15 @@ def main():
                 "default_prompt": "默认",
                 "chat_prompt_map": {},
                 "chat_api_map": {},
+                "chat_max_round_map": {},
                 "group_prompt_map": {},
                 "api_error_reply": "在忙，我稍后回复您",
+                "api_error_reply_once": False,
+                "chat_max_round_switch": False,
+                "chat_max_round_default": 99,
+                "chat_max_round_reset_days": 0,
+                "chat_max_round_reply": "",
+                "chat_max_round_reply_once": False,
                 "chat_split_reply_switch": False,
                 "chat_split_max_chars": 100,
                 "chat_split_max_count": 4,

@@ -192,6 +192,10 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
 .form-control:focus, .form-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(7,193,96,.12); background: #fff; color: var(--card-fg); outline: none; }
 .form-check-input:checked { background-color: var(--primary); border-color: var(--primary); }
 .form-check-label { font-size: 13.5px; color: var(--card-fg); }
+.inline-check-field { display: flex; align-items: stretch; width: 100%; }
+.inline-check-field .form-control { flex: 1; min-width: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.inline-check-suffix { display: inline-flex; align-items: center; gap: 8px; min-height: 38px; padding: 0 14px; border: 1px solid var(--border); border-left: 0; border-radius: 0 6px 6px 0; background: #fff; color: var(--card-fg); font-size: 13.5px; font-weight: 500; white-space: nowrap; cursor: pointer; }
+.inline-check-suffix .form-check-input { margin: 0; width: 16px; height: 16px; flex-shrink: 0; }
 
 /* ===== List Items ===== */
 .list-item { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
@@ -445,6 +449,19 @@ body.mobile-nav-open { overflow: hidden; }
   .cfg-card-header .desc {
     width: 100%;
     margin-left: 0;
+  }
+  .inline-check-field {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .inline-check-field .form-control {
+    flex-basis: 100%;
+    border-radius: 6px;
+  }
+  .inline-check-suffix {
+    min-height: 36px;
+    border-left: 1px solid var(--border);
+    border-radius: 6px;
   }
 
   .list-item,
@@ -946,6 +963,11 @@ body.mobile-nav-open { overflow: hidden; }
           <div class="stat-val" id="sv-delay">-</div>
           <div class="stat-label">回复延迟</div>
         </div>
+        <div class="stat-card" id="sc-max-round">
+          <div class="stat-icon"><i class="bi bi-shield-check"></i></div>
+          <div class="stat-val" id="sv-max-round">-</div>
+          <div class="stat-label">轮数限制</div>
+        </div>
       </div>
       <!-- 详情行 -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
@@ -1272,7 +1294,7 @@ body.mobile-nav-open { overflow: hidden; }
         <span id="listenModeText">{% if config.AllListen_switch %}当前为黑名单模式 — 以下用户的消息将被忽略{% else %}当前为白名单模式 — 仅监听以下用户的消息{% endif %}</span>
       </div>
       <div class="mb-2">
-        <label class="cfg-label" id="listenListLabel">{% if config.AllListen_switch %}黑名单列表{% else %}监听列表 <span style="font-size:11px;color:var(--muted);font-weight:400;">（白名单模式：可为每个用户设置专属 Prompt 和接口）</span>{% endif %}</label>
+        <label class="cfg-label" id="listenListLabel">{% if config.AllListen_switch %}黑名单列表{% else %}监听列表 <span style="font-size:11px;color:var(--muted);font-weight:400;">（白名单模式：可为每个用户设置专属 Prompt、接口和回复上限）</span>{% endif %}</label>
       </div>
       <div id="listen_container">
         {% for item in config.listen_list %}
@@ -1291,6 +1313,9 @@ body.mobile-nav-open { overflow: hidden; }
               <option value="{{ loop.index0 }}" {% if config.chat_api_map.get(item) == loop.index0 %}selected{% endif %}>接口{{ loop.index }}: {{ cfg.model }}</option>
               {% endfor %}
             </select>
+            <input type="number" class="form-control chat-max-round-input" min="1" max="99999"
+                   value="{{ config.get('chat_max_round_map', {}).get(item, '') }}"
+                   placeholder="全局上限" title="专属回复上限（留空=全局）" style="width:120px;flex-shrink:0;">
           </div>
           <button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>
         </div>
@@ -2104,13 +2129,52 @@ body.mobile-nav-open { overflow: hidden; }
         </div>
         <div class="cfg-hint" style="margin-top:8px;">实际延迟为最小值到最大值之间的随机整数秒 · 若最小值大于最大值则自动互换</div>
       </div>
-      <hr style="margin:18px 0 14px;">
       <div class="mb-2">
         <label class="cfg-label" for="api_error_reply" style="font-weight:600;">接口调用失败固定回复</label>
-        <input type="text" class="form-control" id="api_error_reply"
-               value="{{ config.get('api_error_reply', '在忙，我稍后回复您') }}"
-               placeholder="在忙，我稍后回复您">
+        <div class="inline-check-field">
+          <input type="text" class="form-control" id="api_error_reply"
+                 value="{{ config.get('api_error_reply', '在忙，我稍后回复您') }}"
+                 placeholder="在忙，我稍后回复您">
+          <label class="inline-check-suffix" for="api_error_reply_once">
+            <input class="form-check-input" type="checkbox" id="api_error_reply_once" {% if config.get('api_error_reply_once', False) %}checked{% endif %}>
+            只回复一次
+          </label>
+        </div>
         <div class="cfg-hint" style="margin-top:6px;">当调用 AI / 模型接口失败时，机器人将发送此固定回复，而非原始报错提示。</div>
+      </div>
+      <div class="switch-row">
+        <input class="form-check-input" type="checkbox" id="chat_max_round_switch" {% if config.get('chat_max_round_switch', False) %}checked{% endif %}>
+        <label for="chat_max_round_switch">启用回复次数限制（单个好友）</label>
+        <span class="switch-desc">超出设定次数后不再调用 AI 自动回复</span>
+      </div>
+      <div id="chat-max-round-settings" style="{% if not config.get('chat_max_round_switch', False) %}display:none;{% endif %}">
+        <div class="row g-3" style="margin-top:4px;">
+          <div class="col-6">
+            <label class="cfg-label" for="chat_max_round_default">单个好友最多回复次数</label>
+            <input type="number" class="form-control" id="chat_max_round_default" min="1" max="99999"
+              value="{{ config.get('chat_max_round_default', 99) }}" placeholder="99">
+            <div class="cfg-hint">此设置全局生效</div>
+          </div>
+          <div class="col-6">
+            <label class="cfg-label" for="chat_max_round_reset_days">计数重置周期（天）</label>
+            <input type="number" class="form-control" id="chat_max_round_reset_days" min="0" max="365"
+              value="{{ config.get('chat_max_round_reset_days', 0) }}" placeholder="0">
+            <div class="cfg-hint">0=永久累计，1=每天重置，7=每周重置，以此类推</div>
+          </div>
+        </div>
+        <div class="mb-2" style="margin-top:12px;">
+          <label class="cfg-label" for="chat_max_round_reply">超出次数限制固定回复</label>
+          <div class="inline-check-field">
+            <input type="text" class="form-control" id="chat_max_round_reply"
+                   value="{{ config.get('chat_max_round_reply', '') }}"
+                   placeholder="不填写则不回复">
+            <label class="inline-check-suffix" for="chat_max_round_reply_once">
+              <input class="form-check-input" type="checkbox" id="chat_max_round_reply_once" {% if config.get('chat_max_round_reply_once', False) %}checked{% endif %}>
+              只回复一次
+            </label>
+          </div>
+          <div class="cfg-hint">当单个用户回复次数超限时，机器人将发送此固定回复，留空则不回复。</div>
+        </div>
       </div>
       <div class="switch-row">
         <input class="form-check-input" type="checkbox" id="clean_ai_reply_switch" {% if config.get('clean_ai_reply_switch', True) %}checked{% endif %}>
@@ -2852,6 +2916,11 @@ $(function(){
     $('#reply-delay-settings').toggle(this.checked);
   });
 
+  // ===== 回复轮数限制开关联动 =====
+  $('#chat_max_round_switch').on('change', function(){
+    $('#chat-max-round-settings').toggle(this.checked);
+  });
+
   // ===== Remove List Item =====
   $(document).on('click','.btn-remove-item',function(){
     $(this).closest('.list-item, .keyword-item, .scheduled-msg-item, .scheduled-moments-item, .random-moments-item, .random-msg-item, .custom-forward-item').remove();
@@ -3008,7 +3077,7 @@ $(function(){
       $('#global-prompt-row').hide();
       $('#global-filter-mute-row').hide();
       $('.listen-extra').show();
-      $('#listenListLabel').html('监听列表 <span style="font-size:11px;color:var(--muted);font-weight:400;">（白名单模式：可为每个用户设置专属 Prompt 和接口）</span>');
+      $('#listenListLabel').html('监听列表 <span style="font-size:11px;color:var(--muted);font-weight:400;">（白名单模式：可为每个用户设置专属 Prompt、接口和回复上限）</span>');
     }
     $('#listenAddText').text(isGlobal ? '添加黑名单' : '添加监听');
   }
@@ -3022,6 +3091,7 @@ $(function(){
       '<div class="listen-extra" style="display:flex;gap:6px;flex-wrap:wrap;">'+
         '<select class="form-select chat-prompt-select" style="width:145px;flex-shrink:0;" title="专属Prompt">'+buildPromptOpts('')+'</select>'+
         '<select class="form-select chat-api-select" style="width:160px;flex-shrink:0;" title="专属接口">'+buildChatApiOpts(-1)+'</select>'+
+        '<input type="number" class="form-control chat-max-round-input" min="1" max="99999" placeholder="全局上限" title="专属回复上限（留空=全局）" style="width:120px;flex-shrink:0;">'+
       '</div>';
     $('#listen_container').append(
       '<div class="list-item listen-item" style="flex-wrap:wrap;gap:6px;">'+
@@ -3556,7 +3626,7 @@ $(function(){
       group_welcome_msg:$('#group_welcome_msg').summernote('code'),
       default_prompt:$('#default_prompt_select').val()||'默认',
       listen_list:[], group:[], group_api_map:{}, group_prompt_map:{}, new_friend_msg:[],
-      chat_prompt_map:{}, chat_api_map:{},
+      chat_prompt_map:{}, chat_api_map:{}, chat_max_round_map:{},
       group_welcome_random:parseFloat($('#group_welcome_random').val()),
       keyword_dict:{},
       scheduled_msg_switch:$('#scheduled_msg_switch').is(':checked'),
@@ -3584,7 +3654,13 @@ $(function(){
       group_image_recognition_switch:$('#group_image_recognition_switch').is(':checked'),
       group_image_recognition_api:parseInt($('#group_image_recognition_api').val())||0,
       api_error_reply:$('#api_error_reply').val().trim()||'在忙，我稍后回复您',
+      api_error_reply_once:$('#api_error_reply_once').is(':checked'),
       clean_ai_reply_switch:$('#clean_ai_reply_switch').is(':checked'),
+      chat_max_round_switch:$('#chat_max_round_switch').is(':checked'),
+      chat_max_round_default:Math.max(1,Math.min(99999,parseInt($('#chat_max_round_default').val())||99)),
+      chat_max_round_reset_days:Math.max(0,Math.min(365,parseInt($('#chat_max_round_reset_days').val())||0)),
+      chat_max_round_reply:$('#chat_max_round_reply').val().trim(),
+      chat_max_round_reply_once:$('#chat_max_round_reply_once').is(':checked'),
       chat_split_reply_switch:$('#chat_split_reply_switch').is(':checked'),
       chat_split_max_chars:Math.max(1,parseInt($('#chat_split_max_chars').val())||100),
       chat_split_max_count:Math.max(1,parseInt($('#chat_split_max_count').val())||4),
@@ -3607,6 +3683,8 @@ $(function(){
         if (pv) configData.chat_prompt_map[uname] = pv;
         var av = parseInt($(this).find('.chat-api-select').val());
         if (!isNaN(av) && av >= 0) configData.chat_api_map[uname] = av;
+        var rv = parseInt($(this).find('.chat-max-round-input').val());
+        if (!isNaN(rv) && rv >= 1) configData.chat_max_round_map[uname] = Math.min(99999, rv);
       }
     });
     // 群组：收集名称列表 + 专属接口映射 + 专属 prompt 映射
@@ -4069,6 +4147,13 @@ $(function(){
         $('#sv-memory').text(d.memory_switch ? ('上下文' + (d.memory_context_count||'-') + '条') : '未启用');
         // 回复延迟卡片
         $('#sv-delay').text(d.reply_delay_switch ? ((d.reply_delay_min||'-') + '~' + (d.reply_delay_max||'-') + 's') : '未启用');
+        // 回复轮数限制卡片
+        if (d.chat_max_round_switch) {
+          var resetText = d.chat_max_round_reset_days ? ('/' + d.chat_max_round_reset_days + '天') : '';
+          $('#sv-max-round').text('上限' + (d.chat_max_round_default||'-') + '轮' + resetText);
+        } else {
+          $('#sv-max-round').text('未启用');
+        }
         // 详情行
         $('#dv-kw-at').text(d.group_keyword_switch ? (d.group_keyword_at_only ? '仅@触发' : '全部触发') : '-');
         $('#dv-mem-ctx').text(d.memory_switch ? ((d.memory_context_count||'-') + ' 条') : '已关闭');

@@ -200,6 +200,7 @@ class WXBotConfig:
         self.default_prompt   = "默认"      # 全局/fallback prompt 文件名（不含 .md）
         self.chat_prompt_map  = {}          # 私聊白名单用户 -> prompt 名称
         self.chat_api_map     = {}          # 私聊白名单用户 -> API 接口索引
+        self.chat_max_round_map = {}        # 私聊白名单用户 -> 专属回复轮数上限
         self.group_prompt_map = {}          # 群组名称 -> prompt 名称
 
         # ---------- 定时消息配置 ----------
@@ -298,6 +299,7 @@ class WXBotConfig:
                     "default_prompt": "默认",
                     "chat_prompt_map": {},
                     "chat_api_map": {},
+                    "chat_max_round_map": {},
                     "group_prompt_map": {},
                     "scheduled_msg_switch": False,
                     "scheduled_msg_list": [],
@@ -325,6 +327,12 @@ class WXBotConfig:
                     "group_image_recognition_switch": False,
                     "group_image_recognition_api": 0,
                     "api_error_reply": "在忙，我稍后回复您",
+                    "api_error_reply_once": False,
+                    "chat_max_round_switch": False,
+                    "chat_max_round_default": 99,
+                    "chat_max_round_reset_days": 0,
+                    "chat_max_round_reply": "",
+                    "chat_max_round_reply_once": False,
                     "chat_split_reply_switch": False,
                     "chat_split_max_chars": 100,
                     "chat_split_max_count": 4,
@@ -574,11 +582,22 @@ class WXBotConfig:
         self.default_prompt   = self.config.get('default_prompt', '默认')
         self.chat_prompt_map  = self.config.get('chat_prompt_map', {})
         self.chat_api_map     = self.config.get('chat_api_map', {})
+        self.chat_max_round_map = self._normalize_chat_max_round_map(
+            self.config.get('chat_max_round_map', {})
+        )
         self.group_prompt_map = self.config.get('group_prompt_map', {})
         self.init_prompt_dir()
 
         # 接口调用失败时的固定回复
         self.api_error_reply = self.config.get('api_error_reply', '在忙，我稍后回复您')
+        self.api_error_reply_once = bool(self.config.get('api_error_reply_once', False))
+
+        # 单用户最大回复轮数限制配置
+        self.chat_max_round_switch = bool(self.config.get('chat_max_round_switch', False))
+        self.chat_max_round_default = self._coerce_int_range(self.config.get('chat_max_round_default', 99), 99, 1, 99999)
+        self.chat_max_round_reset_days = self._coerce_int_range(self.config.get('chat_max_round_reset_days', 0), 0, 0, 365)
+        self.chat_max_round_reply = self.config.get('chat_max_round_reply', '')
+        self.chat_max_round_reply_once = bool(self.config.get('chat_max_round_reply_once', False))
 
         # 拆分多条回复配置
         self.chat_split_reply_switch  = bool(self.config.get('chat_split_reply_switch', False))
@@ -693,6 +712,32 @@ class WXBotConfig:
     def split_long_text(text, chunk_size=2000):
         """将超长文本按指定长度切分为列表，用于分段发送"""
         return [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
+
+    @staticmethod
+    def _normalize_chat_max_round_map(raw_map):
+        """清洗私聊白名单用户的专属回复轮数上限配置"""
+        if not isinstance(raw_map, dict):
+            return {}
+        clean = {}
+        for name, value in raw_map.items():
+            name = str(name).strip()
+            if not name:
+                continue
+            try:
+                value = int(value)
+            except Exception:
+                continue
+            clean[name] = max(1, min(99999, value))
+        return clean
+
+    @staticmethod
+    def _coerce_int_range(value, default, min_value, max_value):
+        """将配置值转为指定范围内的整数"""
+        try:
+            value = int(value)
+        except Exception:
+            value = default
+        return max(min_value, min(max_value, value))
 
     def human_delay(self):
         """模拟人工操作随机延迟。reply_delay_switch 关闭时直接跳过。"""
@@ -858,6 +903,179 @@ class MemoryManager:
                 except Exception:
                     pass
         return count
+
+
+# ============================================================
+# 回复计数器管理类
+# ============================================================
+
+class ReplyCountStore:
+    """
+    私聊回复计数器管理类。
+    负责持久化每个用户的 AI 回复次数、超限通知状态和 API 错误通知状态。
+    """
+
+    DEFAULT_DATA = {"meta": {"last_reset_date": ""}, "users": {}}
+
+    def __init__(self, file_path):
+        self.file_path = file_path
+        self._lock = threading.RLock()
+        self.data = self._load()
+
+    @classmethod
+    def _empty_data(cls):
+        return {"meta": {"last_reset_date": ""}, "users": {}}
+
+    @classmethod
+    def _normalize_user_data(cls, user_data):
+        if not isinstance(user_data, dict):
+            user_data = {}
+        try:
+            ai_count = int(user_data.get("ai_count", 0))
+        except Exception:
+            ai_count = 0
+        return {
+            "ai_count": max(0, ai_count),
+            "api_err_notified": bool(user_data.get("api_err_notified", False)),
+            "limit_notified": bool(user_data.get("limit_notified", False)),
+        }
+
+    @classmethod
+    def _normalize_data(cls, raw_data):
+        if not isinstance(raw_data, dict):
+            return cls._empty_data()
+        meta = raw_data.get("meta", {})
+        if not isinstance(meta, dict):
+            meta = {}
+        users = raw_data.get("users", {})
+        if not isinstance(users, dict):
+            users = {}
+        normalized_users = {}
+        for user, user_data in users.items():
+            user = str(user).strip()
+            if user:
+                normalized_users[user] = cls._normalize_user_data(user_data)
+        return {
+            "meta": {"last_reset_date": str(meta.get("last_reset_date", "") or "")},
+            "users": normalized_users,
+        }
+
+    def _load(self):
+        if not os.path.exists(self.file_path):
+            return self._empty_data()
+        try:
+            with open(self.file_path, 'r', encoding='utf-8') as f:
+                return self._normalize_data(json.load(f))
+        except Exception as e:
+            log(level="WARNING", message=f"加载 reply_count.json 失败: {e}")
+            return self._empty_data()
+
+    def _save_locked(self):
+        os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
+        tmp_path = self.file_path + ".tmp"
+        with open(tmp_path, 'w', encoding='utf-8') as f:
+            json.dump(self.data, f, ensure_ascii=False, indent=4)
+        os.replace(tmp_path, self.file_path)
+
+    def save(self):
+        with self._lock:
+            self._save_locked()
+
+    def get_user(self, user_key):
+        user_key = str(user_key).strip()
+        with self._lock:
+            users = self.data.setdefault("users", {})
+            if user_key not in users:
+                users[user_key] = self._normalize_user_data({})
+            else:
+                users[user_key] = self._normalize_user_data(users[user_key])
+            return users[user_key]
+
+    def maybe_reset(self, reset_days, now=None):
+        try:
+            reset_days = int(reset_days)
+        except Exception:
+            reset_days = 0
+        if reset_days <= 0:
+            return False
+        now = now or datetime.now()
+        today = now.strftime("%Y-%m-%d")
+        with self._lock:
+            meta = self.data.setdefault("meta", {})
+            last = str(meta.get("last_reset_date", "") or "")
+            if not last:
+                meta["last_reset_date"] = today
+                self._save_locked()
+                return False
+            try:
+                last_dt = datetime.strptime(last, "%Y-%m-%d")
+            except Exception:
+                meta["last_reset_date"] = today
+                self._save_locked()
+                return False
+            delta = (now - last_dt).days
+            if delta >= reset_days:
+                self.data["users"] = {}
+                meta["last_reset_date"] = today
+                self._save_locked()
+                log(message=f"回复计数器已重置（周期 {reset_days} 天）")
+                return True
+        return False
+
+    def increment_ai_count(self, user_key):
+        with self._lock:
+            user_data = self.get_user(user_key)
+            user_data["ai_count"] = user_data.get("ai_count", 0) + 1
+            self._save_locked()
+            return user_data["ai_count"]
+
+    def mark_limit_notified(self, user_key):
+        with self._lock:
+            user_data = self.get_user(user_key)
+            if user_data.get("limit_notified"):
+                return False
+            user_data["limit_notified"] = True
+            self._save_locked()
+            return True
+
+    def mark_api_err_notified(self, user_key):
+        with self._lock:
+            user_data = self.get_user(user_key)
+            if user_data.get("api_err_notified"):
+                return False
+            user_data["api_err_notified"] = True
+            self._save_locked()
+            return True
+
+    def clear_user(self, user_key):
+        user_key = str(user_key).strip()
+        with self._lock:
+            users = self.data.setdefault("users", {})
+            if user_key not in users:
+                return False
+            del users[user_key]
+            self._save_locked()
+            return True
+
+    @staticmethod
+    def was_send_success(result):
+        if result is True:
+            return True
+        if result is False or result is None:
+            return False
+        if isinstance(result, dict):
+            status = str(result.get("status", "")).lower()
+            if status in ("success", "ok", "true"):
+                return True
+            if status in ("error", "fail", "failed", "false"):
+                return False
+            if result.get("code") == 0:
+                return True
+            if result.get("success") is True:
+                return True
+            if result.get("success") is False:
+                return False
+        return bool(result)
 
 
 # ============================================================
@@ -1681,6 +1899,10 @@ class WXBot:
         self.msg_replied_count   = 0            # 已回复消息数
         self.last_msg_time       = None         # 最近一条消息的时间字符串
         self.last_msg_sender     = None         # 最近一条消息的发送者
+
+        # 私聊回复轮数计数器
+        _base = os.path.dirname(sys.executable) if hasattr(sys, '_MEIPASS') else os.path.abspath(".")
+        self.reply_count_store = ReplyCountStore(os.path.join(_base, 'config', 'reply_count.json'))
 
     def _init_api(self):
         """根据配置中的 api_sdk 字段实例化对应的 AI 接口对象（默认接口）"""
@@ -2719,6 +2941,40 @@ class WXBot:
         log(level="WARNING", message="AI 回复清洗后为空，已使用接口失败固定回复兜底")
         return self.config.api_error_reply
 
+    def _get_reply_count_key(self, chat, message=None):
+        """获取回复计数器 key；当前 wxautox4 可用稳定字段有限，先集中使用 chat.who。"""
+        return str(getattr(chat, 'who', '') or '').strip()
+
+    def _get_chat_max_round(self, user_name):
+        """获取私聊用户的回复轮数上限；白名单模式优先用户专属上限。"""
+        if not self.config.AllListen_switch:
+            custom_value = self.config.chat_max_round_map.get(user_name)
+            if custom_value:
+                return custom_value
+        return self.config.chat_max_round_default
+
+    def _check_chat_max_round_limit(self, chat, user_key):
+        """检查并处理私聊回复轮数超限；返回 (是否已处理, 发送结果)。"""
+        if not self.config.chat_max_round_switch or not user_key:
+            return False, True
+        self.reply_count_store.maybe_reset(self.config.chat_max_round_reset_days)
+        user_data = self.reply_count_store.get_user(user_key)
+        max_round = self._get_chat_max_round(user_key)
+        if user_data.get("ai_count", 0) < max_round:
+            return False, True
+
+        if self.config.chat_max_round_reply_once and user_data.get("limit_notified"):
+            return True, True
+        if not self.config.chat_max_round_reply:
+            return True, True
+
+        result = chat.SendMsg(self.config.chat_max_round_reply)
+        if ReplyCountStore.was_send_success(result):
+            self.msg_replied_count += 1
+            if self.config.chat_max_round_reply_once:
+                self.reply_count_store.mark_limit_notified(user_key)
+        return True, result
+
     def _is_custom_forward_source(self, chat_who):
         """判断某个会话是否是任意自定义转发规则的监听来源"""
         for rule in self.config.custom_forward_list:
@@ -2784,6 +3040,14 @@ class WXBot:
         # log(level="DEBUG", message=f"[DEBUG] 私聊暂停标志：{self._pause_chat_reply}，来源：{chat.who}")
         if self._pause_chat_reply:
             return True
+        result = True
+        user_key = self._get_reply_count_key(chat, message)
+        limit_handled, limit_result = self._check_chat_max_round_limit(chat, user_key)
+        if limit_handled:
+            return limit_result
+
+        api_error_reply = False
+        api_error_should_mark = False
         try:
             is_keyword = False
             # 私聊关键词优先匹配
@@ -2841,11 +3105,23 @@ class WXBot:
         except Exception as e:
             print(traceback.format_exc())
             log(level="ERROR", message=str(e) + "\nAPI返回错误，请稍后再试")
-            reply = "API返回错误，请稍后再试"
+            api_error_reply = True
+            if self.config.api_error_reply_once and user_key:
+                user_data = self.reply_count_store.get_user(user_key)
+                if user_data.get("api_err_notified"):
+                    return True
+                api_error_should_mark = True
+            reply = self.config.api_error_reply
 
         # 接口调用失败时替换为配置的固定回复
         if reply == "API返回错误，请稍后再试":
+            if self.config.api_error_reply_once and user_key:
+                user_data = self.reply_count_store.get_user(user_key)
+                if user_data.get("api_err_notified"):
+                    return True
+                api_error_should_mark = True
             reply = self.config.api_error_reply
+            api_error_reply = True
         else:
             reply = self._clean_reply_for_send(reply)
 
@@ -2855,13 +3131,22 @@ class WXBot:
         else:
             parts = [reply]
 
+        send_success = False
         for part in parts:
             self.config.human_delay()   # 每条发送前都延迟（含第一条，与原逻辑等效）
             if len(part) >= 2000:
                 for segment in self.config.split_long_text(part):
                     result = chat.SendMsg(segment)
+                    send_success = send_success or ReplyCountStore.was_send_success(result)
             else:
                 result = chat.SendMsg(part)
+                send_success = send_success or ReplyCountStore.was_send_success(result)
+
+        if send_success and api_error_should_mark:
+            self.reply_count_store.mark_api_err_notified(user_key)
+
+        if send_success and self.config.chat_max_round_switch and user_key and not api_error_reply:
+            self.reply_count_store.increment_ai_count(user_key)
 
         self.msg_replied_count += 1
         return result
@@ -3027,6 +3312,22 @@ class WXBot:
                 '[/查看错误回复] 查看接口失败固定回复\n'
                 '[/设置错误回复 ***] 修改接口失败固定回复'
             )
+        elif content == "/计数器指令":
+            _round_sw = "开启" if self.config.chat_max_round_switch else "关闭"
+            _round_reset = self.config.chat_max_round_reset_days
+            _reset_desc = "不重置" if _round_reset == 0 else f"{_round_reset}天"
+            _reply_desc = self.config.chat_max_round_reply or "（空，超限后静默）"
+            result = chat.SendMsg(
+                '--- 回复计数器 ---\n'
+                f'轮数限制开关：{_round_sw}\n'
+                f'默认上限：{self.config.chat_max_round_default} 轮\n'
+                f'白名单专属上限：{len(self.config.chat_max_round_map)} 个\n'
+                f'重置周期：{_reset_desc}\n'
+                f'超限话术：{_reply_desc}\n'
+                f'超限只回复一次：{"是" if self.config.chat_max_round_reply_once else "否"}\n'
+                f'接口失败只回复一次：{"是" if self.config.api_error_reply_once else "否"}\n'
+                '[/清除计数 昵称] 清除指定用户的回复计数与通知状态'
+            )
         elif content == "/状态":
             result = self._build_status_msg(chat, message)
         elif content == "/关键词状态":
@@ -3158,6 +3459,15 @@ class WXBot:
                 result = chat.SendMsg(f"接口失败固定回复已更新：{new_err}")
             else:
                 result = chat.SendMsg("请提供回复内容，如：/设置错误回复 在忙，我稍后回复您")
+        # --- 回复计数器清零 ---
+        elif content.startswith("/清除计数"):
+            target = re.sub("/清除计数", "", content).strip()
+            if not target:
+                result = chat.SendMsg("请提供用户昵称，如：/清除计数 张三")
+            elif self.reply_count_store.clear_user(target):
+                result = chat.SendMsg(f"已清除 {target} 的回复计数与通知状态")
+            else:
+                result = chat.SendMsg(f"未找到 {target} 的计数记录（可能尚未触发过回复）")
         else:
             # 未匹配到任何指令
             # self 消息（文件传输助手场景下机器人自身回复的同步）不调用 AI，避免误触发关键词或 AI 回复
@@ -3511,6 +3821,7 @@ class WXBot:
             '/拆分回复指令\n'
             '/新好友指令\n'
             '/接口指令\n'
+            '/计数器指令\n'
             '作者:https://www.siver.top'
         )
         return chat.SendMsg(commands)
@@ -3936,6 +4247,9 @@ class WXBot:
             "reply_delay_switch":    self.config.reply_delay_switch,
             "reply_delay_min":       self.config.reply_delay_min,
             "reply_delay_max":       self.config.reply_delay_max,
+            "chat_max_round_switch": self.config.chat_max_round_switch,
+            "chat_max_round_default": self.config.chat_max_round_default,
+            "chat_max_round_reset_days": self.config.chat_max_round_reset_days,
             "pause_chat_reply":      self._pause_chat_reply,
             "pause_group_reply":     self._pause_group_reply,
         }
