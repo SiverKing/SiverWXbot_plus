@@ -1103,7 +1103,35 @@ class OpenAIAPI:
             }
         )
 
-    def chat(self, message, model=None, stream=False, prompt=None, history=None):
+    @staticmethod
+    def _image_to_data_url(image_path: str = "", image_url: str = "") -> str:
+        if image_path:
+            mime_type, _ = mimetypes.guess_type(image_path)
+            if mime_type not in ("image/jpeg", "image/png", "image/gif", "image/webp"):
+                mime_type = "image/jpeg"
+            with open(image_path, "rb") as f:
+                image_data = base64.standard_b64encode(f.read()).decode("utf-8")
+            return f"data:{mime_type};base64,{image_data}"
+        if image_url:
+            return image_url
+        raise ValueError("image_path 和 image_url 不能同时为空")
+
+    @classmethod
+    def _build_chat_image_block(cls, image_path: str = "", image_url: str = "") -> dict:
+        return {
+            "type": "image_url",
+            "image_url": {"url": cls._image_to_data_url(image_path, image_url)}
+        }
+
+    @classmethod
+    def _build_responses_image_block(cls, image_path: str = "", image_url: str = "") -> dict:
+        return {
+            "type": "input_image",
+            "image_url": cls._image_to_data_url(image_path, image_url)
+        }
+
+    def chat(self, message, model=None, stream=False, prompt=None, history=None,
+             image_path: str = "", image_url: str = ""):
         """
         调用 OpenAI 兼容接口获取 AI 回复。
 
@@ -1112,6 +1140,8 @@ class OpenAIAPI:
         :param stream:  是否使用流式输出
         :param prompt:  系统提示词，为 None 时使用配置中的 prompt
         :param history: 历史消息列表（MemoryManager.get_messages 返回值）
+        :param image_path: 本地图片路径，优先于 image_url
+        :param image_url:  图片 URL，image_path 为空时使用
         :return:        AI 回复的文本字符串
         """
         if model is None:
@@ -1131,7 +1161,14 @@ class OpenAIAPI:
                 else:
                     content = f"[{t}] {raw}" if t else raw
                 messages.append({"role": role, "content": content})
-        messages.append({"role": "user", "content": message})
+        if image_path or image_url:
+            user_content = [
+                {"type": "text", "text": message},
+                self._build_chat_image_block(image_path, image_url),
+            ]
+        else:
+            user_content = message
+        messages.append({"role": "user", "content": user_content})
 
         try:
             response = self.client.chat.completions.create(
@@ -1144,7 +1181,7 @@ class OpenAIAPI:
             error_type = type(e).__name__
             log(level="WARN", message=f"Chat Completions API 调用失败 [{error_type}]: {error_msg}")
             log(level="INFO", message="尝试备用方案（Responses API）")
-            return self._try_responses_api(message, model, stream, prompt)
+            return self._try_responses_api(message, model, stream, prompt, image_path, image_url)
 
         try:
             if stream:
@@ -1181,7 +1218,7 @@ class OpenAIAPI:
                     return result
                 else:
                     log(level="WARN", message=f"流式响应为空（收到 {chunk_count} 个块），尝试备用方案")
-                    return self._try_responses_api(message, model, stream, prompt)
+                    return self._try_responses_api(message, model, stream, prompt, image_path, image_url)
             else:
                 # 非流式模式：直接取 choices[0] 的消息内容
                 if response.choices and len(response.choices) > 0:
@@ -1194,16 +1231,16 @@ class OpenAIAPI:
                         return output
                     else:
                         log(level="WARN", message="非流式响应内容为空，尝试备用方案")
-                        return self._try_responses_api(message, model, stream, prompt)
+                        return self._try_responses_api(message, model, stream, prompt, image_path, image_url)
                 else:
                     log(level="WARN", message="响应中没有 choices，尝试备用方案")
-                    return self._try_responses_api(message, model, stream, prompt)
+                    return self._try_responses_api(message, model, stream, prompt, image_path, image_url)
         except Exception as e:
             error_type = type(e).__name__
             log(level="WARN", message=f"解析 API 响应出错 [{error_type}]: {str(e)}，尝试备用方案")
-            return self._try_responses_api(message, model, stream, prompt)
+            return self._try_responses_api(message, model, stream, prompt, image_path, image_url)
 
-    def _try_responses_api(self, message, model, stream, prompt):
+    def _try_responses_api(self, message, model, stream, prompt, image_path="", image_url=""):
         """
         备用方案：使用 Responses API 调用。
         当 Chat Completions API 返回非 JSON 格式时自动降级到此方案。
@@ -1214,12 +1251,22 @@ class OpenAIAPI:
                 log(level="WARN", message="备用方案不支持流式输出，将使用非流式模式")
 
             log(message=f"备用方案：使用 Responses API, model={model}")
-            # Responses API 的 input 只接受字符串，将 prompt 拼接到消息中
-            input_text = f"这是prompt，请不要把这个当做用户输入：{prompt}\n\n这是用户消息，你需要参照prompt来回复用户消息：{message}" if prompt and prompt.strip() else message
+            if image_path or image_url:
+                input_text = f"这是prompt，请不要把这个当做用户输入：{prompt}\n\n这是用户消息，你需要参照prompt来回复用户消息：{message}" if prompt and prompt.strip() else message
+                input_payload = [{
+                    "role": "user",
+                    "content": [
+                        {"type": "input_text", "text": input_text},
+                        self._build_responses_image_block(image_path, image_url),
+                    ],
+                }]
+            else:
+                # Responses API 的 input 可接受字符串，将 prompt 拼接到消息中
+                input_payload = f"这是prompt，请不要把这个当做用户输入：{prompt}\n\n这是用户消息，你需要参照prompt来回复用户消息：{message}" if prompt and prompt.strip() else message
 
             response = self.client.responses.create(
                 model=model,
-                input=input_text,
+                input=input_payload,
                 reasoning={"effort": "none"}
             )
 

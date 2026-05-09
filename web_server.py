@@ -10,6 +10,8 @@ from flask import Flask, render_template, request, jsonify, session, redirect, u
 import json
 import os
 import shutil
+import base64
+import tempfile
 from werkzeug.utils import secure_filename
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -1022,6 +1024,62 @@ def _build_test_api_client(tmp_config):
         return CozeAPI(tmp_config)
     return DusAPI(tmp_config)
 
+_TINY_PNG_BASE64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
+)
+
+def _run_api_image_test(api, sdk):
+    """用内置极小 PNG 测试当前接口是否支持图片输入。"""
+    if sdk not in ("OpenAI SDK", "DusAPI"):
+        return {
+            'status': 'skipped',
+            'message': '当前接口类型暂不支持通用图片测试'
+        }
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as f:
+            f.write(base64.b64decode(_TINY_PNG_BASE64))
+            tmp_path = f.name
+        reply = api.chat(
+            "请只回复 OK",
+            stream=False,
+            prompt="你是图片识别连通性测试助手。请确认你能读取图片，并只回复 OK。",
+            history=[],
+            image_path=tmp_path,
+        )
+        raw_reply = str(reply or "")
+        cleaned_reply = clean_ai_reply_text(raw_reply)
+        if not raw_reply or raw_reply == "API返回错误，请稍后再试":
+            return {
+                'status': 'error',
+                'message': '图片测试未返回有效文本，请确认模型支持视觉输入'
+            }
+        return {
+            'status': 'success',
+            'reply': cleaned_reply or '（清洗后为空）',
+            'raw_length': len(raw_reply),
+            'cleaned': cleaned_reply != raw_reply,
+        }
+    except TypeError as e:
+        return {
+            'status': 'skipped',
+            'message': f'当前接口类暂不支持图片参数：{e}'
+        }
+    except Exception as e:
+        msg = str(e)
+        if len(msg) > 500:
+            msg = msg[:500] + '...'
+        return {
+            'status': 'error',
+            'message': f'图片测试失败：{msg}'
+        }
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
 
 @app.route('/test_api_config', methods=['POST'])
 @login_required
@@ -1053,6 +1111,7 @@ def test_api_config_route():
                 'message': '接口有响应，但未返回有效文本，请检查模型名称、接口地址或服务商兼容性'
             })
 
+        image_test = _run_api_image_test(api, tmp_config.api_sdk)
         elapsed_ms = int((time.time() - started) * 1000)
         return jsonify({
             'status': 'success',
@@ -1061,6 +1120,7 @@ def test_api_config_route():
                 'raw_length': len(raw_reply),
                 'cleaned': cleaned,
                 'elapsed_ms': elapsed_ms,
+                'image_test': image_test,
             }
         })
     except Exception as e:

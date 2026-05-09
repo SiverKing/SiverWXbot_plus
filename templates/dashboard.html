@@ -919,7 +919,7 @@ body.mobile-nav-open { overflow: hidden; }
       <!-- 统计卡片网格 -->
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:20px;">
         <div class="stat-card" id="sc-received">
-          <div class="stat-icon"><i class="bi bi-envelope-arrow-down"></i></div>
+          <div class="stat-icon"><i class="bi bi-inbox"></i></div>
           <div class="stat-val" id="sv-received">-</div>
           <div class="stat-label">收到消息</div>
         </div>
@@ -954,7 +954,7 @@ body.mobile-nav-open { overflow: hidden; }
           <div class="stat-label">关键词回复</div>
         </div>
         <div class="stat-card" id="sc-memory">
-          <div class="stat-icon"><i class="bi bi-brain"></i></div>
+          <div class="stat-icon"><i class="bi bi-journal-text"></i></div>
           <div class="stat-val" id="sv-memory">-</div>
           <div class="stat-label">对话记忆</div>
         </div>
@@ -1350,8 +1350,8 @@ body.mobile-nav-open { overflow: hidden; }
       </div>
       <div style="padding:9px 14px;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;color:#92400e;font-size:12.5px;line-height:1.8;">
         <i class="bi bi-exclamation-triangle" style="color:#d97706;margin-right:4px;"></i>
-        <strong>图片识别：</strong>目前仅支持 <a href="https://dusapi.com" target="_blank" style="color:#92400e;font-weight:600;">DusAPI</a> 接口，需选择支持视觉的模型，如 <strong>claude-sonnet-4-6</strong>、<strong>gpt-5.4</strong> 系列。
-        支持<strong>直接发送</strong>的图片及<strong>引用图片</strong>的识别。DusAPI 原生支持图片识别，和配置其他功能一样，填个 Key 即可通用，快速便捷。
+        <strong>图片识别：</strong>支持 <a href="https://dusapi.com" target="_blank" style="color:#92400e;font-weight:600;">DusAPI</a>，以及兼容 OpenAI 视觉格式的接口（如 Kimi / OpenAI），需选择支持视觉输入的模型。
+        支持<strong>直接发送</strong>的图片及<strong>引用图片</strong>的识别。MiniMax、DeepSeek 当前不建议用于图片识别。
         遇到图片下载、保存或识图相关报错时，请尝试：将 <strong>Windows 屏幕缩放设置为 100%</strong>，并将<strong>微信字体保持标准大小</strong>后重试。
         <br><strong>语音识别：</strong>开启后会自动调用微信的语音消息转文字功能，仅能识别普通话。如果提示转文字失败，请在微信设置 → 通用 → 聊天中，将「语音消息自动转成文字」功能打开。
       </div>
@@ -1483,8 +1483,8 @@ body.mobile-nav-open { overflow: hidden; }
       </div>
       <div style="padding:9px 14px;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;color:#92400e;font-size:12.5px;line-height:1.8;">
         <i class="bi bi-exclamation-triangle" style="color:#d97706;margin-right:4px;"></i>
-        图片识别目前仅支持 <a href="https://dusapi.com" target="_blank" style="color:#92400e;font-weight:600;">DusAPI</a> 接口，需选择支持视觉的模型，如 <strong>claude-sonnet-4-6</strong>、<strong>gpt-5.4</strong> 系列。
-        支持<strong>直接发送</strong>的图片及<strong>引用图片</strong>的识别。DusAPI 原生支持图片识别，和配置其他功能一样，填个 Key 即可通用，快速便捷。
+        图片识别支持 <a href="https://dusapi.com" target="_blank" style="color:#92400e;font-weight:600;">DusAPI</a>，以及兼容 OpenAI 视觉格式的接口（如 Kimi / OpenAI），需选择支持视觉输入的模型。
+        支持<strong>直接发送</strong>的图片及<strong>引用图片</strong>的识别。MiniMax、DeepSeek 当前不建议用于图片识别。
         遇到图片下载、保存或识图相关报错时，请尝试：将 <strong>Windows 屏幕缩放设置为 100%</strong>，并将<strong>微信字体保持标准大小</strong>后重试。
         <br><strong>语音识别：</strong>开启后会自动调用微信的语音消息转文字功能，仅能识别普通话。如果提示转文字失败，请在微信设置 → 通用 → 聊天中，将「语音消息自动转成文字」功能打开。
       </div>
@@ -2723,15 +2723,27 @@ $(function(){
       method: 'POST',
       contentType: 'application/json',
       dataType: 'json',
-      timeout: 70000,
+      timeout: 140000,
       data: JSON.stringify({api_config: apiConfig}),
       success: function(res){
         if(res.status === 'success'){
           var d = res.data || {};
           var cleanedHint = d.cleaned ? '<br><br>检测到思考标签，已按当前清洗规则处理测试返回。' : '';
+          var img = d.image_test || {};
+          var imageHtml = '<br>图片：';
+          if(img.status === 'success'){
+            imageHtml += '<span style="color:#07C160;font-weight:600;">可用</span>';
+            if(img.cleaned) imageHtml += '（已清洗测试返回）';
+          } else if(img.status === 'skipped'){
+            imageHtml += '<span style="color:#888;">未测试</span>：' + $('<div>').text(img.message || '').html();
+          } else {
+            imageHtml += '<span style="color:#FA5151;font-weight:600;">失败</span>：' + $('<div>').text(img.message || '').html();
+          }
           svModal.success(
             '接口 ' + idx + ' 可用<br>' +
             '耗时：' + (d.elapsed_ms || '-') + ' ms<br>' +
+            '文本：<span style="color:#07C160;font-weight:600;">可用</span>' +
+            imageHtml + '<br>' +
             '返回：<code>' + $('<div>').text(d.reply || '').html() + '</code>' +
             cleanedHint,
             '测试成功'
