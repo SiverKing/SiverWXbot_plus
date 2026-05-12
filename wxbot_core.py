@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.7.24"
-version_log = "V4.7.24 - 内核库更新(源码用户请执行pip更新库命令)、新增通用 Webhook 报错通知、优化报错告警链路，支持邮箱和 Webhook 同时通知、新增接口可用性测试功能、扩展 OpenAI 兼容接口图片识别支持、新增模型思考过程清洗、新增接口失败固定回复只回复一次、新增好友专属回复上限配置、新增超限固定回复配置、状态面板新增轮数限制展示、"
+version = "V4.7.25"
+version_log = "V4.7.25 - 适配最新4.1.9.35客户端、优化自动通过好友备注设置、优化面板重启载入新按钮状态刷新"
 
 # ============================================================
 # 标准库导入
@@ -188,6 +188,9 @@ class WXBotConfig:
         self.new_frined_switch = False        # 自动通过新好友开关
         self.new_frien_reply_switch = False   # 新好友自动回复开关
         self.new_frien_msg = []               # 通过后自动发送的打招呼消息列表
+        self.new_friend_remark_use_nickname = True
+        self.new_friend_remark_prefix_timestamp = False
+        self.new_friend_remark_suffix_timestamp = False
 
         # ---------- 关键词回复配置 ----------
         self.chat_keyword_switch = False    # 私聊关键词回复开关
@@ -290,8 +293,11 @@ class WXBotConfig:
                     "new_friend_msg": [],
                     "new_friend_check_min": 60,
                     "new_friend_check_max": 300,
+                    "new_friend_remark_use_nickname": True,
                     "new_friend_remark_prefix": "",
+                    "new_friend_remark_prefix_timestamp": False,
                     "new_friend_remark_suffix": "_机器人备注",
+                    "new_friend_remark_suffix_timestamp": False,
                     "new_friend_tags": [],
                     "chat_keyword_switch": False,
                     "group_keyword_switch": False,
@@ -344,6 +350,8 @@ class WXBotConfig:
                     "group_split_max_count": 4,
                     "siver_panel_enabled": False,
                     "siver_panel_activation_code": "",
+                    "siver_panel_activation_code_applied_hash": "",
+                    "siver_panel_activation_code_failed_hash": "",
                     "siver_panel_slug": "",
                     "siver_panel_install_id": "",
                     "siver_panel_machine_fingerprint": "",
@@ -493,8 +501,11 @@ class WXBotConfig:
         self.new_frien_msg           = self.config.get('new_friend_msg', [])
         self.new_friend_check_min    = max(60, int(self.config.get('new_friend_check_min', 60)))
         self.new_friend_check_max    = min(3600, max(self.new_friend_check_min, int(self.config.get('new_friend_check_max', 300))))
+        self.new_friend_remark_use_nickname = bool(self.config.get('new_friend_remark_use_nickname', True))
         self.new_friend_remark_prefix = self.config.get('new_friend_remark_prefix', '')
+        self.new_friend_remark_prefix_timestamp = bool(self.config.get('new_friend_remark_prefix_timestamp', False))
         self.new_friend_remark_suffix = self.config.get('new_friend_remark_suffix', '_机器人备注')
+        self.new_friend_remark_suffix_timestamp = bool(self.config.get('new_friend_remark_suffix_timestamp', False))
         self.new_friend_tags         = self.config.get('new_friend_tags', [])
 
         # 关键词配置
@@ -3853,11 +3864,17 @@ class WXBot:
         """处理 /新好友状态 指令：返回新好友自动通过和自动回复配置"""
         accept = "开启" if self.config.new_frined_switch      else "关闭"
         reply  = "开启" if self.config.new_frien_reply_switch else "关闭"
+        use_name = "是" if self.config.new_friend_remark_use_nickname else "否"
+        prefix_time = "是" if self.config.new_friend_remark_prefix_timestamp else "否"
+        suffix_time = "是" if self.config.new_friend_remark_suffix_timestamp else "否"
         msgs   = self.config.new_frien_msg if self.config.new_frien_msg else ["（无）"]
         lines  = [
             "--- 新好友状态 ---",
             f"自动通过好友申请：{accept}",
             f"自动回复新好友：{reply}",
+            f"备注采用昵称：{use_name}",
+            f"备注前缀：{self.config.new_friend_remark_prefix or '（空）'}  前缀加时间戳：{prefix_time}",
+            f"备注后缀：{self.config.new_friend_remark_suffix or '（空）'}  后缀加时间戳：{suffix_time}",
             "自动回复消息：",
         ] + [f"  · {m}" for m in msgs]
         return chat.SendMsg('\n'.join(lines))
@@ -3956,6 +3973,61 @@ class WXBot:
         )
         return bool(pattern.match(s))
 
+    @staticmethod
+    def _remark_unit_len(text):
+        """按微信备注近似限制计算长度：ASCII 算 1，中文和特殊字符算 2。"""
+        total = 0
+        for ch in str(text or ""):
+            try:
+                total += len(ch.encode("gbk"))
+            except UnicodeEncodeError:
+                total += 2
+        return total
+
+    @classmethod
+    def _truncate_remark_units(cls, text, max_units):
+        """按备注长度单位裁剪，不截断字符。"""
+        if max_units <= 0:
+            return ""
+        result = []
+        used = 0
+        for ch in str(text or ""):
+            try:
+                unit = len(ch.encode("gbk"))
+            except UnicodeEncodeError:
+                unit = 2
+            if used + unit > max_units:
+                break
+            result.append(ch)
+            used += unit
+        return "".join(result)
+
+    def build_new_friend_remark(self, nickname):
+        """根据面板配置生成新好友备注，并裁剪到微信备注长度限制内。"""
+        max_units = 32
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        leading = timestamp if self.config.new_friend_remark_prefix_timestamp else ""
+        prefix = str(self.config.new_friend_remark_prefix or "")
+        name = str(nickname or "") if self.config.new_friend_remark_use_nickname else ""
+        suffix = str(self.config.new_friend_remark_suffix or "")
+        trailing = timestamp if self.config.new_friend_remark_suffix_timestamp else ""
+
+        fixed_left = leading + prefix
+        fixed_right = suffix + trailing
+        fixed_units = self._remark_unit_len(fixed_left) + self._remark_unit_len(fixed_right)
+        if fixed_units <= max_units:
+            name_units = max_units - fixed_units
+            remark = fixed_left + self._truncate_remark_units(name, name_units) + fixed_right
+        else:
+            trailing_units = self._remark_unit_len(trailing)
+            available_main_units = max(0, max_units - trailing_units)
+            main = self._truncate_remark_units(fixed_left + suffix, available_main_units)
+            remark = main + trailing
+        if not remark:
+            fallback = str(nickname or "新好友") if self.config.new_friend_remark_use_nickname else "新好友"
+            remark = self._truncate_remark_units(fallback, max_units)
+        return remark
+
     def Pass_New_Friends(self):
         """
         检测并批量通过新好友请求，通过后按需自动发送打招呼消息。
@@ -3968,7 +4040,7 @@ class WXBot:
         if len(NewFriends) != 0:
             log(message="以下是新朋友：\n" + str(NewFriends))
             for new in NewFriends:
-                new_name = self.config.new_friend_remark_prefix + new.name + self.config.new_friend_remark_suffix
+                new_name = self.build_new_friend_remark(new.name)
                 tags = self.config.new_friend_tags if self.config.new_friend_tags else None
                 new.accept(remark=new_name, tags=tags)  # 接受好友请求并设置备注和标签
                 log(message="已通过" + new_name + "的好友请求")
@@ -4362,9 +4434,9 @@ class WXBot:
             log(level="ERROR", message=str(e) + "\n 初始化微信监听器失败，请检查微信是否启动登录正确，微信主窗口是否开着")
             log(level="ERROR", message=str(e) + "\n 请尝试退出wx再重新登录后再启动")
             log(level="ERROR", message=str(e) + "\n 请尝试退出wx再重新登录后再启动")
-            log(level="ERROR", message=str(e) + "\n 若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配,4.1.7 ~ 4.1.9.30")
-            log(level="ERROR", message=str(e) + "\n 若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配,4.1.7 ~ 4.1.9.30")
-            log(level="ERROR", message=str(e) + "\n 若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配,4.1.7 ~ 4.1.9.30")
+            log(level="ERROR", message=str(e) + "\n 若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配,4.1.7 ~ 4.1.9.35")
+            log(level="ERROR", message=str(e) + "\n 若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配,4.1.7 ~ 4.1.9.35")
+            log(level="ERROR", message=str(e) + "\n 若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配,4.1.7 ~ 4.1.9.35")
             self.run_flag = False
 
         # 主循环

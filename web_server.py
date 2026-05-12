@@ -672,6 +672,9 @@ def dashboard():
     config.setdefault('reply_delay_min', 1)
     config.setdefault('reply_delay_max', 5)
     config.setdefault('clean_ai_reply_switch', True)
+    config.setdefault('new_friend_remark_use_nickname', True)
+    config.setdefault('new_friend_remark_prefix_timestamp', False)
+    config.setdefault('new_friend_remark_suffix_timestamp', False)
     config.setdefault('chat_image_recognition_switch', False)   # 私聊图片识别开关
     config.setdefault('chat_image_recognition_api',    0)        # 私聊识别接口索引
     config.setdefault('group_image_recognition_switch', False)  # 群组图片识别开关
@@ -763,6 +766,9 @@ def _coerce_bool_fields(merged_config):
         'group_welcome',
         'new_friend_switch',
         'new_friend_reply_switch',
+        'new_friend_remark_use_nickname',
+        'new_friend_remark_prefix_timestamp',
+        'new_friend_remark_suffix_timestamp',
         # —— 新增布尔字段 ——
         'chat_keyword_switch',
         'group_keyword_switch',
@@ -1846,8 +1852,11 @@ def main():
                 "new_friend_msg": [],
                 "new_friend_check_min": 60,
                 "new_friend_check_max": 300,
+                "new_friend_remark_use_nickname": True,
                 "new_friend_remark_prefix": "",
+                "new_friend_remark_prefix_timestamp": False,
                 "new_friend_remark_suffix": "_机器人备注",
+                "new_friend_remark_suffix_timestamp": False,
                 "new_friend_tags": [],
                 "chat_keyword_switch": False,
                 "group_keyword_switch": False,
@@ -1859,6 +1868,9 @@ def main():
                 "random_msg_list": [],
                 "scheduled_moments_switch": False,
                 "scheduled_moments_list": [],
+                "moments_like_switch": False,
+                "moments_like_min": 60,
+                "moments_like_max": 120,
                 "random_moments_switch": False,
                 "random_moments_list": [],
                 "everyday_start_stop_bot_switch": False,

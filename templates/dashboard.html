@@ -782,7 +782,7 @@ body.mobile-nav-open { overflow: hidden; }
   <div class="action-bar">
     <button id="btnStart" class="btn btn-start"><i class="bi bi-play-fill"></i> 启动机器人</button>
     <button id="btnStop" class="btn btn-stop"><i class="bi bi-stop-fill"></i> 停止机器人</button>
-    <button id="btnRestart" class="btn btn-restart" style="display:none;"><i class="bi bi-arrow-repeat"></i> 重启载入新配置</button>
+    <button id="btnRestart" class="btn btn-restart"><i class="bi bi-arrow-repeat"></i> 重启载入新配置</button>
     <div style="flex:1"></div>
     <button id="btnLoad" class="btn btn-load"><i class="bi bi-arrow-down-circle"></i> 加载配置</button>
     <button id="btnSave" class="btn btn-save"><i class="bi bi-save"></i> 保存配置</button>
@@ -1287,7 +1287,7 @@ body.mobile-nav-open { overflow: hidden; }
       <div id="global-filter-mute-row" style="display:{% if config.AllListen_switch %}flex{% else %}none{% endif %};align-items:center;gap:10px;margin-bottom:12px;padding:10px 14px;background:#fef3c7;border:1px solid #fde68a;border-radius:6px;">
         <input class="form-check-input" type="checkbox" id="AllListen_filter_mute" name="AllListen_filter_mute" {% if config.AllListen_filter_mute %}checked{% endif %} style="margin:0;">
         <label for="AllListen_filter_mute" style="margin:0;font-size:13px;font-weight:500;color:#78350f;cursor:pointer;">过滤免打扰消息</label>
-        <span class="cfg-hint" style="margin:0;color:#92400e;">开启后将忽略设置了免打扰的会话消息</span>
+        <span class="cfg-hint" style="margin:0;color:#92400e;">开启后将忽略设置了免打扰的会话消息，若开了过滤免打扰后发现全局不接收消息了，请把Windows屏幕缩放设为100%后再重启微信和面板重试</span>
       </div>
       <!-- 模式提示条 -->
       <div id="listenModeHint" class="d-flex align-items-center gap-2 px-3 py-2 rounded mb-3" style="font-size:13px;font-weight:600;{% if config.AllListen_switch %}background:#FEF2F2;color:#DC2626;border:1px solid #FECACA{% else %}background:#F0FDF4;color:#16A34A;border:1px solid #BBF7D0{% endif %}">
@@ -1544,14 +1544,36 @@ body.mobile-nav-open { overflow: hidden; }
       </div>
       <div class="row g-2 mb-3">
         <div class="col-12"><label class="cfg-label">通过后自动设置备注</label></div>
-        <div class="col-auto d-flex align-items-center gap-2 flex-wrap">
-          <span style="font-size:13px;color:var(--muted);">前缀</span>
-          <input type="text" class="form-control" id="new_friend_remark_prefix" name="new_friend_remark_prefix" placeholder="（留空）" value="{{ config.new_friend_remark_prefix|default('') }}" style="width:130px;">
-          <span style="font-size:13px;color:var(--muted);">+ 微信昵称 +</span>
-          <span style="font-size:13px;color:var(--muted);">后缀</span>
-          <input type="text" class="form-control" id="new_friend_remark_suffix" name="new_friend_remark_suffix" placeholder="_机器人备注" value="{{ config.new_friend_remark_suffix|default('_机器人备注') }}" style="width:130px;">
+        <div class="col-12 d-flex align-items-center gap-3 flex-wrap" style="padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--muted-bg);">
+          <label class="d-inline-flex align-items-center gap-2" for="new_friend_remark_use_nickname" style="font-size:13px;color:var(--card-fg);font-weight:600;margin:0;cursor:pointer;">
+            <input class="form-check-input" type="checkbox" id="new_friend_remark_use_nickname" name="new_friend_remark_use_nickname" {% if config.get('new_friend_remark_use_nickname', True) %}checked{% endif %}>
+            采用新好友昵称
+          </label>
+          <span style="font-size:12px;color:var(--muted);">关闭后仅使用前缀、后缀和时间戳生成备注</span>
         </div>
-        <div class="col-12"><div class="cfg-hint">备注格式：前缀 + 微信昵称 + 后缀，前后缀均可留空</div></div>
+        <div class="col-12 d-flex align-items-end gap-2 flex-wrap">
+          <div style="min-width:190px;flex:1 1 220px;">
+            <label class="cfg-label" for="new_friend_remark_prefix">前缀</label>
+            <div class="inline-check-field">
+              <input type="text" class="form-control" id="new_friend_remark_prefix" name="new_friend_remark_prefix" placeholder="（留空）" value="{{ config.new_friend_remark_prefix|default('') }}">
+              <label class="inline-check-suffix" for="new_friend_remark_prefix_timestamp">
+                <input class="form-check-input" type="checkbox" id="new_friend_remark_prefix_timestamp" name="new_friend_remark_prefix_timestamp" {% if config.get('new_friend_remark_prefix_timestamp', False) %}checked{% endif %}>
+                加时间戳
+              </label>
+            </div>
+          </div>
+          <div style="min-width:190px;flex:1 1 220px;">
+            <label class="cfg-label" for="new_friend_remark_suffix">后缀</label>
+            <div class="inline-check-field">
+              <input type="text" class="form-control" id="new_friend_remark_suffix" name="new_friend_remark_suffix" placeholder="_机器人备注" value="{{ config.new_friend_remark_suffix|default('_机器人备注') }}">
+              <label class="inline-check-suffix" for="new_friend_remark_suffix_timestamp">
+                <input class="form-check-input" type="checkbox" id="new_friend_remark_suffix_timestamp" name="new_friend_remark_suffix_timestamp" {% if config.get('new_friend_remark_suffix_timestamp', False) %}checked{% endif %}>
+                加时间戳
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="col-12"><div class="cfg-hint">备注格式：前缀时间戳 + 前缀 + 新好友昵称 + 后缀 + 后缀时间戳。微信备注最长约 32 个单位，超出会自动裁剪，中文约占 2 个单位。</div></div>
       </div>
       <div class="row g-2 mb-3">
         <div class="col-12"><label class="cfg-label">通过后自动设置标签</label><span class="cfg-hint" style="margin-left:8px;">⚠️ 只能填写微信中已存在的标签，填写不存在的标签将无效</span></div>
@@ -3684,8 +3706,11 @@ $(function(){
       new_friend_reply_switch:$('#new_friend_reply_switch').is(':checked'),
       new_friend_check_min:parseInt($('#new_friend_check_min').val())||60,
       new_friend_check_max:parseInt($('#new_friend_check_max').val())||300,
+      new_friend_remark_use_nickname:$('#new_friend_remark_use_nickname').is(':checked'),
       new_friend_remark_prefix:$('#new_friend_remark_prefix').val(),
+      new_friend_remark_prefix_timestamp:$('#new_friend_remark_prefix_timestamp').is(':checked'),
       new_friend_remark_suffix:$('#new_friend_remark_suffix').val(),
+      new_friend_remark_suffix_timestamp:$('#new_friend_remark_suffix_timestamp').is(':checked'),
       new_friend_tags:$('[name="new_friend_tags"]').map(function(){return $(this).val();}).get().filter(s=>s.trim()!==''),
       chat_keyword_switch:$('#chat_keyword_switch').is(':checked'),
       group_keyword_switch:$('#group_keyword_switch').is(':checked'),
@@ -3957,12 +3982,16 @@ $(function(){
 
   $('#btnRestart').click(function(){
     var $btn = $(this);
-    saveConfig(function(){
-      $btn.prop('disabled', true).html('<i class="bi bi-stop-fill"></i> 正在停止...');
+    var defaultHtml = '<i class="bi bi-arrow-repeat"></i> 重启载入新配置';
+    function resetButton(){
+      $btn.prop('disabled', false).html(defaultHtml);
+    }
+    function restartRunningBot(){
+      $btn.html('<i class="bi bi-stop-fill"></i> 正在停止...');
       $.post('/stop_bot', function(res){
         if(res.status !== 'success'){
           svModal.error(res.message||'停止失败，重启中断');
-          $btn.prop('disabled', false).html('<i class="bi bi-arrow-repeat"></i> 重启载入新配置');
+          resetButton();
           return;
         }
         $btn.html('<i class="bi bi-hourglass-split"></i> 等待中(4s)...');
@@ -3973,12 +4002,27 @@ $(function(){
             else svModal.error(res2.message||'启动失败');
           }).fail(function(xhr){ svModal.error('启动失败: '+xhr.responseText); })
             .always(function(){
-              $btn.prop('disabled', false).html('<i class="bi bi-arrow-repeat"></i> 重启载入新配置');
+              resetButton();
             });
         }, 4000);
       }).fail(function(xhr){
         svModal.error('停止失败: '+xhr.responseText);
-        $btn.prop('disabled', false).html('<i class="bi bi-arrow-repeat"></i> 重启载入新配置');
+        resetButton();
+      });
+    }
+    saveConfig(function(){
+      $btn.prop('disabled', true).html('<i class="bi bi-search"></i> 检查状态...');
+      $.getJSON('/get_status', function(res){
+        var isRunning = res && res.status === 'success' && res.data && res.data.bot_running;
+        if(!isRunning){
+          svModal.alert('配置已保存。机器人当前未运行，无需重启；如需载入新配置，请点击“启动机器人”。', '机器人未运行');
+          resetButton();
+          return;
+        }
+        restartRunningBot();
+      }).fail(function(xhr){
+        svModal.error('检查运行状态失败: '+xhr.responseText);
+        resetButton();
       });
     });
   });
@@ -4183,7 +4227,6 @@ $(function(){
       if(!res || res.status !== 'success') return;
       var d = res.data;
       if(d.bot_running){
-        $('#btnRestart').show();
         $('#topbar-notice').show();
         $('#status-dot').css('background', d.callback_is_die ? '#FA5151' : '#07C160');
         $('#status-text').text(d.callback_is_die ? '运行异常（回调出错）' : '运行中');
@@ -4226,7 +4269,6 @@ $(function(){
         $('#dv-kw-at').text(d.group_keyword_switch ? (d.group_keyword_at_only ? '仅@触发' : '全部触发') : '-');
         $('#dv-mem-ctx').text(d.memory_switch ? ((d.memory_context_count||'-') + ' 条') : '已关闭');
       } else {
-        $('#btnRestart').hide();
         $('#topbar-notice').hide();
         $('#status-dot').css('background', '#ccc');
         // 只在首次加载（数据还是初始 "-"）时才显示"未运行"占位，否则保留上次数据
