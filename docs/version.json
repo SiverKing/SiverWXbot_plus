@@ -1,5 +1,5 @@
 {
-    "version": "V4.7.26",
-    "version_log": "强烈建议所有用户更新！V4.7.26 - 优化监听和全局窗口管理、优化记忆存储文件命名、监听新增只监听不AI回复模式(便于存储消息、只关键词回复或者自定义转发等不需要ai回复的场景)",
-    "infrom": "有使用问题均可及时联系作者，右上角文档可找到联系方式。远程访问服务获取：https://panel.siver.top"
+    "version": "V4.7.27",
+    "version_log": "V4.7.27 - 优化远程访问、关闭SESSION_COOKIE_HTTPONLY方便内外网访问、优化面板接口测试",
+    "infrom": "有使用问题均可及时联系作者，右上角文档可找到联系方式。远程访问服务获取：https://panel.siver.top\n最新版wx 4.1.10、4.1.9.55、4.1.9.57正在制作更新适配中...请耐心等待... 暂时请使用4.1.9.35版本,若被自动更新了就用.35的安装包覆盖安装即可\nwx 4.1.9.35版本下载链接 github：https://github.com/SiverKing/wechat4.0-windows-versions/releases/tag/v4.1.9.35    百度网盘：https://pan.baidu.com/s/13Hb-AIQ74Y4T32GDGhy7iQ?pwd=uhkz 提取码: uhkz"
 }

@@ -10,8 +10,6 @@ from flask import Flask, render_template, request, jsonify, session, redirect, u
 import json
 import os
 import shutil
-import base64
-import tempfile
 import hashlib
 import re
 from werkzeug.utils import secure_filename
@@ -58,7 +56,7 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1, x_proto=1, x_prefix=1)
 # 安全配置
 app.config.update(
     SESSION_COOKIE_SECURE=False,
-    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_HTTPONLY=False,
     SESSION_COOKIE_SAMESITE='Lax',
     PERMANENT_SESSION_LIFETIME=timedelta(days=1)
 )
@@ -597,10 +595,10 @@ def dashboard():
     # 旧配置迁移：只要旧字段存在就迁移并写回磁盘（无论 api_configs 是否已有）
     if 'api_sdk' in config:
         config['api_configs'] = [
-            {'sdk': config.get('api_sdk', 'DusAPI'), 'key': config.get('api_key', ''),
-             'url': config.get('base_url', 'https://api.dusapi.com'), 'model': config.get('model1', 'gpt-5')},
-            {'sdk': config.get('api_sdk', 'DusAPI'), 'key': config.get('api_key', ''),
-             'url': config.get('base_url', 'https://api.dusapi.com'), 'model': config.get('model2', 'claude-sonnet-4-6')},
+            {'sdk': config.get('api_sdk', ''), 'key': config.get('api_key', ''),
+             'url': config.get('base_url', ''), 'model': config.get('model1', '')},
+            {'sdk': config.get('api_sdk', ''), 'key': config.get('api_key', ''),
+             'url': config.get('base_url', ''), 'model': config.get('model2', '')},
         ]
         config['api_index'] = 0
         for old_key in ('api_sdk', 'api_key', 'base_url', 'model1', 'model2', 'api_sdk_list'):
@@ -612,8 +610,8 @@ def dashboard():
         except Exception as _e:
             log('ERROR', f'迁移配置写入失败: {_e}')
     config.setdefault('api_configs', [
-        {"sdk": "DusAPI", "key": "", "url": "https://api.dusapi.com", "model": "gpt-5"},
-        {"sdk": "DusAPI", "key": "", "url": "https://api.dusapi.com", "model": "claude-sonnet-4-6"},
+        {"sdk": "", "key": "", "url": "", "model": ""},
+        {"sdk": "", "key": "", "url": "", "model": ""},
     ])
     config.setdefault('api_index', 0)
 
@@ -1036,63 +1034,9 @@ def _build_test_api_client(tmp_config):
         return DifyAPI(tmp_config)
     if sdk == "Coze":
         return CozeAPI(tmp_config)
-    return DusAPI(tmp_config)
-
-_TINY_PNG_BASE64 = (
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
-)
-
-def _run_api_image_test(api, sdk):
-    """用内置极小 PNG 测试当前接口是否支持图片输入。"""
-    if sdk not in ("OpenAI SDK", "DusAPI"):
-        return {
-            'status': 'skipped',
-            'message': '当前接口类型暂不支持通用图片测试'
-        }
-    tmp_path = None
-    try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as f:
-            f.write(base64.b64decode(_TINY_PNG_BASE64))
-            tmp_path = f.name
-        reply = api.chat(
-            "请只回复 OK",
-            stream=False,
-            prompt="你是图片识别连通性测试助手。请确认你能读取图片，并只回复 OK。",
-            history=[],
-            image_path=tmp_path,
-        )
-        raw_reply = str(reply or "")
-        cleaned_reply = clean_ai_reply_text(raw_reply)
-        if not raw_reply or raw_reply == "API返回错误，请稍后再试":
-            return {
-                'status': 'error',
-                'message': '图片测试未返回有效文本，请确认模型支持视觉输入'
-            }
-        return {
-            'status': 'success',
-            'reply': cleaned_reply or '（清洗后为空）',
-            'raw_length': len(raw_reply),
-            'cleaned': cleaned_reply != raw_reply,
-        }
-    except TypeError as e:
-        return {
-            'status': 'skipped',
-            'message': f'当前接口类暂不支持图片参数：{e}'
-        }
-    except Exception as e:
-        msg = str(e)
-        if len(msg) > 500:
-            msg = msg[:500] + '...'
-        return {
-            'status': 'error',
-            'message': f'图片测试失败：{msg}'
-        }
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            try:
-                os.remove(tmp_path)
-            except Exception:
-                pass
+    if sdk == "DusAPI":
+        return DusAPI(tmp_config)
+    raise ValueError("不支持的 SDK 类型")
 
 
 @app.route('/test_api_config', methods=['POST'])
@@ -1106,6 +1050,8 @@ def test_api_config_route():
             return jsonify({'status': 'error', 'message': '接口配置格式无效'})
 
         tmp_config = _TempAPIConfig(cfg)
+        if tmp_config.api_sdk not in ("DusAPI", "OpenAI SDK", "Dify", "Coze"):
+            return jsonify({'status': 'error', 'message': '请选择有效的 SDK'})
         if not tmp_config.api_key:
             return jsonify({'status': 'error', 'message': 'API Key 不能为空'})
         if not tmp_config.base_url:
@@ -1125,7 +1071,6 @@ def test_api_config_route():
                 'message': '接口有响应，但未返回有效文本，请检查模型名称、接口地址或服务商兼容性'
             })
 
-        image_test = _run_api_image_test(api, tmp_config.api_sdk)
         elapsed_ms = int((time.time() - started) * 1000)
         return jsonify({
             'status': 'success',
@@ -1134,7 +1079,6 @@ def test_api_config_route():
                 'raw_length': len(raw_reply),
                 'cleaned': cleaned,
                 'elapsed_ms': elapsed_ms,
-                'image_test': image_test,
             }
         })
     except Exception as e:
@@ -1895,8 +1839,8 @@ def main():
         if not os.path.exists(CONFIG_FILE):
             default_config = {
                 "api_configs": [
-                    {"sdk": "DusAPI", "key": "your-api-key", "url": "https://api.dusapi.com", "model": "gpt-5.4"},
-                    {"sdk": "DusAPI", "key": "your-api-key", "url": "https://api.dusapi.com", "model": "claude-sonnet-4-6"},
+                    {"sdk": "", "key": "", "url": "", "model": ""},
+                    {"sdk": "", "key": "", "url": "", "model": ""},
                 ],
                 "api_index": 0,
                 "prompt": "你是一个ai回复助手，请根据用户的问题给出回答,回复尽量保持在30字以内",

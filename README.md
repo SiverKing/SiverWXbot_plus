@@ -77,8 +77,7 @@ python web_server.py
 - **记忆管理面板** - 在 Web 面板中可视化查看/删除各窗口的记忆记录，气泡式消息展示
 
 ### 🎯 多 AI 平台支持
-- **DusAPI** ⭐ 推荐 - 兼容 Claude、GPT 等全系模型，国内稳定低延迟，一个 Key 搞定所有需求
-  - 官网：[dusapi.com](https://dusapi.com)
+- **DusAPI** - 兼容 Claude、GPT 等模型的接口封装
   - **自动重试**：梯度重试机制（2/4/8/16/32 秒），5 次失败后报错
 - **OpenAI SDK** - 兼容所有 OpenAI 格式的 API（DeepSeek、通义千问等）
   - 支持流式和非流式输出
@@ -153,7 +152,7 @@ python web_server.py
 - **私聊 / 群聊独立配置** - 私聊和群聊各有独立的开关、最大字数、最多条数设置
 - **群聊 @ 策略** - 群聊模式下首条消息 @ 发言人，后续条不重复 @
 - **容错设计** - AI 未遵守格式时（无分隔符）整段正常发出；超长单条走现有 2000 字分段逻辑
-- **仅适用于支持自定义 Prompt 的接口** - 推荐 DusAPI；Coze / Dify 等工作流接口在平台侧已固化逻辑，可能无效
+- **仅适用于支持自定义 Prompt 的接口** - Coze / Dify 等工作流接口在平台侧已固化逻辑，可能无效
 
 ### 🔧 接口错误自定义固定回复
 - **可配置错误回复** - 调用 AI 接口失败时，机器人发送的回复内容可在面板自定义，默认为"在忙，我稍后回复您"
@@ -165,7 +164,7 @@ python web_server.py
 - **直接图片消息** - 用户直接发送图片，机器人自动下载并调用多模态接口描述图片内容后回复
 - **引用图片消息** - 用户引用带图片的消息，自动提取图片路径与文字内容，一并传给识别接口处理
 - **识别关闭时零开销** - 关闭开关后不仅不回复，连图片下载也跳过，节省资源
-- **须使用 DusAPI** - 图片识别需使用支持视觉的模型（如 claude-sonnet-4-6、gpt-5 系列），通过 [DusAPI](https://dusapi.com) 调用
+- **接口能力要求** - 图片识别需选择支持视觉输入的接口和模型
 
 ### 📂 图片路径快速选择
 - 新好友打招呼消息、定时消息内容、定时朋友圈图片三处均支持 **📁 选择图片** 按钮
@@ -210,23 +209,6 @@ python web_server.py
 
 ---
 
-## 🌟 推荐使用 DusAPI
-
-> **为什么推荐 DusAPI？**
-
-| | DusAPI | 直连 OpenAI |
-|---|---|---|
-| 国内访问 | ✅ 稳定低延迟 | ❌ 需要代理 |
-| 模型覆盖 | ✅ Claude + GPT 全系 | ⚠️ 仅 OpenAI |
-| 一个 Key | ✅ 搞定所有模型 | ❌ 各平台单独申请 |
-| 兼容性 | ✅ 最优 | ⚠️ 部分接口差异 |
-| 自动重试 | ✅ 梯度重试，更稳定 | ⚠️ 依赖 SDK 默认行为 |
-| **图片识别** | ✅ 原生支持，填 Key 即用 | ⚠️ 需自行适配多模态格式 |
-
-👉 前往 [dusapi.com](https://dusapi.com) 注册获取 Key，支持 Claude Opus 4.6、Claude Sonnet 4.6、GPT-5、GPT-5 Pro 等主流模型。**图片识别功能也只需一个 Key，无需任何额外配置，开启开关即可直接使用，非常方便。**
-
----
-
 ## ⚙️ 配置说明
 
 ### config.json 配置文件
@@ -234,8 +216,8 @@ python web_server.py
 ```json
 {
     "api_configs": [
-        {"sdk": "DusAPI", "key": "your-api-key", "url": "https://api.dusapi.com", "model": "gpt-5"},
-        {"sdk": "DusAPI", "key": "your-api-key", "url": "https://api.dusapi.com", "model": "claude-sonnet-4-6"}
+        {"sdk": "OpenAI SDK", "key": "your-api-key", "url": "https://api.example.com/v1", "model": "gpt-5"},
+        {"sdk": "Dify", "key": "your-api-key", "url": "https://api.example.com/v1", "model": "workflow-id"}
     ],
     "api_index": 0,
     "admin": "文件传输助手",
@@ -698,7 +680,7 @@ wxbot_plus/
 3. 保存配置，机器人下次回复时 AI 会自行决定是否拆分
 4. 每条消息之间有发送延迟（使用已配置的回复延迟范围）
 
-> ⚠️ 此功能通过在 Prompt 前注入格式指令实现，仅适用于支持自定义 Prompt 的接口（推荐 DusAPI）；Coze / Dify 等工作流接口可能无效。
+> ⚠️ 此功能通过在 Prompt 前注入格式指令实现，仅适用于支持自定义 Prompt 的接口；Coze / Dify 等工作流接口可能无效。
 
 ### 自定义转发使用示例
 
