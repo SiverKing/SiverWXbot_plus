@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.7.26"
-version_log = "V4.7.26 - 优化监听和全局窗口管理、优化记忆存储文件命名、监听新增只监听不AI回复模式(便于存储消息、只关键词回复或者自定义转发等不需要ai回复的场景)"
+version = "V4.7.27"
+version_log = "V4.7.27 - 优化远程访问、关闭SESSION_COOKIE_HTTPONLY方便内外网访问、优化面板接口测试"
 
 # ============================================================
 # 标准库导入
@@ -273,8 +273,8 @@ class WXBotConfig:
             if not os.path.exists(self.CONFIG_FILE):
                 base_config = {
                     "api_configs": [
-                        {"sdk": "DusAPI", "key": "your-api-key", "url": "https://api.dusapi.com", "model": "gpt-5.4"},
-                        {"sdk": "DusAPI", "key": "your-api-key", "url": "https://api.dusapi.com", "model": "claude-sonnet-4-6"},
+                        {"sdk": "", "key": "", "url": "", "model": ""},
+                        {"sdk": "", "key": "", "url": "", "model": ""},
                     ],
                     "api_index": 0,
                     "prompt": "你是一个ai回复助手，请根据用户的问题给出回答,回复尽量保持在30字以内",
@@ -449,16 +449,16 @@ class WXBotConfig:
         if 'api_configs' not in self.config and 'api_sdk' in self.config:
             self.config['api_configs'] = [
                 {
-                    'sdk':   self.config.get('api_sdk', 'DusAPI'),
+                    'sdk':   self.config.get('api_sdk', ''),
                     'key':   self.config.get('api_key', ''),
-                    'url':   self.config.get('base_url', 'https://api.dusapi.com'),
-                    'model': self.config.get('model1', 'gpt-5'),
+                    'url':   self.config.get('base_url', ''),
+                    'model': self.config.get('model1', ''),
                 },
                 {
-                    'sdk':   self.config.get('api_sdk', 'DusAPI'),
+                    'sdk':   self.config.get('api_sdk', ''),
                     'key':   self.config.get('api_key', ''),
-                    'url':   self.config.get('base_url', 'https://api.dusapi.com'),
-                    'model': self.config.get('model2', 'claude-sonnet-4-6'),
+                    'url':   self.config.get('base_url', ''),
+                    'model': self.config.get('model2', ''),
                 },
             ]
             self.config['api_index'] = 0
@@ -468,8 +468,8 @@ class WXBotConfig:
             log(message="旧 API 配置已自动迁移为新格式并保存")
 
         self.api_configs = self.config.get('api_configs', [
-            {"sdk": "DusAPI", "key": "", "url": "https://api.dusapi.com", "model": "gpt-5"},
-            {"sdk": "DusAPI", "key": "", "url": "https://api.dusapi.com", "model": "claude-sonnet-4-6"},
+            {"sdk": "", "key": "", "url": "", "model": ""},
+            {"sdk": "", "key": "", "url": "", "model": ""},
         ])
         self.api_index = self.config.get('api_index', 0)
         if self.api_index >= len(self.api_configs):
@@ -477,7 +477,7 @@ class WXBotConfig:
 
         # 从当前接口配置派生兼容属性（供 AI 接口类使用）
         _cur = self.api_configs[self.api_index] if self.api_configs else {}
-        self.api_sdk  = _cur.get('sdk', 'DusAPI')
+        self.api_sdk  = _cur.get('sdk', '')
         self.api_key  = _cur.get('key', '')
         self.base_url = _cur.get('url', '')
         self.model1   = _cur.get('model', '')
@@ -2046,7 +2046,7 @@ class WXBot:
             log(level="WARNING", message=f"群组接口索引 {idx} 超出范围，回退到默认接口")
             return self.api
         cfg = configs[idx]
-        sdk = cfg.get('sdk', 'DusAPI')
+        sdk = cfg.get('sdk', '')
 
         # 轻量代理配置：仅覆盖接口相关字段，其余不涉及
         class _ApiProxy:
@@ -4631,6 +4631,8 @@ class WXBot:
             log(level="ERROR", message=str(e) + "\n 若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配,4.1.7 ~ 4.1.9.35")
             log(level="ERROR", message=str(e) + "\n 若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配,4.1.7 ~ 4.1.9.35")
             log(level="ERROR", message=str(e) + "\n 若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配,4.1.7 ~ 4.1.9.35")
+            log(level="ERROR", message=str(e) + "\n 若以上情况都检查完没有问题，那大概率为wx本身或者windows系统不稳定导致的，重启程序即可，若是一直这样，如果您是虚拟机就请分配更多性能，若是实体机可以联系作者询问")
+            log(level="ERROR", message=str(e) + "\n 若以上情况都检查完没有问题，那大概率为wx本身或者windows系统不稳定导致的，重启程序即可，若是一直这样，如果您是虚拟机就请分配更多性能，若是实体机可以联系作者询问")
             self.run_flag = False
 
         # 主循环

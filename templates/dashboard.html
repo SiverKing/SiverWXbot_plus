@@ -1125,17 +1125,6 @@ body.mobile-nav-open { overflow: hidden; }
   </div>
 
   <div class="config-panel" id="tab-api">
-    <!-- DusAPI 顶部广告横幅 -->
-    <div style="background:linear-gradient(135deg,#06AD56 0%,#07C160 100%);border-radius:8px;padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;gap:16px;">
-      <div style="display:flex;align-items:center;gap:12px;">
-        <i class="bi bi-stars" style="font-size:24px;color:#fff;flex-shrink:0;"></i>
-        <div>
-          <div style="color:#fff;font-weight:700;font-size:14px;margin-bottom:2px;">推荐使用 DusAPI · 兼容性更好，速度更快，使用更丝滑顺畅</div>
-          <div style="color:rgba(255,255,255,.85);font-size:12.5px;">支持 Claude、GPT 等全系模型，一个 Key 搞定所有需求，国内稳定低延迟畅快直连使用 · 🖼️ 原生支持图片识别，无需额外配置，填 Key 即可使用</div>
-        </div>
-      </div>
-      <a href="https://dusapi.com" target="_blank" style="flex-shrink:0;background:rgba(255,255,255,.25);color:#fff;border:1px solid rgba(255,255,255,.5);border-radius:6px;padding:7px 18px;font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap;transition:all .2s;" onmouseover="this.style.background='rgba(255,255,255,.35)'" onmouseout="this.style.background='rgba(255,255,255,.25)'">立即前往 →</a>
-    </div>
     <div class="cfg-card">
       <div class="cfg-card-header"><i class="bi bi-cloud"></i><h5>API 接口配置</h5><span class="desc">选中的接口为当前使用，至少保留 2 个</span></div>
       <div id="api_configs_container">
@@ -1147,15 +1136,12 @@ body.mobile-nav-open { overflow: hidden; }
             <span class="api-active-badge" style="font-size:11px;background:var(--primary);color:#fff;border-radius:10px;padding:1px 8px;{% if loop.index0 != config.get('api_index', 0) %}display:none;{% endif %}">当前使用</span>
             <button type="button" class="btn-rm btn-remove-api-config" style="margin-left:auto;" title="删除此接口"><i class="bi bi-trash"></i></button>
           </div>
-          <div class="dusapi-item-hint" style="display:{% if cfg.get('sdk') == 'DusAPI' %}flex{% else %}none{% endif %};align-items:center;gap:8px;background:#F0FBF5;border:1px solid #B7EBD0;border-radius:6px;padding:10px 14px;margin-bottom:10px;">
-            <i class="bi bi-check-circle-fill" style="color:#07C160;font-size:16px;flex-shrink:0;"></i>
-            <div style="font-size:12.5px;color:#06AD56;">已选择 <strong>DusAPI</strong> · 接口地址已自动填写 · 兼容性更好，速度更快 · 🖼️ 原生支持图片识别，填 Key 即用 · <a href="https://dusapi.com" target="_blank" style="color:#07C160;font-weight:600;">前往 dusapi.com 获取 Key</a></div>
-          </div>
           <div class="row g-2">
             <div class="col-12 col-md-3">
               <label class="cfg-label">SDK</label>
               <div style="position:relative;">
                 <select class="form-select api-sdk-select" style="appearance:none;-webkit-appearance:none;padding-right:28px;">
+                  <option value="" disabled {% if not cfg.get('sdk') %}selected{% endif %}>请选择 SDK</option>
                   <option value="DusAPI" {% if cfg.get('sdk') == 'DusAPI' %}selected{% endif %}>DusAPI</option>
                   <option value="OpenAI SDK" {% if cfg.get('sdk') == 'OpenAI SDK' %}selected{% endif %}>OpenAI SDK</option>
                   <option value="Dify" {% if cfg.get('sdk') == 'Dify' %}selected{% endif %}>Dify</option>
@@ -1189,7 +1175,7 @@ body.mobile-nav-open { overflow: hidden; }
           <i class="bi bi-plus-circle"></i> 添加接口配置
         </button>
       </div>
-      <div class="cfg-hint" style="margin-top:8px;">点击左侧单选框选择当前使用的接口 · 选择 DusAPI 时接口地址自动填写 · <a href="https://dusapi.com" target="_blank" style="color:#07C160;">dusapi.com 获取 Key</a></div>
+      <div class="cfg-hint" style="margin-top:8px;">点击左侧单选框选择当前使用的接口。不同 SDK 的 API Key、Base URL 和模型填写方式请参考对应服务商文档。</div>
     </div>
   </div>
 
@@ -1360,8 +1346,8 @@ body.mobile-nav-open { overflow: hidden; }
       </div>
       <div style="padding:9px 14px;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;color:#92400e;font-size:12.5px;line-height:1.8;">
         <i class="bi bi-exclamation-triangle" style="color:#d97706;margin-right:4px;"></i>
-        <strong>图片识别：</strong>支持 <a href="https://dusapi.com" target="_blank" style="color:#92400e;font-weight:600;">DusAPI</a>，以及兼容 OpenAI 视觉格式的接口（比如 Kimi），需选择支持视觉输入的模型。
-        支持<strong>直接发送</strong>的图片及<strong>引用图片</strong>的识别。DusAPI 原生支持图片识别，和配置其他功能一样，填个 Key 即可通用，快速便捷。
+        <strong>图片识别：</strong>需选择支持视觉输入的接口和模型，支持兼容 OpenAI 视觉格式的接口。
+        支持<strong>直接发送</strong>的图片及<strong>引用图片</strong>的识别。
         遇到图片下载、保存或识图相关报错时，请尝试：将 <strong>Windows 屏幕缩放设置为 100%</strong>，并将<strong>微信字体保持标准大小</strong>后重试。
         <br><strong>语音识别：</strong>开启后会自动调用微信的语音消息转文字功能，仅能识别普通话。如果提示转文字失败，请在微信设置 → 通用 → 聊天中，将「语音消息自动转成文字」功能打开。
       </div>
@@ -1391,7 +1377,7 @@ body.mobile-nav-open { overflow: hidden; }
         <div style="padding:9px 14px;background:#f0f7ff;border:1px solid #bcd4f5;border-radius:6px;color:#1a5fa8;font-size:12.5px;line-height:1.8;">
           <i class="bi bi-info-circle" style="color:#2d8cf0;margin-right:4px;"></i>
           此功能通过在 Prompt 中注入格式指令，让 AI 自主决定是否拆分及条数，每条之间加入发送延迟模拟真人。<br>
-          <strong>仅适用于支持自定义 Prompt 的接口</strong>（如 <strong>DusAPI</strong>）；Coze / Dify 等工作流类接口已在平台侧固化逻辑，此功能可能无效，推荐使用 DusAPI。<br>
+          <strong>仅适用于支持自定义 Prompt 的接口</strong>；Coze / Dify 等工作流类接口已在平台侧固化逻辑，此功能可能无效。<br>
           💡 单条字数限制越小、最多发送条数设置越多，拆分概率越大；反之字数限制越高、条数越少，拆分为多条的概率越低。<br>
           ⚠️ <strong>最终效果取决于模型能力与你的 Prompt</strong>：分不分开发送、怎么分，完全由模型自主决策，面板只是给出参数提示。模型智商越高、理解能力越强，少写点 Prompt 它就能领会；模型智商低，写再多也未必管用。我们无法干预模型内部的决策逻辑——<strong>想要更好的拆分效果，请在自己的 Prompt 里明确写出拆分规则和示例</strong>，反复调教、多次测试，才能找到最适合你当前模型和接口的最佳姿势。
         </div>
@@ -1503,8 +1489,8 @@ body.mobile-nav-open { overflow: hidden; }
       </div>
       <div style="padding:9px 14px;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;color:#92400e;font-size:12.5px;line-height:1.8;">
         <i class="bi bi-exclamation-triangle" style="color:#d97706;margin-right:4px;"></i>
-        图片识别支持 <a href="https://dusapi.com" target="_blank" style="color:#92400e;font-weight:600;">DusAPI</a>，以及兼容 OpenAI 视觉格式的接口（比如 Kimi），需选择支持视觉输入的模型。
-        支持<strong>直接发送</strong>的图片及<strong>引用图片</strong>的识别。DusAPI 原生支持图片识别，和配置其他功能一样，填个 Key 即可通用，快速便捷。
+        图片识别需选择支持视觉输入的接口和模型，支持兼容 OpenAI 视觉格式的接口。
+        支持<strong>直接发送</strong>的图片及<strong>引用图片</strong>的识别。
         遇到图片下载、保存或识图相关报错时，请尝试：将 <strong>Windows 屏幕缩放设置为 100%</strong>，并将<strong>微信字体保持标准大小</strong>后重试。
         <br><strong>语音识别：</strong>开启后会自动调用微信的语音消息转文字功能，仅能识别普通话。如果提示转文字失败，请在微信设置 → 通用 → 聊天中，将「语音消息自动转成文字」功能打开。
       </div>
@@ -1534,7 +1520,7 @@ body.mobile-nav-open { overflow: hidden; }
         <div style="padding:9px 14px;background:#f0f7ff;border:1px solid #bcd4f5;border-radius:6px;color:#1a5fa8;font-size:12.5px;line-height:1.8;">
           <i class="bi bi-info-circle" style="color:#2d8cf0;margin-right:4px;"></i>
           此功能通过在 Prompt 中注入格式指令，让 AI 自主决定是否拆分及条数，每条之间加入发送延迟模拟真人。群聊模式下首条消息 @ 发言人，后续条不重复 @。<br>
-          <strong>仅适用于支持自定义 Prompt 的接口</strong>（如 <strong>DusAPI</strong>）；Coze / Dify 等工作流类接口已在平台侧固化逻辑，此功能可能无效，推荐使用 DusAPI。<br>
+          <strong>仅适用于支持自定义 Prompt 的接口</strong>；Coze / Dify 等工作流类接口已在平台侧固化逻辑，此功能可能无效。<br>
           💡 单条字数限制越小、最多发送条数设置越多，拆分概率越大；反之字数限制越高、条数越少，拆分为多条的概率越低。<br>
           ⚠️ <strong>最终效果取决于模型能力与你的 Prompt</strong>：分不分开发送、怎么分，完全由模型自主决策，面板只是给出参数提示。模型智商越高、理解能力越强，少写点 Prompt 它就能领会；模型智商低，写再多也未必管用。我们无法干预模型内部的决策逻辑——<strong>想要更好的拆分效果，请在自己的 Prompt 里明确写出拆分规则和示例</strong>，反复调教、多次测试，才能找到最适合你当前模型和接口的最佳姿势。
         </div>
@@ -2358,15 +2344,6 @@ body.mobile-nav-open { overflow: hidden; }
         <label class="form-check-label" for="memory_switch">启用对话记忆</label>
         <span class="switch-desc">开启后机器人运行时的所有消息将写入记忆文件，AI 回复时携带历史上下文</span>
       </div>
-      <!-- DusAPI 记忆兼容提示 -->
-      <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:8px;background:linear-gradient(135deg,#f0fdf4 0%,#dcfce7 100%);border:1px solid #bbf7d0;margin-bottom:16px;">
-        <i class="bi bi-stars" style="font-size:20px;color:#07C160;flex-shrink:0;"></i>
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;font-weight:700;color:#166534;margin-bottom:2px;">推荐使用 DusAPI · 与记忆功能完全兼容</div>
-          <div style="font-size:12px;color:#4b7a57;line-height:1.5;">DusAPI 原生支持多轮对话上下文，与本项目记忆功能完全兼容。其他接口可能对历史消息格式支持不一，可能导致记忆功能效果不佳。</div>
-        </div>
-        <a href="https://dusapi.com" target="_blank" style="flex-shrink:0;background:#07C160;color:#fff;border-radius:6px;padding:6px 14px;font-size:12.5px;font-weight:600;text-decoration:none;white-space:nowrap;transition:opacity .2s;" onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">前往 →</a>
-      </div>
       <div class="cfg-hint" style="margin-bottom:16px;">提示：推荐存储 3000 条，AI 带入 1000 条。数值越大 token 消耗越多，请根据实际需求调整。记忆存储依托对话名称区分对象，请手动做好微信备注，避免重名导致记忆混用。</div>
       <div class="row g-3">
         <div class="col-12 col-md-6">
@@ -2778,17 +2755,6 @@ $(function(){
     };
   }
 
-  // ===== 接口配置：SDK 变更自动填写 URL + 显示 DusAPI 提示 =====
-  $(document).on('change', '.api-sdk-select', function(){
-    var $item = $(this).closest('.api-config-item');
-    if($(this).val() === 'DusAPI'){
-      $item.find('.api-url-input').val('https://api.dusapi.com');
-      $item.find('.dusapi-item-hint').show();
-    } else {
-      $item.find('.dusapi-item-hint').hide();
-    }
-  });
-
   // ===== 接口配置：单选框高亮 + 当前使用 badge =====
   $(document).on('change', '.api-radio', function(){
     $('.api-config-item').css({'border-color':'var(--border)', 'background':'var(--card)'});
@@ -2813,6 +2779,10 @@ $(function(){
       return;
     }
     var apiConfig = getApiConfigFromItem($item);
+    if(!apiConfig.sdk){
+      svModal.error('请先选择当前接口的 SDK');
+      return;
+    }
     if(!apiConfig.key || !apiConfig.url || !apiConfig.model){
       svModal.error('请先填写当前选中接口的 API Key、Base URL 和模型名称');
       return;
@@ -2830,21 +2800,10 @@ $(function(){
         if(res.status === 'success'){
           var d = res.data || {};
           var cleanedHint = d.cleaned ? '<br><br>检测到思考标签，已按当前清洗规则处理测试返回。' : '';
-          var img = d.image_test || {};
-          var imageHtml = '<br>图片：';
-          if(img.status === 'success'){
-            imageHtml += '<span style="color:#07C160;font-weight:600;">可用</span>';
-            if(img.cleaned) imageHtml += '（已清洗测试返回）';
-          } else if(img.status === 'skipped'){
-            imageHtml += '<span style="color:#888;">未测试</span>：' + $('<div>').text(img.message || '').html();
-          } else {
-            imageHtml += '<span style="color:#FA5151;font-weight:600;">失败</span>：' + $('<div>').text(img.message || '').html();
-          }
           svModal.success(
             '接口 ' + idx + ' 可用<br>' +
             '耗时：' + (d.elapsed_ms || '-') + ' ms<br>' +
-            '文本：<span style="color:#07C160;font-weight:600;">可用</span>' +
-            imageHtml + '<br>' +
+            '文字回复：<span style="color:#07C160;font-weight:600;">可用</span><br>' +
             '返回：<code>' + $('<div>').text(d.reply || '').html() + '</code>' +
             cleanedHint,
             '测试成功'
@@ -2875,15 +2834,12 @@ $(function(){
           '<span class="api-active-badge" style="font-size:11px;background:var(--primary);color:#fff;border-radius:10px;padding:1px 8px;display:none;">当前使用</span>'+
           '<button type="button" class="btn-rm btn-remove-api-config" style="margin-left:auto;" title="删除此接口"><i class="bi bi-trash"></i></button>'+
         '</div>'+
-        '<div class="dusapi-item-hint" style="display:flex;align-items:center;gap:8px;background:#F0FBF5;border:1px solid #B7EBD0;border-radius:6px;padding:10px 14px;margin-bottom:10px;">'+
-          '<i class="bi bi-check-circle-fill" style="color:#07C160;font-size:16px;flex-shrink:0;"></i>'+
-          '<div style="font-size:12.5px;color:#06AD56;">已选择 <strong>DusAPI</strong> · 接口地址已自动填写 · 兼容性更好，速度更快 · <a href="https://dusapi.com" target="_blank" style="color:#07C160;font-weight:600;">前往 dusapi.com 获取 Key</a></div>'+
-        '</div>'+
         '<div class="row g-2">'+
           '<div class="col-12 col-md-3"><label class="cfg-label">SDK</label>'+
             '<div style="position:relative;">'+
               '<select class="form-select api-sdk-select" style="appearance:none;-webkit-appearance:none;padding-right:28px;">'+
-                '<option value="DusAPI" selected>DusAPI</option>'+
+                '<option value="" disabled selected>请选择 SDK</option>'+
+                '<option value="DusAPI">DusAPI</option>'+
                 '<option value="OpenAI SDK">OpenAI SDK</option>'+
                 '<option value="Dify">Dify</option>'+
                 '<option value="Coze">Coze</option>'+
@@ -2891,9 +2847,9 @@ $(function(){
               '<i class="bi bi-chevron-down" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);pointer-events:none;font-size:11px;color:var(--muted);"></i>'+
             '</div></div>'+
           '<div class="col-12 col-md-3"><label class="cfg-label">模型</label>'+
-            '<input type="text" class="form-control api-model-input" value="gpt-5" placeholder="模型名称"></div>'+
+            '<input type="text" class="form-control api-model-input" value="" placeholder="模型名称"></div>'+
           '<div class="col-12 col-md-6"><label class="cfg-label">Base URL</label>'+
-            '<input type="text" class="form-control api-url-input" value="https://api.dusapi.com" placeholder="https://api.example.com"></div>'+
+            '<input type="text" class="form-control api-url-input" value="" placeholder="https://api.example.com"></div>'+
           '<div class="col-12"><label class="cfg-label">API Key</label>'+
             '<input type="text" class="form-control api-key-input" data-real-key="" placeholder="sk-..." autocomplete="off"></div>'+
         '</div>'+
@@ -3708,10 +3664,13 @@ $(function(){
       // 若显示的是遮罩值或为空，保留原真实 Key；否则使用用户输入的新 Key
       var keyToSave=(typedKey===maskedKey||typedKey==='')?realKey:typedKey;
       _keyUpdates.push({$el:$k, key:keyToSave});
+      var sdk=$(this).find('.api-sdk-select').val()||'';
+      var model=$(this).find('.api-model-input').val();
+      var url=$(this).find('.api-url-input').val();
       api_configs.push({
-        sdk:$(this).find('.api-sdk-select').val(),
-        model:$(this).find('.api-model-input').val(),
-        url:$(this).find('.api-url-input').val(),
+        sdk:sdk,
+        model:model,
+        url:url,
         key:keyToSave
       });
     });

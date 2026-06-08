@@ -415,11 +415,17 @@ class SiverPanelManager:
                 if not activation_code:
                     raise
                 if exc.code == "service_expired":
-                    self._log("WARNING", "当前设备授权已过期，开始尝试使用新激活码续期")
-                    return self._activate_with_new_code(config, failure_prefix="使用新激活码续期失败")
+                    return self._refresh_credentials_after_service_problem(
+                        config,
+                        reason_code=exc.code,
+                        failure_prefix="使用新激活码续期失败",
+                    )
                 if exc.code == "invalid_device_credentials":
-                    self._log("WARNING", "检测到现有设备凭据失效，开始尝试恢复设备凭据")
-                    return self._recover_credentials(config)
+                    return self._refresh_credentials_after_service_problem(
+                        config,
+                        reason_code=exc.code,
+                        failure_prefix="使用新激活码恢复设备凭据失败",
+                    )
                 raise
 
             if activation_code and self._should_attempt_activation_refresh(config):
@@ -523,7 +529,26 @@ class SiverPanelManager:
 
         error_code = activation_data.get("error_code") or "register_failed"
         message = activation_data.get("message") or "远程服务未接受新的激活码"
+        if error_code in {"already_bound", "service_expired"}:
+            self._log("WARNING", f"新激活码重复注册未成功，尝试恢复已绑定设备凭据: {message}")
+            return self._recover_credentials(config)
         raise ServiceIssue(error_code, f"{failure_prefix}: {message}")
+
+    def _refresh_credentials_after_service_problem(
+        self,
+        config: dict[str, Any],
+        *,
+        reason_code: str,
+        failure_prefix: str,
+    ) -> dict[str, Any]:
+        if self._is_activation_code_applied(config):
+            self._log("WARNING", "现有设备凭据不可用，当前激活码已应用过，开始恢复设备凭据")
+            return self._recover_credentials(config)
+        if reason_code == "invalid_device_credentials":
+            self._log("WARNING", "检测到现有设备凭据失效，开始尝试使用当前激活码更新设备凭据")
+        else:
+            self._log("WARNING", "当前设备授权已过期，开始尝试使用新激活码续期")
+        return self._activate_with_new_code(config, failure_prefix=failure_prefix)
 
     def _should_attempt_activation_refresh(self, config: dict[str, Any]) -> bool:
         activation_code = (config.get("siver_panel_activation_code") or "").strip()
@@ -535,6 +560,12 @@ class SiverPanelManager:
         if code_hash and code_hash == config.get("siver_panel_activation_code_failed_hash"):
             return False
         return True
+
+    def _is_activation_code_applied(self, config: dict[str, Any]) -> bool:
+        activation_code = (config.get("siver_panel_activation_code") or "").strip()
+        if not activation_code:
+            return False
+        return self._activation_code_hash(activation_code) == config.get("siver_panel_activation_code_applied_hash")
 
     def _activation_code_hash(self, activation_code: str) -> str:
         return hashlib.sha256(activation_code.strip().encode("utf-8")).hexdigest() if activation_code.strip() else ""
@@ -568,7 +599,18 @@ class SiverPanelManager:
 
                 auth_payload = self._decode_ws_message(websocket.recv(timeout=WS_AUTH_TIMEOUT))
                 if auth_payload.get("type") == "auth.error":
-                    raise ServiceIssue("auth_error", auth_payload.get("message") or "远程服务认证失败")
+                    auth_message = auth_payload.get("message") or "远程服务认证失败"
+                    auth_code = self._ws_auth_error_code(auth_message)
+                    if auth_code in {"service_expired", "invalid_device_credentials"} and (
+                        config.get("siver_panel_activation_code") or ""
+                    ).strip():
+                        self._refresh_credentials_after_service_problem(
+                            config,
+                            reason_code=auth_code,
+                            failure_prefix="远程认证失败后使用新激活码更新凭据失败",
+                        )
+                        raise NetworkIssue("credentials_refreshed", "设备凭据已更新，准备重新连接")
+                    raise ServiceIssue(auth_code, auth_message)
                 if auth_payload.get("type") != "auth.ok":
                     raise ServiceIssue("auth_error", "远程服务返回了未知的认证响应")
 
@@ -875,6 +917,18 @@ class SiverPanelManager:
                 if isinstance(value, int):
                     return value
         return None
+
+    def _ws_auth_error_code(self, message: str) -> str:
+        lowered = message.lower()
+        if "service expired" in lowered or ("授权" in message and "过期" in message):
+            return "service_expired"
+        if "invalid device credentials" in lowered or ("设备凭据" in message and "失效" in message):
+            return "invalid_device_credentials"
+        if "device disabled" in lowered:
+            return "device_disabled"
+        if "panel slug mismatch" in lowered:
+            return "slug_mismatch"
+        return "auth_error"
 
     def _load_config(self) -> dict[str, Any]:
         try:
