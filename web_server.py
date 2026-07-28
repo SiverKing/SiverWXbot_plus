@@ -623,6 +623,8 @@ def dashboard():
     config.setdefault('chat_keyword_switch', False)          # 私聊关键词开关
     config.setdefault('group_keyword_switch', False)         # 群组关键词开关
     config.setdefault('group_keyword_at_only', False)        # 群聊关键词仅@时回复
+    config.setdefault('keyword_reply_quote', config.get('group_keyword_reply_quote', False))  # 关键词回复是否引用消息
+    config.setdefault('group_keyword_reply_at_msg', False)   # 群聊关键词回复是否@发言人
     config.setdefault('keyword_dict', {})                    # 关键词字典
     config.setdefault('scheduled_msg_switch', config.get('everyday_msg_switch', False))  # 定时消息开关
     config.setdefault('scheduled_msg_list', [])              # 定时消息任务列表
@@ -777,6 +779,8 @@ def _coerce_bool_fields(merged_config):
         'chat_keyword_switch',
         'group_keyword_switch',
         'group_keyword_at_only',
+        'keyword_reply_quote',
+        'group_keyword_reply_at_msg',
         'scheduled_msg_switch',
         'random_msg_switch',                # 随机定时消息开关
         'scheduled_moments_switch',         # 定时朋友圈开关
@@ -1873,6 +1877,8 @@ def main():
                 "chat_keyword_switch": False,
                 "group_keyword_switch": False,
                 "group_keyword_at_only": False,
+                "keyword_reply_quote": False,
+                "group_keyword_reply_at_msg": False,
                 "keyword_dict": {},
                 "scheduled_msg_switch": False,
                 "scheduled_msg_list": [],

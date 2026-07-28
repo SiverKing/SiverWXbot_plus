@@ -52,7 +52,7 @@
 1. **克隆项目**
 ```bash
 git clone https://github.com/SiverKing/SiverWXbot_plus.git
-cd wxbot_plus
+cd SiverWXbot_plus
 ```
 
 1. **安装依赖**
@@ -554,10 +554,13 @@ Webhook 通知用于在机器人出现报错时，通过 HTTP Webhook 向飞书�
 
 但是如果你有以下行为，**即使手动操作**也有风控的风险：
 
-- 曾用hook类或webhook类微信工具，如dll注入、itchat及其衍生产品
+- 曾用hook类或webhook类微信工具，如dll注入、itchat、数据库破解类、移动端越狱魔改客户端工具等等及其衍生产品以及其余全部破解类工具
 - 频繁且大量的发送消息、添加好友等，导致风控
 - 高频率发送机器人特征明显的消息，导致被人举报，致使行为风控
 - 扫码手机与电脑客户端不在同一个城市，导致异地风控
+- 在虚拟环境登录如虚拟机、云服务器
+- 行为动作与环境与诈骗分子类似如多开、批量加人、群控、拉群
+- 违反适用法律法规及第三方协议（如[微信用户协议](https://weixin.qq.com/cgi-bin/readtemplate?&t=page/agreement/personal_account&lang=zh_CN)）
 - 低权重账号做太多动作，低权重账号可能包括：
   - 新注册账号
   - 长期未登录或不活跃账号
@@ -612,7 +615,7 @@ Webhook 通知用于在机器人出现报错时，通过 HTTP Webhook 向飞书�
 
 ### Q: 不会写prompt（提示词）？
 
-**A:** 随便找一个AI，告诉他你的需求，让他给你写一份prompt模板，自行修改即可。或者上网搜索prompt模板。
+**A:** 随便找一个AI，告诉他你的需求，让他给你写一份prompt模板，自行修改即可。或者上网搜索prompt模板。提示词优化工具(仅供参考)：[https://www.jyshare.com/front-end/9127/](https://www.jyshare.com/front-end/9127/)
 
 ### Q: 为什么api接口要收费？ ？
 

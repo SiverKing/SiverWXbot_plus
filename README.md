@@ -1,6 +1,6 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.7.26-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
+[![Version](https://img.shields.io/badge/version-V4.7.28-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
 [![Python](https://img.shields.io/badge/python-3.9+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
@@ -266,6 +266,8 @@ python web_server.py
     "chat_keyword_switch": true,
     "group_keyword_switch": true,
     "group_keyword_at_only": false,
+    "keyword_reply_quote": false,
+    "group_keyword_reply_at_msg": false,
     "keyword_dict": {
         "关键词1": "回复内容1",
         "关键词2": "回复内容2"
@@ -388,6 +390,8 @@ python web_server.py
 | `chat_keyword_switch` | boolean | `false` | 是否开启私聊关键词回复 |
 | `group_keyword_switch` | boolean | `false` | 是否开启群聊关键词回复 |
 | `group_keyword_at_only` | boolean | `false` | 群聊关键词回复是否仅在被 @ 时触发 |
+| `keyword_reply_quote` | boolean | `false` | 关键词回复时是否引用原消息，私聊关键词和群聊关键词均生效，引用失败自动降级普通发送 |
+| `group_keyword_reply_at_msg` | boolean | `false` | 群聊关键词回复时是否 @ 发言人 |
 | `keyword_dict` | object | `{}` | 关键词→回复内容映射 |
 | `custom_forward_switch` | boolean | `false` | 自定义规则转发总开关 |
 | `custom_forward_list` | array | `[]` | 自定义转发规则列表，详见下方说明 |
