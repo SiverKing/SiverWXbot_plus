@@ -27,7 +27,7 @@
 
 **环境要求：**
 - Windows 操作系统
-- Windows wx PC 版（`4.1.7` ~ `4.1.9.35` 版本）
+- Windows wx PC 版（`4.1.9` ~ `4.1.12.26` 版本）
 
 **下载地址（二选一）：**
 
@@ -44,7 +44,7 @@
 **环境要求：**
 - Python `3.9` - `3.13`
 - Windows 操作系统
-- Windows wx PC 版（`4.1.7` ~ `4.1.9.35` 版本）
+- Windows wx PC 版（`4.1.9` ~ `4.1.12.26` 版本）
 - wxautox4内核库 设备授权（需购买，购买地址：https://www.siverking.online/static/img/siver_wx.jpg ）
 
 **安装步骤：**
@@ -636,6 +636,12 @@ Webhook 通知用于在机器人出现报错时，通过 HTTP Webhook 向飞书�
 ### Q: 微信历史版本下载？
 
 **A:** 若要下载请点击**Assets**展开后下载exe，不要点下载Download URL  [https://github.com/SiverKing/wechat4.0-windows-versions/releases](https://github.com/SiverKing/wechat4.0-windows-versions/releases)
+
+### Q: NVDA下载？
+
+**A:** [蓝奏云  密码:1234](https://wwbuf.lanzout.com/b00tcoqafi)
+
+[github](https://github.com/nvaccess/nvda/releases/tag/release-2026.1.1)
 
 ---
 
