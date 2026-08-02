@@ -978,7 +978,7 @@ body.mobile-nav-open { overflow: hidden; }
         <div class="detail-row"><span class="detail-key">版本</span><span class="detail-val" id="dv-version">-</span></div>
         <div class="detail-row"><span class="detail-key">最近消息</span><span class="detail-val" id="dv-lasttime">-</span></div>
         <div class="detail-row"><span class="detail-key">最近发送者</span><span class="detail-val" id="dv-lastsender">-</span></div>
-        <div class="detail-row"><span class="detail-key">群词@触发</span><span class="detail-val" id="dv-kw-at">-</span></div>
+        <div class="detail-row"><span class="detail-key">群词规则</span><span class="detail-val" id="dv-kw-at">-</span></div>
         <div class="detail-row"><span class="detail-key">记忆上下文</span><span class="detail-val" id="dv-mem-ctx">-</span></div>
       </div>
     </div>
@@ -1601,13 +1601,13 @@ body.mobile-nav-open { overflow: hidden; }
       <div id="new_friend_msg_container">
         {% for msg in config.new_friend_msg %}
         <div class="list-item">
-          <input type="text" class="form-control" name="new_friend_msg" value="{{ msg }}" placeholder="文字内容 或 图片完整路径">
+          <textarea class="form-control" name="new_friend_msg" rows="2" placeholder="文字内容 或 图片完整路径">{{ msg }}</textarea>
           <button type="button" class="btn-pick-img" title="点击选择本地图片，自动填入路径"><i class="bi bi-folder2-open"></i></button>
           <button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>
         </div>
         {% endfor %}
       </div>
-      <button type="button" class="btn-add" data-target="#new_friend_msg_container" data-name="new_friend_msg" data-imgpick="1"><i class="bi bi-plus-circle"></i> 添加消息</button>
+      <button type="button" class="btn-add" data-target="#new_friend_msg_container" data-name="new_friend_msg" data-imgpick="1" data-multiline="1"><i class="bi bi-plus-circle"></i> 添加消息</button>
     </div>
   </div>
 
@@ -1630,6 +1630,16 @@ body.mobile-nav-open { overflow: hidden; }
       <div class="sub-switch-row">
         <input class="form-check-input" type="checkbox" id="group_keyword_at_only" name="group_keyword_at_only" {% if config.group_keyword_at_only %}checked{% endif %}>
         <label for="group_keyword_at_only">仅在被 @ 时触发群聊关键词回复</label>
+      </div>
+      <div class="sub-switch-row">
+        <input class="form-check-input" type="checkbox" id="group_keyword_reply_at_msg" name="group_keyword_reply_at_msg" {% if config.get('group_keyword_reply_at_msg', False) %}checked{% endif %}>
+        <label for="group_keyword_reply_at_msg">群聊关键词回复时 @ 发言人</label>
+        <span class="switch-desc">仅群聊关键词回复生效</span>
+      </div>
+      <div class="sub-switch-row">
+        <input class="form-check-input" type="checkbox" id="keyword_reply_quote" name="keyword_reply_quote" {% if config.get('keyword_reply_quote', config.get('group_keyword_reply_quote', False)) %}checked{% endif %}>
+        <label for="keyword_reply_quote">关键词回复时引用消息</label>
+        <span class="switch-desc">私聊关键词和群聊关键词同步生效，引用失败时自动降级普通发送</span>
       </div>
       <div id="keyword_container">
         {% for key, value in config.keyword_dict.items() %}
@@ -1808,7 +1818,7 @@ body.mobile-nav-open { overflow: hidden; }
           <div class="scheduled-msg-list">
             {% for msg in item.msgs %}
             <div class="list-item">
-              <input type="text" class="form-control" name="scheduled_msg" value="{{ msg }}" placeholder="文字内容 或 图片完整路径">
+              <textarea class="form-control" name="scheduled_msg" rows="2" placeholder="文字内容 或 图片完整路径">{{ msg }}</textarea>
               <button type="button" class="btn-pick-img" title="点击选择本地图片，自动填入路径"><i class="bi bi-folder2-open"></i></button>
               <button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>
             </div>
@@ -1886,7 +1896,7 @@ body.mobile-nav-open { overflow: hidden; }
           <div class="rmsg-msg-list">
             {% for msg in item.msgs %}
             <div class="list-item">
-              <input type="text" class="form-control" name="rmsg_msg" value="{{ msg }}" placeholder="文字内容 或 图片完整路径">
+              <textarea class="form-control" name="rmsg_msg" rows="2" placeholder="文字内容 或 图片完整路径">{{ msg }}</textarea>
               <button type="button" class="btn-pick-img" title="点击选择本地图片，自动填入路径"><i class="bi bi-folder2-open"></i></button>
               <button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>
             </div>
@@ -2164,9 +2174,8 @@ body.mobile-nav-open { overflow: hidden; }
       <div class="mb-2">
         <label class="cfg-label" for="api_error_reply" style="font-weight:600;">接口调用失败固定回复</label>
         <div class="inline-check-field">
-          <input type="text" class="form-control" id="api_error_reply"
-                 value="{{ config.get('api_error_reply', '在忙，我稍后回复您') }}"
-                 placeholder="在忙，我稍后回复您">
+          <textarea class="form-control" id="api_error_reply" rows="2"
+                    placeholder="在忙，我稍后回复您">{{ config.get('api_error_reply', '在忙，我稍后回复您') }}</textarea>
           <label class="inline-check-suffix" for="api_error_reply_once">
             <input class="form-check-input" type="checkbox" id="api_error_reply_once" {% if config.get('api_error_reply_once', False) %}checked{% endif %}>
             只回复一次
@@ -2197,9 +2206,8 @@ body.mobile-nav-open { overflow: hidden; }
         <div class="mb-2" style="margin-top:12px;">
           <label class="cfg-label" for="chat_max_round_reply">超出次数限制固定回复</label>
           <div class="inline-check-field">
-            <input type="text" class="form-control" id="chat_max_round_reply"
-                   value="{{ config.get('chat_max_round_reply', '') }}"
-                   placeholder="不填写则不回复">
+            <textarea class="form-control" id="chat_max_round_reply" rows="2"
+                      placeholder="不填写则不回复">{{ config.get('chat_max_round_reply', '') }}</textarea>
             <label class="inline-check-suffix" for="chat_max_round_reply_once">
               <input class="form-check-input" type="checkbox" id="chat_max_round_reply_once" {% if config.get('chat_max_round_reply_once', False) %}checked{% endif %}>
               只回复一次
@@ -2998,7 +3006,7 @@ $(function(){
   // ===== 选择本地图片（调后端弹系统文件选择框）=====
   $(document).on('click','.btn-pick-img',function(){
     var $btn=$(this);
-    var $input=$btn.closest('.list-item').find('input');
+    var $input=$btn.closest('.list-item').find('input, textarea').first();
     $btn.prop('disabled',true).html('<i class="bi bi-hourglass-split"></i>');
     $.get('/pick_image_file', function(res){
       if(res.status==='success' && res.path){
@@ -3013,9 +3021,12 @@ $(function(){
   $(document).on('click','.btn-add[data-target]',function(){
     var target=$(this).data('target'), name=$(this).data('name');
     var pickBtn=$(this).data('imgpick')?'<button type="button" class="btn-pick-img" title="点击选择本地图片，自动填入路径"><i class="bi bi-folder2-open"></i></button>':'';
+    var fieldHtml=$(this).data('multiline')
+      ? '<textarea class="form-control" name="'+name+'" rows="2"></textarea>'
+      : '<input type="text" class="form-control" name="'+name+'">';
     $(target).append(
       '<div class="list-item">'+
-      '<input type="text" class="form-control" name="'+name+'">'+
+      fieldHtml+
       pickBtn+
       '<button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>'+
       '</div>'
@@ -3285,7 +3296,7 @@ $(function(){
   $(document).on('click','.btn-add-scheduled-msg',function(){
     $(this).prev('.scheduled-msg-list').append(
       '<div class="list-item">'+
-      '<input type="text" class="form-control" name="scheduled_msg" placeholder="文字内容 或 图片完整路径">'+
+      '<textarea class="form-control" name="scheduled_msg" rows="2" placeholder="文字内容 或 图片完整路径"></textarea>'+
       '<button type="button" class="btn-pick-img" title="点击选择本地图片，自动填入路径"><i class="bi bi-folder2-open"></i></button>'+
       '<button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>'+
       '</div>'
@@ -3556,7 +3567,7 @@ $(function(){
       '<div class="cfg-hint" style="margin-bottom:8px;"><i class="bi bi-image" style="color:var(--primary);"></i> 填写文字内容将发送文字，填写图片完整路径（如 <code>C:\\图片\\hello.png</code>）将自动发送图片</div>'+
       '<div class="scheduled-msg-list">'+
         '<div class="list-item">'+
-          '<input type="text" class="form-control" name="scheduled_msg" placeholder="文字内容 或 图片完整路径">'+
+          '<textarea class="form-control" name="scheduled_msg" rows="2" placeholder="文字内容 或 图片完整路径"></textarea>'+
           '<button type="button" class="btn-pick-img" title="点击选择本地图片，自动填入路径"><i class="bi bi-folder2-open"></i></button>'+
           '<button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>'+
         '</div>'+
@@ -3594,7 +3605,7 @@ $(function(){
   $(document).on('click','.btn-add-rmsg-msg',function(){
     $(this).prev('.rmsg-msg-list').append(
       '<div class="list-item">'+
-        '<input type="text" class="form-control" name="rmsg_msg" placeholder="文字内容 或 图片完整路径">'+
+        '<textarea class="form-control" name="rmsg_msg" rows="2" placeholder="文字内容 或 图片完整路径"></textarea>'+
         '<button type="button" class="btn-pick-img" title="点击选择本地图片，自动填入路径"><i class="bi bi-folder2-open"></i></button>'+
         '<button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>'+
       '</div>'
@@ -3641,7 +3652,7 @@ $(function(){
       '<div class="cfg-hint" style="margin-bottom:8px;"><i class="bi bi-image" style="color:var(--primary);"></i> 填写文字内容将发送文字，填写图片完整路径（如 <code>C:\\图片\\hello.png</code>）将自动发送图片</div>'+
       '<div class="rmsg-msg-list">'+
         '<div class="list-item">'+
-          '<input type="text" class="form-control" name="rmsg_msg" placeholder="文字内容 或 图片完整路径">'+
+          '<textarea class="form-control" name="rmsg_msg" rows="2" placeholder="文字内容 或 图片完整路径"></textarea>'+
           '<button type="button" class="btn-pick-img" title="点击选择本地图片，自动填入路径"><i class="bi bi-folder2-open"></i></button>'+
           '<button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>'+
         '</div>'+
@@ -3699,6 +3710,8 @@ $(function(){
       chat_keyword_switch:$('#chat_keyword_switch').is(':checked'),
       group_keyword_switch:$('#group_keyword_switch').is(':checked'),
       group_keyword_at_only:$('#group_keyword_at_only').is(':checked'),
+      keyword_reply_quote:$('#keyword_reply_quote').is(':checked'),
+      group_keyword_reply_at_msg:$('#group_keyword_reply_at_msg').is(':checked'),
       admin:$('#admin').val(),
       group_welcome_msg:$('#group_welcome_msg').summernote('code'),
       default_prompt:$('#default_prompt_select').val()||'默认',
@@ -3774,12 +3787,12 @@ $(function(){
       var gpv=$(this).find('.group-prompt-select').val();
       if(gpv){ configData.group_prompt_map[name]=gpv; }
     });
-    $('input[name="new_friend_msg"]').each(function(){ if($(this).val()) configData.new_friend_msg.push($(this).val()); });
+    $('[name="new_friend_msg"]').each(function(){ if($(this).val()) configData.new_friend_msg.push($(this).val()); });
     var keys=$('input[name="keyword_key"]'), vals=$('textarea[name="keyword_value"]');
     keys.each(function(i){ var k=$(this).val(); if(k) configData.keyword_dict[k]=vals.eq(i).val(); });
     $('.scheduled-msg-item').each(function(){
       var $t=$(this), msgs=[];
-      $t.find('input[name="scheduled_msg"]').each(function(){ if($(this).val()) msgs.push($(this).val()); });
+      $t.find('[name="scheduled_msg"]').each(function(){ if($(this).val()) msgs.push($(this).val()); });
       var weekdays=[];
       $t.find('.weekday-check:checked').each(function(){ weekdays.push(parseInt($(this).val())); });
       configData.scheduled_msg_list.push({
@@ -3806,7 +3819,7 @@ $(function(){
     // 收集随机定时消息任务列表
     $('.random-msg-item').each(function(){
       var $r=$(this), msgs=[];
-      $r.find('input[name="rmsg_msg"]').each(function(){ if($(this).val()) msgs.push($(this).val()); });
+      $r.find('[name="rmsg_msg"]').each(function(){ if($(this).val()) msgs.push($(this).val()); });
       var repeatType=$r.find('.rmsg-repeat-type').val();
       var daysCount=parseInt($r.find('.rmsg-days-count').val())||1;
       var maxDays=(repeatType==='weekly'?7:31);
@@ -4250,7 +4263,14 @@ $(function(){
           $('#sv-max-round').text('未启用');
         }
         // 详情行
-        $('#dv-kw-at').text(d.group_keyword_switch ? (d.group_keyword_at_only ? '仅@触发' : '全部触发') : '-');
+        if (d.group_keyword_switch) {
+          var kwModes = [d.group_keyword_at_only ? '仅@触发' : '全部触发'];
+          if (d.group_keyword_reply_at_msg) kwModes.push('@发言人');
+          if (d.keyword_reply_quote) kwModes.push('引用');
+          $('#dv-kw-at').text(kwModes.join(' · '));
+        } else {
+          $('#dv-kw-at').text('-');
+        }
         $('#dv-mem-ctx').text(d.memory_switch ? ((d.memory_context_count||'-') + ' 条') : '已关闭');
       } else {
         $('#topbar-notice').hide();
