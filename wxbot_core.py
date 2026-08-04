@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.7.29"
-version_log = "V4.7.29 - 内核库更新(源码用户请执行pip更新库命令)、适配wx版本更新4.1.9 ~ 4.1.12.26"
+version = "V4.7.30"
+version_log = "V4.7.30 - 内核库补丁 监听偶尔丢失系统消息的bug、内核库更新补丁(源码用户请执行pip更新库命令)、修复未填写api接口时无法启动机器人的bug"
 
 # ============================================================
 # 标准库导入
@@ -1233,6 +1233,17 @@ class ReplyCountStore:
 # AI 接口类
 # ============================================================
 
+class UnconfiguredAPI:
+    """未配置 AI 接口时的轻量占位实现，保证非 AI 功能可以正常运行。"""
+
+    def __init__(self, config):
+        self.DS_NOW_MOD = getattr(config, 'model1', '') or ''
+
+    def chat(self, *args, **kwargs):
+        log(level="WARNING", message="未配置 API 接口，已跳过 AI 调用")
+        return "API返回错误，请稍后再试"
+
+
 class OpenAIAPI:
     """
     OpenAI 兼容接口封装类
@@ -2119,8 +2130,8 @@ class WXBot:
             log(message="使用DusAPI")
             return DusAPI(self.config)
         else:
-            log(level="ERROR", message="未配置API SDK, 默认使用OpenAI SDK")
-            return OpenAIAPI(self.config)
+            log(level="WARNING", message="未配置 API SDK，已跳过 AI 客户端初始化，非 AI 功能仍可正常使用")
+            return UnconfiguredAPI(self.config)
 
     def _init_api_by_index(self, idx):
         """
@@ -2154,7 +2165,8 @@ class WXBot:
         elif sdk == "DusAPI":
             return DusAPI(tmp)
         else:
-            return OpenAIAPI(tmp)
+            log(level="WARNING", message=f"接口索引 {idx} 未配置 API SDK，已跳过 AI 客户端初始化")
+            return UnconfiguredAPI(tmp)
 
     def _get_group_api(self, group_name):
         """
@@ -4803,13 +4815,9 @@ class WXBot:
         except Exception as e:
             print(traceback.format_exc())
             log(level="ERROR", message=str(e) + "\n 初始化微信监听器失败，请检查微信是否启动登录正确，微信主窗口是否开着")
-            log(level="ERROR", message=str(e) + "\n 初始化微信监听器失败，请检查微信是否启动登录正确，微信主窗口是否开着")
             log(level="ERROR", message=str(e) + "\n 请尝试退出wx再重新登录后再启动")
-            log(level="ERROR", message=str(e) + "\n 请尝试退出wx再重新登录后再启动")
-            log(level="ERROR", message=str(e) + "\n 若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配,4.1.7 ~ 4.1.9.35")
-            log(level="ERROR", message=str(e) + "\n 若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配,4.1.7 ~ 4.1.9.35")
-            log(level="ERROR", message=str(e) + "\n 若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配,4.1.7 ~ 4.1.9.35")
-            log(level="ERROR", message=str(e) + "\n 若以上情况都检查完没有问题，那大概率为wx本身或者windows系统不稳定导致的，重启程序即可，若是一直这样，如果您是虚拟机就请分配更多性能，若是实体机可以联系作者询问")
+            log(level="ERROR", message=str(e) + "\n 若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配,4.1.9 ~ 4.1.12.26")
+            log(level="ERROR", message=str(e) + "\n 若是wx 4.1.9.35往后版本有初始化问题，请到wx群内@Siver")
             log(level="ERROR", message=str(e) + "\n 若以上情况都检查完没有问题，那大概率为wx本身或者windows系统不稳定导致的，重启程序即可，若是一直这样，如果您是虚拟机就请分配更多性能，若是实体机可以联系作者询问")
             self.run_flag = False
 
