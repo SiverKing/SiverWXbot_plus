@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.7.30"
-version_log = "V4.7.30 - 内核库补丁 监听偶尔丢失系统消息的bug、内核库更新补丁(源码用户请执行pip更新库命令)、修复未填写api接口时无法启动机器人的bug"
+version = "V4.7.31"
+version_log = "V4.7.31 - 修复@回复易丢失@的bug、优化初始化提示、修复 onefile 打包后临时目录被清理导致证书错误、优化OpenAI API 格式兼容接口的兼容性、适配新版本"
 
 # ============================================================
 # 标准库导入
@@ -75,6 +75,12 @@ WxParam.MESSAGE_HASH = True         # 启用消息哈希，辅助消息去重判
 WxParam.FORCE_MESSAGE_XBIAS = True  # 每次启动强制重新获取 X 偏移量
 WxParam.CHAT_WINDOW_SIZE = (1500, 6000)
 WxParam.DEFAULT_MESSAGE_YBIAS = 40
+
+# ============================================================
+# SDK 名称常量（面板显示名，兼容旧名 "OpenAI SDK"）
+# ============================================================
+OPENAI_SDK_NAME    = "OpenAI API 格式兼容接口"
+OPENAI_SDK_ALIASES = ("OpenAI SDK", OPENAI_SDK_NAME)
 
 # ============================================================
 # 拆分多条回复常量
@@ -543,6 +549,16 @@ class WXBotConfig:
         self.api_index = self.config.get('api_index', 0)
         if self.api_index >= len(self.api_configs):
             self.api_index = 0
+
+        # 接口名称迁移：OpenAI SDK → OpenAI API 格式兼容接口（兼容旧配置）
+        _sdk_renamed = False
+        for _cfg in self.api_configs:
+            if _cfg.get('sdk') == 'OpenAI SDK':
+                _cfg['sdk'] = OPENAI_SDK_NAME
+                _sdk_renamed = True
+        if _sdk_renamed:
+            self.save_config()
+            log(message="接口名称已自动更新：OpenAI SDK → OpenAI API 格式兼容接口")
 
         # 从当前接口配置派生兼容属性（供 AI 接口类使用）
         _cur = self.api_configs[self.api_index] if self.api_configs else {}
@@ -1246,8 +1262,8 @@ class UnconfiguredAPI:
 
 class OpenAIAPI:
     """
-    OpenAI 兼容接口封装类
-    适用于所有兼容 OpenAI SDK 格式的 AI 服务（如 DeepSeek、通义等）。
+    OpenAI API 格式兼容接口封装类（面板中名称为「OpenAI API 格式兼容接口」）
+    适用于所有兼容 OpenAI API 格式的 AI 服务（如 DeepSeek、通义等）。
     """
 
     def __init__(self, config):
@@ -1292,6 +1308,21 @@ class OpenAIAPI:
             "image_url": cls._image_to_data_url(image_path, image_url)
         }
 
+    def _build_history_messages(self, history):
+        """将记忆历史转换为 OpenAI 消息列表（主路径与备用路径共用）"""
+        messages = []
+        for h in history or []:
+            role = "assistant" if h.get('attr') == 'self' else "user"
+            t = h.get('time', '')
+            raw = h.get('content', '')
+            sender = h.get('sender', '')
+            if role == 'user' and sender:
+                content = f"[{t}] {sender}: {raw}" if t else f"{sender}: {raw}"
+            else:
+                content = f"[{t}] {raw}" if t else raw
+            messages.append({"role": role, "content": content})
+        return messages
+
     def chat(self, message, model=None, stream=False, prompt=None, history=None,
              image_path: str = "", image_url: str = ""):
         """
@@ -1313,16 +1344,7 @@ class OpenAIAPI:
 
         messages = [{"role": "system", "content": prompt}]
         if history:
-            for h in history:
-                role = "assistant" if h.get('attr') == 'self' else "user"
-                t = h.get('time', '')
-                raw = h.get('content', '')
-                sender = h.get('sender', '')
-                if role == 'user' and sender:
-                    content = f"[{t}] {sender}: {raw}" if t else f"{sender}: {raw}"
-                else:
-                    content = f"[{t}] {raw}" if t else raw
-                messages.append({"role": role, "content": content})
+            messages.extend(self._build_history_messages(history))
         if image_path or image_url:
             user_content = [
                 {"type": "text", "text": message},
@@ -1343,7 +1365,7 @@ class OpenAIAPI:
             error_type = type(e).__name__
             log(level="WARN", message=f"Chat Completions API 调用失败 [{error_type}]: {error_msg}")
             log(level="INFO", message="尝试备用方案（Responses API）")
-            return self._try_responses_api(message, model, stream, prompt, image_path, image_url)
+            return self._try_responses_api(message, model, stream, prompt, history, image_path, image_url)
 
         try:
             if stream:
@@ -1380,7 +1402,7 @@ class OpenAIAPI:
                     return result
                 else:
                     log(level="WARN", message=f"流式响应为空（收到 {chunk_count} 个块），尝试备用方案")
-                    return self._try_responses_api(message, model, stream, prompt, image_path, image_url)
+                    return self._try_responses_api(message, model, stream, prompt, history, image_path, image_url)
             else:
                 # 非流式模式：直接取 choices[0] 的消息内容
                 if response.choices and len(response.choices) > 0:
@@ -1393,19 +1415,19 @@ class OpenAIAPI:
                         return output
                     else:
                         log(level="WARN", message="非流式响应内容为空，尝试备用方案")
-                        return self._try_responses_api(message, model, stream, prompt, image_path, image_url)
+                        return self._try_responses_api(message, model, stream, prompt, history, image_path, image_url)
                 else:
                     log(level="WARN", message="响应中没有 choices，尝试备用方案")
-                    return self._try_responses_api(message, model, stream, prompt, image_path, image_url)
+                    return self._try_responses_api(message, model, stream, prompt, history, image_path, image_url)
         except Exception as e:
             error_type = type(e).__name__
             log(level="WARN", message=f"解析 API 响应出错 [{error_type}]: {str(e)}，尝试备用方案")
-            return self._try_responses_api(message, model, stream, prompt, image_path, image_url)
+            return self._try_responses_api(message, model, stream, prompt, history, image_path, image_url)
 
-    def _try_responses_api(self, message, model, stream, prompt, image_path="", image_url=""):
+    def _try_responses_api(self, message, model, stream, prompt, history=None, image_path="", image_url=""):
         """
         备用方案：使用 Responses API 调用。
-        当 Chat Completions API 返回非 JSON 格式时自动降级到此方案。
+        当 Chat Completions API 调用失败时自动降级到此方案。
         注意：备用方案暂不支持流式输出，统一使用非流式模式。
         """
         try:
@@ -1413,32 +1435,52 @@ class OpenAIAPI:
                 log(level="WARN", message="备用方案不支持流式输出，将使用非流式模式")
 
             log(message=f"备用方案：使用 Responses API, model={model}")
+
+            # 与主路径保持一致的输入结构：system 提示词 + 历史消息 + 用户消息
+            input_items = []
+            if prompt and prompt.strip():
+                input_items.append({"role": "system", "content": prompt})
+            input_items.extend(self._build_history_messages(history))
             if image_path or image_url:
-                input_text = f"这是prompt，请不要把这个当做用户输入：{prompt}\n\n这是用户消息，你需要参照prompt来回复用户消息：{message}" if prompt and prompt.strip() else message
-                input_payload = [{
+                input_items.append({
                     "role": "user",
                     "content": [
-                        {"type": "input_text", "text": input_text},
+                        {"type": "input_text", "text": message},
                         self._build_responses_image_block(image_path, image_url),
                     ],
-                }]
+                })
             else:
-                # Responses API 的 input 可接受字符串，将 prompt 拼接到消息中
-                input_payload = f"这是prompt，请不要把这个当做用户输入：{prompt}\n\n这是用户消息，你需要参照prompt来回复用户消息：{message}" if prompt and prompt.strip() else message
+                input_items.append({"role": "user", "content": message})
 
             response = self.client.responses.create(
                 model=model,
-                input=input_payload,
-                reasoning={"effort": "none"}
+                input=input_items,
             )
 
-            # 从 output 中提取文本内容
-            if response.output and len(response.output) > 0:
-                output_item = response.output[0]
-                if hasattr(output_item, 'content') and output_item.content:
-                    text = output_item.content[0].text
-                    log(message=f"备用方案返回成功：{text[:100]}...")
-                    return text
+            # 遍历 output 提取 message 条目中的文本（兼容 reasoning 等其它条目类型）
+            output_text = ""
+            for item in (response.output or []):
+                if getattr(item, 'type', '') != 'message':
+                    continue
+                item_content = getattr(item, 'content', None)
+                if isinstance(item_content, str):
+                    if item_content.strip():
+                        output_text = item_content
+                        break
+                    continue
+                if not item_content:
+                    continue
+                parts = []
+                for part in item_content:
+                    if getattr(part, 'type', '') == 'output_text' and getattr(part, 'text', ''):
+                        parts.append(part.text)
+                output_text = "".join(parts)
+                if output_text.strip():
+                    break
+
+            if output_text.strip():
+                log(message=f"备用方案返回成功：{output_text[:100]}...")
+                return output_text
 
             log(level="WARN", message="备用方案响应内容为空")
             return "API返回错误，请稍后再试"
@@ -2120,8 +2162,8 @@ class WXBot:
         if sdk == "Dify":
             log(message="使用Dify API")
             return DifyAPI(self.config)
-        elif sdk == "OpenAI SDK":
-            log(message="使用OpenAI SDK")
+        elif sdk in OPENAI_SDK_ALIASES:
+            log(message="使用OpenAI API 格式兼容接口")
             return OpenAIAPI(self.config)
         elif sdk == "Coze":
             log(message="使用Coze API")
@@ -2158,7 +2200,7 @@ class WXBot:
         log(message=f"初始化群组专属接口：索引{idx}  SDK:{sdk}  模型:{tmp.model1}")
         if sdk == "Dify":
             return DifyAPI(tmp)
-        elif sdk == "OpenAI SDK":
+        elif sdk in OPENAI_SDK_ALIASES:
             return OpenAIAPI(tmp)
         elif sdk == "Coze":
             return CozeAPI(tmp)
@@ -4816,7 +4858,7 @@ class WXBot:
             print(traceback.format_exc())
             log(level="ERROR", message=str(e) + "\n 初始化微信监听器失败，请检查微信是否启动登录正确，微信主窗口是否开着")
             log(level="ERROR", message=str(e) + "\n 请尝试退出wx再重新登录后再启动")
-            log(level="ERROR", message=str(e) + "\n 若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配,4.1.9 ~ 4.1.12.26")
+            log(level="ERROR", message=str(e) + "\n 若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配,4.1.9 ~ 4.1.12.55")
             log(level="ERROR", message=str(e) + "\n 若是wx 4.1.9.35往后版本有初始化问题，请到wx群内@Siver")
             log(level="ERROR", message=str(e) + "\n 若以上情况都检查完没有问题，那大概率为wx本身或者windows系统不稳定导致的，重启程序即可，若是一直这样，如果您是虚拟机就请分配更多性能，若是实体机可以联系作者询问")
             self.run_flag = False

@@ -1,6 +1,6 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.7.30-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
+[![Version](https://img.shields.io/badge/version-V4.7.31-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
 [![Python](https://img.shields.io/badge/python-3.9+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
@@ -79,7 +79,7 @@ python web_server.py
 ### 🎯 多 AI 平台支持
 - **DusAPI** - 兼容 Claude、GPT 等模型的接口封装
   - **自动重试**：梯度重试机制（2/4/8/16/32 秒），5 次失败后报错
-- **OpenAI SDK** - 兼容所有 OpenAI 格式的 API（DeepSeek、通义千问等）
+- **OpenAI API 格式兼容接口** - 兼容所有 OpenAI API 格式的服务（DeepSeek、通义千问等）
   - 支持流式和非流式输出
   - 支持思维链内容（reasoning_content）
   - 自动降级到 Responses API 备用方案
@@ -216,7 +216,7 @@ python web_server.py
 ```json
 {
     "api_configs": [
-        {"sdk": "OpenAI SDK", "key": "your-api-key", "url": "https://api.example.com/v1", "model": "gpt-5"},
+        {"sdk": "OpenAI API 格式兼容接口", "key": "your-api-key", "url": "https://api.example.com/v1", "model": "gpt-5"},
         {"sdk": "Dify", "key": "your-api-key", "url": "https://api.example.com/v1", "model": "workflow-id"}
     ],
     "api_index": 0,

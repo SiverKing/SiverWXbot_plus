@@ -11,6 +11,7 @@ import json
 import os
 import shutil
 import hashlib
+import certifi
 import re
 from werkzeug.utils import secure_filename
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -20,6 +21,7 @@ import logging
 from functools import wraps
 import threading
 from wxbot_core import CozeAPI, DifyAPI, DusAPI, OpenAIAPI, WXBot, clean_ai_reply_text, version as BOT_VERSION
+from wxbot_core import OPENAI_SDK_ALIASES, OPENAI_SDK_NAME
 from logger import log
 import logger
 import pythoncom
@@ -79,6 +81,33 @@ DEFAULT_PROMPT_CONTENT = "你是一个ai回复助手，请根据用户的问题�
 # 启动时确保目录存在
 os.makedirs(os.path.join(base_dir(), 'config'),      exist_ok=True)
 os.makedirs(os.path.join(base_dir(), 'panel_logs'),  exist_ok=True)
+
+
+def install_persistent_ca_bundle():
+    """onefile 打包时 certifi 的 cacert.pem 位于 %TEMP%\\_MEIxxxx\\ 临时目录，
+    挂机电脑的临时文件清理（存储感知/管家类软件）会将其删除，
+    导致 API 请求报证书错误、重启后恢复。
+    启动时将其复制到 config/ 目录并让所有 HTTP 库改用它。"""
+    try:
+        persistent = os.path.join(base_dir(), 'config', 'cacert.pem')
+        src = certifi.where()
+        if src and os.path.exists(src):
+            tmp = persistent + '.tmp'
+            shutil.copyfile(src, tmp)
+            os.replace(tmp, persistent)
+        if os.path.exists(persistent):
+            os.environ['REQUESTS_CA_BUNDLE'] = persistent   # requests 每次请求时读取
+            os.environ['CURL_CA_BUNDLE'] = persistent       # 双保险
+            os.environ['SSL_CERT_FILE'] = persistent        # httpx(openai/cozepy) trust_env 读取
+            certifi.where = lambda: persistent              # httpcore 默认证书上下文读取
+            log(level='SUCCESS', message=f'持久CA证书包已安装: {persistent}')
+            return True
+    except Exception as e:
+        log(level='WARNING', message=f'安装持久CA证书包失败: {e}')
+    return False
+
+
+install_persistent_ca_bundle()
 
 
 def load_panel_secret_key():
@@ -615,6 +644,20 @@ def dashboard():
     ])
     config.setdefault('api_index', 0)
 
+    # 接口名称迁移：OpenAI SDK → OpenAI API 格式兼容接口（兼容旧配置）
+    _sdk_renamed = False
+    for _cfg in config.get('api_configs', []):
+        if _cfg.get('sdk') == 'OpenAI SDK':
+            _cfg['sdk'] = OPENAI_SDK_NAME
+            _sdk_renamed = True
+    if _sdk_renamed:
+        try:
+            with open(CONFIG_FILE, 'w', encoding='utf-8') as _f:
+                json.dump(config, _f, ensure_ascii=False, indent=4)
+            log('SUCCESS', '接口名称已自动更新：OpenAI SDK → OpenAI API 格式兼容接口')
+        except Exception as _e:
+            log('ERROR', f'接口名称更新写入失败: {_e}')
+
     # —— 新增字段默认值（关键）——
     config.setdefault('group_api_map', {})                   # 群组专属接口映射
     config.setdefault('group_welcome_random', 1.0)          # 新人欢迎概率
@@ -1032,7 +1075,7 @@ class _TempAPIConfig:
 
 def _build_test_api_client(tmp_config):
     sdk = tmp_config.api_sdk
-    if sdk == "OpenAI SDK":
+    if sdk in OPENAI_SDK_ALIASES:
         return OpenAIAPI(tmp_config)
     if sdk == "Dify":
         return DifyAPI(tmp_config)
@@ -1054,7 +1097,7 @@ def test_api_config_route():
             return jsonify({'status': 'error', 'message': '接口配置格式无效'})
 
         tmp_config = _TempAPIConfig(cfg)
-        if tmp_config.api_sdk not in ("DusAPI", "OpenAI SDK", "Dify", "Coze"):
+        if tmp_config.api_sdk not in ("DusAPI", "Dify", "Coze") and tmp_config.api_sdk not in OPENAI_SDK_ALIASES:
             return jsonify({'status': 'error', 'message': '请选择有效的 SDK'})
         if not tmp_config.api_key:
             return jsonify({'status': 'error', 'message': 'API Key 不能为空'})
