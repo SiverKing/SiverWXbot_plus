@@ -1,10 +1,10 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
 [![Version](https://img.shields.io/badge/version-V4.7.31-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
-[![Python](https://img.shields.io/badge/python-3.9+-green.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.10+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-> 一个功能完整、架构清晰的WX机器人框架，支持多 AI 平台接入、多份 Prompt 管理、对话记忆、拆分多条回复、图片识别、自定义规则转发、灵活的监听模式、50+ 管理命令和智能的消息处理流程。
+> 一个wxautox4官方制作的功能完整、架构清晰的WX机器人框架，支持多 AI 平台接入、多份 Prompt 管理、对话记忆、拆分多条回复、图片识别、自定义规则转发、灵活的监听模式、50+ 管理命令和智能的消息处理流程。
 
 **作者**: [Siver](https://www.siver.top)
 
@@ -15,9 +15,9 @@
 ## 📦 安装部署
 
 ### 环境要求
-- Python `3.9` ~ `3.13`
+- Python `3.10` ~ `3.13`
 - Windows 操作系统
-- Windows wx PC 版（`4.1.9` ~ `4.1.12.26` 版本）
+- Windows wx PC 版（`4.1.9` ~ `4.1.13.63` 版本）
 
 ### 安装步骤
 
@@ -26,7 +26,7 @@
 1. **克隆项目**
 ```bash
 git clone https://github.com/SiverKing/SiverWXbot_plus.git
-cd wxbot_plus
+cd SiverWXbot_plus
 ```
 
 2. **安装依赖**
@@ -45,6 +45,46 @@ pip install -r requirements.txt
 ```bash
 python web_server.py
 ```
+
+---
+
+## 🤖 内置 Agent 分支版本
+
+> ⚠️ **注意：** 以下三个功能均属于独立的**分支版本**（版本号带 `+agent` 后缀，如 `v4.7.31+agent.x`），**不包含**在本仓库公开版本中。有需要可前往[交流页面](https://wxbot.siverking.online/docs.html?c=%E4%BA%A4%E6%B5%81)或[联系作者](https://www.siverking.online/static/img/siver_wx.jpg)询问获取。
+
+分支版本在原有全部功能的基础上，内置了一位专属 **AI 管家**（内置 agent）。它运行在你自己的 Windows 电脑上，可以通过**自然语言对话**帮你完成面板配置、Prompt 编写、运行状态检查、故障排查，以及源码版的功能定制开发。不用翻文档、找字段、手改 JSON，像聊天一样把需求告诉它即可。
+
+它一共有三种使用方式：
+
+### 🤖 内置 agent（AI 面板管家）
+
+- **24 小时在线的专属技术助手** - 内置在管理面板中，可以读取面板的配置、Prompt、记忆和日志，理解你的需求后**替你完成操作**
+- **面板配置** - 用大白话一句话完成：修改模型接口、监听名单、关键词回复、自定义转发、定时消息、朋友圈任务、记忆设置等
+- **Prompt 管理** - 读写 `config/prompt/*.md`，帮你编写和优化角色、语气、禁答、转人工等规则
+- **状态与排查** - 检查机器人运行状态、微信在线状态、错误日志，给出可验证的排查顺序
+- **源码版定制开发** - 阅读并修改源码，帮你开发自定义功能（仅源码版支持，修改前会先征求确认）
+- **安全可靠** - 先检查再动手、修改前说明、高风险操作二次确认，Key 只显示脱敏状态
+
+> 💡 **使用前准备：** 管家依赖一个大模型工作，首次使用需在面板「AI 面板管家」栏目里配置一个可用的 AI 接口（内置 DeepSeek、OpenAI、Claude、Gemini、Kimi 等提供商，也支持任意 OpenAI 兼容接口）；管家与机器人回消息用的是**两套独立 AI 配置**，互不影响。
+
+### 💬 管理员微信直通内置 agent
+
+- **不用开面板也能用管家** - 管理员直接在自己与机器人的微信聊天窗口里发送 `/agent` 命令，把任务交给内置 agent，处理完成后结果会自动发回微信
+- **支持的微信命令**：`/agent 任务内容`（提交任务）、`/agent会话`（查看会话列表）、`/选择agent会话 N`（切换会话）、`/agent新会话`（重新开始）、`/agent停止`（停止任务）
+- **长结果自动分段** - 内容较长时自动分段发送，单次任务最长处理 30 分钟，超时自动中止
+
+> 💡 **提示：** 任务内容不会写入机器人对话记忆，日志中只显示 `（任务内容已隐藏）`，保护隐私。
+
+### 📱 接入微信 ClawBot（手机微信远程管理）
+
+- **手机微信远程管理** - 接入微信 ClawBot 插件后，用手机上的微信就能与 agent 对话、发送管理员命令
+- **面板扫码接入** - 打开管理面板点击「微信 ClawBot：未连接」按钮，生成二维码用手机微信扫码即可，支持数字配对码验证
+- **电脑端离线也能用** - 机器人未启动时，仍可手机问 agent、查询状态、测试接口
+- **串行安全执行** - 与微信直通发起的命令共用同一把锁串行执行，不会同时操作微信造成冲突
+
+> ⚠️ **注意：** ClawBot 目前仅支持文字消息（语音需微信已转为文字）；只有接入时绑定的微信账号可以对话；开启「全局监听」时建议把 ClawBot 会话设为免打扰并开启「过滤免打扰消息」，避免监听冲突。
+
+> 💡 **需要获取？** 以上功能均为分支版本专属，公开仓库暂不提供，有需要可前往[交流页面](https://wxbot.siverking.online/docs.html?c=%E4%BA%A4%E6%B5%81)或[联系作者](https://www.siverking.online/static/img/siver_wx.jpg)获取。
 
 ---
 
@@ -205,6 +245,7 @@ python web_server.py
 
 ### 📧 告警通知
 - **邮件告警** - 发生错误时自动发送邮件通知
+- **Webhook 通知** - 支持飞书、钉钉、企业微信、Discord 等通用 HTTP Webhook，请求头和请求体支持 `$title`、`$content` 占位符，可与邮件告警同时启用
 - **离线检测** - WX离线时自动告警
 
 ---
@@ -536,14 +577,16 @@ config/prompt/
 
 ### admin.json 账密文件
 
-位于 `config/admin.json`，首次启动自动创建，也可在面板「账号密码」页在线修改：
+位于 `config/admin.json`，首次启动自动创建，也可在面板「账号密码」页在线修改。密码以哈希形式存储（不保存明文）：
 
 ```json
 {
     "username": "admin",
-    "password": "123456"
+    "password_hash": "pbkdf2:sha256:1000000$..."
 }
 ```
+
+> 旧版本保存明文 `password` 字段的账号文件会在启动时自动迁移为哈希存储。
 
 ### email.txt 配置文件
 
@@ -587,7 +630,7 @@ python web_server.py
 **发送 `/指令` 获取分类目录，再发送分类指令查看该类详情：**
 
 ```
-/指令           → 返回 11 个分类目录
+/指令           → 返回 13 个分类目录
 /系统状态指令   → 状态、版本、接口测试、更新配置
 /用户管理指令   → 添加/删除/查看监听用户
 /群组管理指令   → 群机器人、欢迎语全套管理
@@ -595,10 +638,12 @@ python web_server.py
 /关键词指令     → 私聊/群聊关键词开关、@触发模式
 /记忆指令       → 开关记忆、清除单用户/群/全部记忆
 /延迟指令       → 开关回复延迟
+/暂停恢复指令   → 只监听不 AI 回复模式开关（私聊/群聊）
 /图片识别指令   → 查看识别状态及接口
 /拆分回复指令   → 查看配置、私聊/群聊独立开关
 /新好友指令     → 查看自动通过及自动回复状态
 /接口指令       → 接口列表、切换接口、错误回复查看/修改
+/计数器指令     → 回复轮数限制查看、清除计数
 ```
 
 **常用命令速查：**
@@ -635,13 +680,19 @@ python web_server.py
 wxbot_plus/
 ├── wxbot_core.py              # 机器人核心（配置管理、AI接入、消息处理）
 ├── web_server.py              # Web 管理界面
+├── siver_panel.py             # 远程访问服务客户端（由 web_server.py 动态加载）
+├── webhook_send.py            # Webhook 报错通知模块
 ├── logger.py                  # 日志模块
 ├── email_send.py              # 邮件发送模块
 ├── requirements.txt           # 依赖列表
+├── SiverWXbot.spec            # PyInstaller 打包配置
 ├── config/                    # 配置文件目录（自动创建）
 │   ├── config.json            # 机器人配置
-│   ├── admin.json             # Web 管理账密
+│   ├── admin.json             # Web 管理账密（哈希存储）
 │   ├── email.txt              # 邮件告警配置
+│   ├── webhook.json           # Webhook 通知配置
+│   ├── reply_count.json       # 回复轮数计数记录
+│   ├── panel_secret.key       # 面板 Session 密钥
 │   └── prompt/                # Prompt 文件目录（自动创建）
 │       ├── 默认.md             # 默认 Prompt（自动创建）
 │       └── *.md               # 其他自定义 Prompt
@@ -649,11 +700,14 @@ wxbot_plus/
 │   └── {wx_id}/
 │       └── {chat_name}/
 │           └── {chat_name}_memory.json
+├── old_wxbot_config/          # 自动备份目录（启动时自动备份 config/ 与 memory/）
 ├── panel_logs/                # 运行日志目录（自动创建）
 ├── templates/                 # Web 界面模板
 │   ├── dashboard.html         # 管理面板
 │   ├── login.html
+│   ├── error.html
 │   └── static/                # 本地静态资源（Bootstrap Icons 本地化）
+├── docs/                      # 文档站源码
 └── wxauto_logs/               # wxautox 日志目录
 ```
 
@@ -734,7 +788,7 @@ memory/
 #### 黑名单（全局）模式
 - 监听所有消息，动态管理会话列表
 - 全局共用一个 Prompt（`default_prompt` 指定），接口使用全局默认
-- 自动移除 3 分钟无消息的会话
+- 自动移除 10 分钟无消息的会话
 
 ---
 
@@ -745,7 +799,7 @@ memory/
    - 购买地址：https://www.siverking.online/static/img/siver_wx.jpg
 
 2. **WX版本**
-   - 建议使用WX 4.1.8 版本
+   - 建议使用推荐的WX版本
 
 3. **API 配置**
    - 确保 API 密钥有效

@@ -4858,7 +4858,7 @@ class WXBot:
             print(traceback.format_exc())
             log(level="ERROR", message=str(e) + "\n 初始化微信监听器失败，请检查微信是否启动登录正确，微信主窗口是否开着")
             log(level="ERROR", message=str(e) + "\n 请尝试退出wx再重新登录后再启动")
-            log(level="ERROR", message=str(e) + "\n 若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配,4.1.9 ~ 4.1.12.55")
+            log(level="ERROR", message=str(e) + "\n 若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配,4.1.9 ~ 4.1.13.63")
             log(level="ERROR", message=str(e) + "\n 若是wx 4.1.9.35往后版本有初始化问题，请到wx群内@Siver")
             log(level="ERROR", message=str(e) + "\n 若以上情况都检查完没有问题，那大概率为wx本身或者windows系统不稳定导致的，重启程序即可，若是一直这样，如果您是虚拟机就请分配更多性能，若是实体机可以联系作者询问")
             self.run_flag = False

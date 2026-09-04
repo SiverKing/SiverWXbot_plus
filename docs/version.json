@@ -1,5 +1,7 @@
 {
     "version": "V4.7.31",
     "version_log": "V4.7.31 - 修复@回复易丢失@的bug、优化初始化提示、修复 onefile 打包后临时目录被清理导致证书错误、优化OpenAI API 格式兼容接口的兼容性、适配新版本性",
-    "infrom": "有使用问题均可及时联系作者，右上角文档可找到联系方式。远程访问服务获取：https://panel.siver.top\n更新后4.1.9.35往后版本适配有问题可联系作者或在群内提问\nwx 4.1.9.35版本下载链接 github：https://github.com/SiverKing/wechat4.0-windows-versions/releases/tag/v4.1.9.35    百度网盘：https://pan.baidu.com/s/13Hb-AIQ74Y4T32GDGhy7iQ?pwd=uhkz 提取码: uhkz"
+    "agent_version": "v4.7.31+agent.4",
+    "agent_version_log": "v4.7.31+agent.4 - 新增管理员直通内置agent可在管理员微信发消息交流、新增agent接入微信ClawBot插件",
+    "infrom": "内置AI agent面板管家版本现已上线 欢迎体验：https://wxbot.siverking.online/docs.html?c=ai面板管理\n当前支持4.1.9 ~ 4.1.13.63\n有使用问题均可及时联系作者，右上角文档可找到联系方式。\n更新后4.1.9.35往后版本适配有问题可联系作者或在群内提问"
 }
