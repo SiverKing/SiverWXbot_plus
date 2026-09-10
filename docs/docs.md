@@ -1,6 +1,6 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.7.31-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
+[![Version](https://img.shields.io/badge/version-v4.7.32-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
 [![Python](https://img.shields.io/badge/python-3.10+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
@@ -36,7 +36,7 @@ SiverWXbot_plus与wxauto 是独立第三方项目，并非腾讯或微信官方�
 
 **环境要求：**
 - Windows 操作系统
-- Windows wx PC 版（`4.1.9` ~ `4.1.13.63` 版本）
+- Windows wx PC 版（`4.1.9` ~ `4.1.13.65` 版本）
 
 **下载地址（二选一）：**
 
@@ -53,7 +53,7 @@ SiverWXbot_plus与wxauto 是独立第三方项目，并非腾讯或微信官方�
 **环境要求：**
 - Python `3.10` - `3.13`
 - Windows 操作系统
-- Windows wx PC 版（`4.1.9` ~ `4.1.13.63` 版本）
+- Windows wx PC 版（`4.1.9` ~ `4.1.13.65` 版本）
 - wxautox4内核库 设备授权（需购买，购买地址：https://www.siverking.online/static/img/siver_wx.jpg ）
 
 **安装步骤：**
@@ -905,7 +905,7 @@ AI 面板管家在 **exe 版**和**源码版**中都可以使用，但能力边�
 2. 电脑自动休眠 黑屏都设为**从不**（一般情况程序会自动阻止不用手动调整）。
 3. 如需离线邮件提醒，请在配置面板修改设置邮件。
 4. 关闭wx自动更新。
-5. 适配 Windows wx `4.1.9` - `4.1.13.63`。
+5. 适配 Windows wx `4.1.9` - `4.1.13.65`。
 6. 程序接管wx运行时，请勿手动干预，避免影响自动化操作。
 7. **各 SDK 接口填写说明：**
    - **DusAPI**：填写 Key、URL、模型 ID
@@ -1196,6 +1196,8 @@ Plus 激活时可能处理设备硬件标识、授权码、激活时间、软件
 **wxautox4内核库授权激活**: [wxautox4内核库授权激活](https://www.siverking.online/static/img/siver_wx.jpg)
 
 **联系作者**: [联系作者](https://www.siverking.online/static/img/siver_wx.jpg)
+
+**在线联系**: [在线联系](https://work.weixin.qq.com/kfid/kfc20809625e490617a)
 
 **交流群**：**拥有wxautox4授权后，可联系作者进群**
 

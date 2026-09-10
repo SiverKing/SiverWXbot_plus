@@ -662,6 +662,7 @@ def dashboard():
     config.setdefault('group_api_map', {})                   # 群组专属接口映射
     config.setdefault('group_welcome_random', 1.0)          # 新人欢迎概率
     config.setdefault('chat_listen_only', False)             # 私聊只监听不 AI 回复
+    config.setdefault('special_session_name', [])            # 全局监听特殊会话过滤名单（用户附加项）
     config.setdefault('group_listen_only', False)            # 群聊只监听不 AI 回复
     config.setdefault('chat_keyword_switch', False)          # 私聊关键词开关
     config.setdefault('group_keyword_switch', False)         # 群组关键词开关
@@ -852,7 +853,7 @@ def _coerce_bool_fields(merged_config):
                 merged_config[field] = bool(v)
 
 def _coerce_list_fields(merged_config):
-    list_fields = ['listen_list', 'group', 'new_friend_msg', 'new_friend_tags', 'scheduled_msg_list', 'random_msg_list', 'scheduled_moments_list', 'random_moments_list', 'custom_forward_list']
+    list_fields = ['listen_list', 'special_session_name', 'group', 'new_friend_msg', 'new_friend_tags', 'scheduled_msg_list', 'random_msg_list', 'scheduled_moments_list', 'random_moments_list', 'custom_forward_list']
     for field in list_fields:
         if field in merged_config and not isinstance(merged_config[field], list):
             if isinstance(merged_config[field], str):
@@ -861,6 +862,10 @@ def _coerce_list_fields(merged_config):
                 merged_config[field] = []
         if field in merged_config:
             merged_config[field] = [item for item in merged_config[field] if str(item).strip()]
+    if 'special_session_name' in merged_config:
+        merged_config['special_session_name'] = list(dict.fromkeys(
+            str(item).strip() for item in merged_config['special_session_name'] if str(item).strip()
+        ))
 
 def _coerce_float_fields(merged_config):
     # 仅当前需要 group_welcome_random，限定 [0.0, 1.0]
@@ -1896,6 +1901,7 @@ def main():
                 "AllListen_filter_mute": True,
                 "chat_listen_only": False,
                 "listen_list": [],
+                "special_session_name": [],
                 "group": [],
                 "group_api_map": {},
                 "group_switch": False,

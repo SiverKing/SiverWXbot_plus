@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.7.31"
-version_log = "V4.7.31 - 修复@回复易丢失@的bug、优化初始化提示、修复 onefile 打包后临时目录被清理导致证书错误、优化OpenAI API 格式兼容接口的兼容性、适配新版本"
+version = "v4.7.32"
+version_log = "v4.7.32 - 私聊全局监听新增“特殊会话过滤名单”配置、适配新版本"
 
 # ============================================================
 # 标准库导入
@@ -75,6 +75,7 @@ WxParam.MESSAGE_HASH = True         # 启用消息哈希，辅助消息去重判
 WxParam.FORCE_MESSAGE_XBIAS = True  # 每次启动强制重新获取 X 偏移量
 WxParam.CHAT_WINDOW_SIZE = (1500, 6000)
 WxParam.DEFAULT_MESSAGE_YBIAS = 40
+_CONFIG_SPECIAL_SESSION_NAMES = set()
 
 # ============================================================
 # SDK 名称常量（面板显示名，兼容旧名 "OpenAI SDK"）
@@ -236,6 +237,7 @@ class WXBotConfig:
 
         # ---------- 用户与权限 ----------
         self.listen_list = []           # 白名单/黑名单用户列表
+        self.special_session_name = []  # 全局监听特殊会话过滤名单（用户附加项）
         self.cmd = ""                   # 管理员账号（命令接收者）
 
         # ---------- AI 接口配置 ----------
@@ -356,6 +358,7 @@ class WXBotConfig:
                     "AllListen_filter_mute": True,
                     "chat_listen_only": False,
                     "listen_list": [],
+                    "special_session_name": [],
                     "group": [],
                     "group_api_map": {},
                     "group_switch": False,
@@ -574,6 +577,27 @@ class WXBotConfig:
         self.AllListen_switch     = self.config.get('AllListen_switch')
         self.AllListen_filter_mute = bool(self.config.get('AllListen_filter_mute', True))
         self.chat_listen_only     = bool(self.config.get('chat_listen_only', False))
+
+        # 配置中只保存用户附加项，保留 wxautox 内置的特殊会话名单。
+        _special_session_names = self.config.get('special_session_name', [])
+        if not isinstance(_special_session_names, list):
+            _special_session_names = []
+        self.special_session_name = []
+        for _session_name in _special_session_names:
+            _session_name = str(_session_name).strip()
+            if _session_name and _session_name not in self.special_session_name:
+                self.special_session_name.append(_session_name)
+
+        # 面板进程内重启机器人时，先移除上次由配置追加的项，使删除操作也能生效。
+        global _CONFIG_SPECIAL_SESSION_NAMES
+        for _session_name in _CONFIG_SPECIAL_SESSION_NAMES:
+            if _session_name in WxParam.SPECIAL_SESSION_NAME:
+                WxParam.SPECIAL_SESSION_NAME.remove(_session_name)
+        _CONFIG_SPECIAL_SESSION_NAMES.clear()
+        for _session_name in self.special_session_name:
+            if _session_name not in WxParam.SPECIAL_SESSION_NAME:
+                WxParam.SPECIAL_SESSION_NAME.append(_session_name)
+                _CONFIG_SPECIAL_SESSION_NAMES.add(_session_name)
 
         # 群聊配置
         self.group                = self.config.get('group', [])
@@ -4858,7 +4882,7 @@ class WXBot:
             print(traceback.format_exc())
             log(level="ERROR", message=str(e) + "\n 初始化微信监听器失败，请检查微信是否启动登录正确，微信主窗口是否开着")
             log(level="ERROR", message=str(e) + "\n 请尝试退出wx再重新登录后再启动")
-            log(level="ERROR", message=str(e) + "\n 若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配,4.1.9 ~ 4.1.13.63")
+            log(level="ERROR", message=str(e) + "\n 若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配,4.1.9 ~ 4.1.13.65")
             log(level="ERROR", message=str(e) + "\n 若是wx 4.1.9.35往后版本有初始化问题，请到wx群内@Siver")
             log(level="ERROR", message=str(e) + "\n 若以上情况都检查完没有问题，那大概率为wx本身或者windows系统不稳定导致的，重启程序即可，若是一直这样，如果您是虚拟机就请分配更多性能，若是实体机可以联系作者询问")
             self.run_flag = False

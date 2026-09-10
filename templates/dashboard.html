@@ -1322,6 +1322,26 @@ body.mobile-nav-open { overflow: hidden; }
         <i class="bi bi-exclamation-triangle-fill" style="color:#DC2626;margin-right:4px;"></i>
         <strong>此处只能添加私聊联系人，请勿添加群聊。</strong>群聊若添加到此处，会被当作私聊处理，不会遵循群组管理中的规则，可能导致严重错误甚至发错消息。群聊请在「群组管理」页面添加。
       </div>
+      <div id="special-session-filter-row" style="display:{% if config.AllListen_switch %}block{% else %}none{% endif %};">
+        <hr>
+        <div class="mb-2">
+          <label class="cfg-label">特殊会话过滤名单</label>
+        </div>
+        <div id="special_session_name_container">
+          {% for item in config.get('special_session_name', []) %}
+          <div class="list-item">
+            <input type="text" class="form-control" name="special_session_name" value="{{ item }}" placeholder="会话名称">
+            <button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>
+          </div>
+          {% endfor %}
+        </div>
+        <button type="button" class="btn-add" data-target="#special_session_name_container" data-name="special_session_name" data-placeholder="会话名称"><i class="bi bi-plus-circle"></i> 添加过滤会话</button>
+        <div style="margin-top:8px;padding:9px 14px;background:#f0f7ff;border:1px solid #bcd4f5;border-radius:6px;color:#1a5fa8;font-size:12.5px;line-height:1.8;">
+          <i class="bi bi-info-circle" style="color:#2d8cf0;margin-right:4px;"></i>
+          用于全局监听时过滤既非私聊、也非群聊的特殊会话。这类会话点开后可能进入二级页面，导致整个全局监听卡住；发现后可将会话名称加入此名单。
+          常见项有：<strong>服务号</strong>、<strong>公众号</strong>（这两项已默认内置，无需重复添加）、<strong>客服消息</strong>、<strong>(企微消息)</strong>（个人微信中关注的企业微信企业发来的消息）。
+        </div>
+      </div>
       <hr>
       <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:6px;">
         <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
@@ -3020,10 +3040,11 @@ $(function(){
   // ===== Add List Item =====
   $(document).on('click','.btn-add[data-target]',function(){
     var target=$(this).data('target'), name=$(this).data('name');
+    var placeholder=$(this).data('placeholder')||'';
     var pickBtn=$(this).data('imgpick')?'<button type="button" class="btn-pick-img" title="点击选择本地图片，自动填入路径"><i class="bi bi-folder2-open"></i></button>':'';
     var fieldHtml=$(this).data('multiline')
       ? '<textarea class="form-control" name="'+name+'" rows="2"></textarea>'
-      : '<input type="text" class="form-control" name="'+name+'">';
+      : '<input type="text" class="form-control" name="'+name+'" placeholder="'+placeholder+'">';
     $(target).append(
       '<div class="list-item">'+
       fieldHtml+
@@ -3148,6 +3169,7 @@ $(function(){
 
   // ===== Listen Tab：模式切换联动（扩展现有逻辑）=====
   function _updateListenMode(isGlobal) {
+    $('#special-session-filter-row').toggle(isGlobal);
     if (isGlobal) {
       $('#global-prompt-row').show();
       $('#global-filter-mute-row').show();
@@ -3715,7 +3737,7 @@ $(function(){
       admin:$('#admin').val(),
       group_welcome_msg:$('#group_welcome_msg').summernote('code'),
       default_prompt:$('#default_prompt_select').val()||'默认',
-      listen_list:[], group:[], group_api_map:{}, group_prompt_map:{}, new_friend_msg:[],
+      listen_list:[], special_session_name:[], group:[], group_api_map:{}, group_prompt_map:{}, new_friend_msg:[],
       chat_prompt_map:{}, chat_api_map:{}, chat_max_round_map:{},
       group_welcome_random:parseFloat($('#group_welcome_random').val()),
       keyword_dict:{},
@@ -3775,6 +3797,12 @@ $(function(){
         if (!isNaN(av) && av >= 0) configData.chat_api_map[uname] = av;
         var rv = parseInt($(this).find('.chat-max-round-input').val());
         if (!isNaN(rv) && rv >= 1) configData.chat_max_round_map[uname] = Math.min(99999, rv);
+      }
+    });
+    $('#special_session_name_container input[name="special_session_name"]').each(function(){
+      var sessionName = $(this).val().trim();
+      if (sessionName && configData.special_session_name.indexOf(sessionName) === -1) {
+        configData.special_session_name.push(sessionName);
       }
     });
     // 群组：收集名称列表 + 专属接口映射 + 专属 prompt 映射
