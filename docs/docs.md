@@ -16,7 +16,9 @@
 
 一个功能完整、架构清晰的WX机器人框架，支持多 AI 平台接入、多份 Prompt 管理、对话记忆、拆分多条回复、图片识别、自定义规则转发、灵活的监听模式、50+ 管理命令和智能的消息处理流程。
 
-本项目为`wxautox4`官方出品的基于`wxautox4`py库为内核，搭建并封装了实体功能的[开源](https://github.com/SiverKing/SiverWXbot_plus/)项目。可直接使用源码或exe快速部署，也可二次修改使用。本项目为开源项目，全部源代码免费开放不收取任何费用，仅供交流学习使用。wxautox4收费为wxautox4 py库设备授权需要收费。若您拥有wxautox4 py库授权，不仅可免费使用本项目，还可以自行开发或者使用其他基于内核库的项目。获取授权可查看README或者下方[安装部署](https://wxbot.siverking.online/docs.html?c=安装部署)内查看。当前有试用可获取，数量有限，先到先得。
+本项目为`wxautox4`官方出品的基于`wxautox4`py库为内核，搭建并封装了实体功能的[开源](https://github.com/SiverKing/SiverWXbot_plus/)项目。可直接使用源码或exe快速部署，也可二次修改使用。本项目为开源项目，全部源代码免费开放不收取任何费用，仅供交流学习使用。wxautox4收费为wxautox4 py库设备授权需要收费。若您拥有wxautox4 py库授权，不仅可免费使用本项目，还可以自行开发或者使用其他基于内核库的项目。获取授权前往[交流页面](https://wxbot.siverking.online/docs.html?c=%E4%BA%A4%E6%B5%81)。
+
+> **获取激活码:** 联系此处[交流页面](https://wxbot.siverking.online/docs.html?c=%E4%BA%A4%E6%B5%81)
 
 ### SiverWXbot_plus与wxauto
 

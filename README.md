@@ -6,7 +6,7 @@
 
 > 一个wxautox4官方制作的功能完整、架构清晰的WX机器人框架，支持多 AI 平台接入、多份 Prompt 管理、对话记忆、拆分多条回复、图片识别、自定义规则转发、灵活的监听模式、50+ 管理命令和智能的消息处理流程。
 
-**作者**: [Siver](https://www.siver.top)
+**作者**: [Siver](https://github.com/SiverKing)
 
 📖 **[查看完整使用文档](https://wxbot.siverking.online)**
 
