@@ -3,5 +3,5 @@
     "version_log": "v4.7.32 - 私聊全局监听新增“特殊会话过滤名单”配置、适配新版本",
     "agent_version": "v4.7.32+agent.4",
     "agent_version_log": "v4.7.32+agent.4 - 新增管理员直通内置agent可在管理员微信发消息交流、新增agent接入微信ClawBot插件",
-    "infrom": "内置AI agent面板管家版本现已上线 欢迎体验：https://wxbot.siverking.online/docs.html?c=ai面板管理\n当前支持4.1.9 ~ 4.1.13.65\n有使用问题均可及时联系作者，右上角文档可找到联系方式。\n更新后4.1.9.35往后版本适配有问题可联系作者或在群内提问"
+    "infrom": "内置AI agent面板管家版本现已上线 欢迎体验：https://wxbot.siverking.online/docs.html?c=ai面板管理\n当前支持4.1.9 ~ 4.1.15.9\n有使用问题均可及时联系作者，右上角文档可找到联系方式。\n更新后4.1.9.35往后版本适配有问题可联系作者或在群内提问"
 }
