@@ -1,6 +1,6 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-v4.7.32-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
+[![Version](https://img.shields.io/badge/version-v4.7.33-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
 [![Python](https://img.shields.io/badge/python-3.10+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
@@ -1192,8 +1192,6 @@ Plus 激活时可能处理设备硬件标识、授权码、激活时间、软件
 ## 交流
 
 **项目地址**：[https://github.com/SiverKing/SiverWXbot_plus](https://github.com/SiverKing/SiverWXbot_plus)
-
-**作者主页**：[https://www.siver.top](https://www.siverking.online)
 
 **wxautox4内核库授权激活**: [wxautox4内核库授权激活](https://www.siverking.online/static/img/siver_wx.jpg)
 

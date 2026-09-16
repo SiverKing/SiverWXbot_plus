@@ -1163,6 +1163,20 @@ body.mobile-nav-open { overflow: hidden; }
               {% set _k = cfg.get('key', '') %}{% if _k|length > 10 %}{% set _km = _k[:5] + ('*' * (_k|length - 10)) + _k[-5:] %}{% else %}{% set _km = _k %}{% endif %}
               <input type="text" class="form-control api-key-input" value="{{ _km }}" data-real-key="{{ _k }}" data-masked="{{ _km }}" placeholder="sk-..." autocomplete="off">
             </div>
+            <div class="col-12 col-md-6">
+              <label class="cfg-label">备用接口</label>
+              {% set _api_index = loop.index0 %}
+              <select class="form-select api-fallback-select" title="主接口失败时调用一次备用接口">
+                <option value="-1" {% if cfg.get('fallback_api_index', -1)|int == -1 %}selected{% endif %}>无</option>
+                {% for _other_index in range(config.api_configs|length) %}
+                {% if _other_index != _api_index %}
+                <option value="{{ _other_index }}" {% if cfg.get('fallback_api_index', -1)|int == _other_index %}selected{% endif %}>
+                  接口{{ _other_index + 1 }}: {{ config.api_configs[_other_index].get('model', '') }}
+                </option>
+                {% endif %}
+                {% endfor %}
+              </select>
+            </div>
           </div>
         </div>
         {% endfor %}
@@ -2794,8 +2808,45 @@ $(function(){
   // ===== 接口配置：删除（至少保留 2 个）=====
   $(document).on('click', '.btn-remove-api-config', function(){
     if($('.api-config-item').length <= 2){ svModal.alert('至少保留 2 个接口配置'); return; }
-    $(this).closest('.api-config-item').remove();
+    var $removedItem = $(this).closest('.api-config-item');
+    var removedIndex = $('.api-config-item').index($removedItem);
+    var wasSelected = $removedItem.find('.api-radio').is(':checked');
+    var fallbackSelections = [];
+    $('.api-config-item').each(function(i){
+      if(i === removedIndex) return;
+      var fallbackIndex = parseApiIndex($(this).find('.api-fallback-select').val());
+      if(fallbackIndex === removedIndex) fallbackIndex = -1;
+      else if(fallbackIndex > removedIndex) fallbackIndex -= 1;
+      fallbackSelections.push({item:this, index:fallbackIndex});
+    });
+    $removedItem.remove();
+
+    // 删除接口后，所有引用该下标的配置都要同步前移或回到默认值。
+    $('.chat-api-select, .group-api-select').each(function(){
+      var index = parseApiIndex($(this).val());
+      if(index === removedIndex) index = -1;
+      else if(index > removedIndex) index -= 1;
+      $(this).val(String(index));
+    });
+    $('#chat_image_recognition_api, #group_image_recognition_api').each(function(){
+      var index = parseApiIndex($(this).val());
+      if(index === removedIndex) index = Math.min(removedIndex, $('.api-config-item').length - 1);
+      else if(index > removedIndex) index -= 1;
+      $(this).val(String(Math.max(0, index)));
+    });
+
     renumberApiConfigs();
+    if(wasSelected){
+      var nextSelectedIndex = Math.min(removedIndex, $('.api-config-item').length - 1);
+      $('.api-config-item').eq(nextSelectedIndex).find('.api-radio')
+        .prop('checked', true).trigger('change');
+    }
+    syncApiConfigsList();
+    fallbackSelections.forEach(function(selection){
+      $(selection.item).find('.api-fallback-select').val(String(selection.index));
+    });
+    refreshApiReferenceDropdowns();
+    refreshApiFallbackOptions();
   });
 
   // ===== 接口配置：测试当前选中接口 =====
@@ -2880,10 +2931,17 @@ $(function(){
             '<input type="text" class="form-control api-url-input" value="" placeholder="https://api.example.com"></div>'+
           '<div class="col-12"><label class="cfg-label">API Key</label>'+
             '<input type="text" class="form-control api-key-input" data-real-key="" placeholder="sk-..." autocomplete="off"></div>'+
+          '<div class="col-12 col-md-6"><label class="cfg-label">备用接口</label>'+
+            '<select class="form-select api-fallback-select" title="主接口失败时调用一次备用接口">'+
+              '<option value="-1" selected>无</option>'+
+            '</select></div>'+
         '</div>'+
       '</div>';
     $('#api_configs_container').append(html);
     renumberApiConfigs();
+    syncApiConfigsList();
+    refreshApiReferenceDropdowns();
+    refreshApiFallbackOptions();
   });
 
   function renumberApiConfigs(){
@@ -2894,6 +2952,63 @@ $(function(){
 
   // ===== 群组专属接口：接口列表数据（Jinja2 注入，供动态添加群组行使用）=====
   var apiConfigsList = {{ config.api_configs | tojson }};
+  function parseApiIndex(value){
+    var index = parseInt(value, 10);
+    return isNaN(index) ? -1 : index;
+  }
+  function escapeApiOptionText(value){
+    return $('<div>').text(value == null ? '' : String(value)).html();
+  }
+  function syncApiConfigsList(){
+    apiConfigsList = [];
+    $('.api-config-item').each(function(){
+      apiConfigsList.push({
+        model: $(this).find('.api-model-input').val() || ''
+      });
+    });
+  }
+  function buildImageApiOpts(selectedIdx){
+    var s = '';
+    apiConfigsList.forEach(function(c,i){
+      var sel=(i===selectedIdx)?' selected':'';
+      s+='<option value="'+i+'"'+sel+'>接口'+(i+1)+': '+escapeApiOptionText((c.model||'').substring(0,20))+'</option>';
+    });
+    return s;
+  }
+  function refreshApiReferenceDropdowns(){
+    syncApiConfigsList();
+    $('.group-api-select').each(function(){
+      var selectedIdx = parseApiIndex($(this).val());
+      if(selectedIdx < 0 || selectedIdx >= apiConfigsList.length) selectedIdx = -1;
+      $(this).html(buildGroupApiOpts(selectedIdx));
+    });
+    $('.chat-api-select').each(function(){
+      var selectedIdx = parseApiIndex($(this).val());
+      if(selectedIdx < 0 || selectedIdx >= apiConfigsList.length) selectedIdx = -1;
+      $(this).html(buildChatApiOpts(selectedIdx));
+    });
+    $('#chat_image_recognition_api, #group_image_recognition_api').each(function(){
+      var selectedIdx = parseApiIndex($(this).val());
+      if(selectedIdx < 0 || selectedIdx >= apiConfigsList.length) selectedIdx = 0;
+      $(this).html(buildImageApiOpts(selectedIdx));
+    });
+  }
+  function refreshApiFallbackOptions(){
+    var $items = $('.api-config-item');
+    $items.each(function(i){
+      var $select = $(this).find('.api-fallback-select');
+      var selectedIdx = parseApiIndex($select.val());
+      if(selectedIdx < 0 || selectedIdx >= $items.length || selectedIdx === i) selectedIdx = -1;
+      var html = '<option value="-1"'+(selectedIdx===-1?' selected':'')+'>无</option>';
+      $items.each(function(j){
+        if(j === i) return;
+        var model = $(this).find('.api-model-input').val() || '';
+        html += '<option value="'+j+'"'+(selectedIdx===j?' selected':'')+'>接口'+(j+1)+': '+
+          escapeApiOptionText(model.substring(0,20))+'</option>';
+      });
+      $select.html(html).val(String(selectedIdx));
+    });
+  }
   // ===== Prompt 列表数据（Jinja2 注入，供 prompt 下拉框和编辑器使用）=====
   var promptsList = {{ prompts | map(attribute='name') | list | tojson }};
 
@@ -2901,7 +3016,7 @@ $(function(){
     var s = '<option value="-1"'+(selectedIdx===-1?' selected':'')+'>默认接口</option>';
     apiConfigsList.forEach(function(c,i){
       var sel=(i===selectedIdx)?' selected':'';
-      s+='<option value="'+i+'"'+sel+'>接口'+(i+1)+': '+((c.model||'').substring(0,20))+'</option>';
+      s+='<option value="'+i+'"'+sel+'>接口'+(i+1)+': '+escapeApiOptionText((c.model||'').substring(0,20))+'</option>';
     });
     return s;
   }
@@ -3067,10 +3182,16 @@ $(function(){
     var s = '<option value="-1"'+(selectedIdx===-1?' selected':'')+'>默认接口</option>';
     apiConfigsList.forEach(function(c,i){
       var sel=(i===selectedIdx)?' selected':'';
-      s+='<option value="'+i+'"'+sel+'>接口'+(i+1)+': '+((c.model||'').substring(0,20))+'</option>';
+      s+='<option value="'+i+'"'+sel+'>接口'+(i+1)+': '+escapeApiOptionText((c.model||'').substring(0,20))+'</option>';
     });
     return s;
   }
+  $(document).on('input change', '.api-model-input', function(){
+    refreshApiReferenceDropdowns();
+    refreshApiFallbackOptions();
+  });
+  refreshApiReferenceDropdowns();
+  refreshApiFallbackOptions();
   function refreshAllPromptDropdowns() {
     ['#default_prompt_select', '.chat-prompt-select', '.group-prompt-select'].forEach(function(sel){
       $(sel).each(function(){
@@ -3690,6 +3811,7 @@ $(function(){
     var api_configs=[];
     var api_index=0;
     var _keyUpdates=[];
+    var api_config_count=$('.api-config-item').length;
     $('.api-config-item').each(function(i){
       if($(this).find('.api-radio').is(':checked')) api_index=i;
       var $k=$(this).find('.api-key-input');
@@ -3700,11 +3822,16 @@ $(function(){
       var sdk=$(this).find('.api-sdk-select').val()||'';
       var model=$(this).find('.api-model-input').val();
       var url=$(this).find('.api-url-input').val();
+      var fallbackApiIndex=parseApiIndex($(this).find('.api-fallback-select').val());
+      if(fallbackApiIndex < 0 || fallbackApiIndex >= api_config_count || fallbackApiIndex === i) {
+        fallbackApiIndex=-1;
+      }
       api_configs.push({
         sdk:sdk,
         model:model,
         url:url,
-        key:keyToSave
+        key:keyToSave,
+        fallback_api_index:fallbackApiIndex
       });
     });
     var configData={
