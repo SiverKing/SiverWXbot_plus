@@ -10,6 +10,8 @@ from flask import Flask, render_template, request, jsonify, session, redirect, u
 import json
 import os
 import shutil
+import base64
+import tempfile
 import hashlib
 import certifi
 import re
@@ -21,7 +23,7 @@ import logging
 from functools import wraps
 import threading
 from wxbot_core import CozeAPI, DifyAPI, DusAPI, OpenAIAPI, WXBot, clean_ai_reply_text, version as BOT_VERSION
-from wxbot_core import OPENAI_SDK_ALIASES, OPENAI_SDK_NAME
+from wxbot_core import OPENAI_SDK_ALIASES, OPENAI_SDK_NAME, _normalize_api_configs
 from logger import log
 import logger
 import pythoncom
@@ -625,9 +627,11 @@ def dashboard():
     if 'api_sdk' in config:
         config['api_configs'] = [
             {'sdk': config.get('api_sdk', ''), 'key': config.get('api_key', ''),
-             'url': config.get('base_url', ''), 'model': config.get('model1', '')},
+             'url': config.get('base_url', ''), 'model': config.get('model1', ''),
+             'fallback_api_index': -1},
             {'sdk': config.get('api_sdk', ''), 'key': config.get('api_key', ''),
-             'url': config.get('base_url', ''), 'model': config.get('model2', '')},
+             'url': config.get('base_url', ''), 'model': config.get('model2', ''),
+             'fallback_api_index': -1},
         ]
         config['api_index'] = 0
         for old_key in ('api_sdk', 'api_key', 'base_url', 'model1', 'model2', 'api_sdk_list'):
@@ -639,9 +643,15 @@ def dashboard():
         except Exception as _e:
             log('ERROR', f'迁移配置写入失败: {_e}')
     config.setdefault('api_configs', [
-        {"sdk": "", "key": "", "url": "", "model": ""},
-        {"sdk": "", "key": "", "url": "", "model": ""},
+        {"sdk": "", "key": "", "url": "", "model": "", "fallback_api_index": -1},
+        {"sdk": "", "key": "", "url": "", "model": "", "fallback_api_index": -1},
     ])
+    if not isinstance(config.get('api_configs'), list):
+        config['api_configs'] = [
+            {"sdk": "", "key": "", "url": "", "model": "", "fallback_api_index": -1},
+            {"sdk": "", "key": "", "url": "", "model": "", "fallback_api_index": -1},
+        ]
+    config['api_configs'] = _normalize_api_configs(config['api_configs'])
     config.setdefault('api_index', 0)
 
     # 接口名称迁移：OpenAI SDK → OpenAI API 格式兼容接口（兼容旧配置）
@@ -899,6 +909,26 @@ def _coerce_int_range_fields(merged_config):
         if merged_config['new_friend_check_min'] > merged_config['new_friend_check_max']:
             merged_config['new_friend_check_max'] = merged_config['new_friend_check_min']
 
+def _coerce_api_fields(merged_config):
+    """校验接口列表及所有依赖接口下标的配置项。"""
+    if 'api_configs' not in merged_config:
+        return
+
+    api_configs = merged_config.get('api_configs')
+    if not isinstance(api_configs, list):
+        api_configs = []
+    merged_config['api_configs'] = _normalize_api_configs(api_configs)
+    api_count = len(api_configs)
+
+    for field in ('api_index', 'chat_image_recognition_api', 'group_image_recognition_api'):
+        if field not in merged_config:
+            continue
+        try:
+            value = int(merged_config[field])
+        except (TypeError, ValueError):
+            value = 0
+        merged_config[field] = value if 0 <= value < api_count else 0
+
 def _coerce_dict_fields(merged_config):
     # keyword_dict 支持：dict / JSON字符串 / list[{key, value}]
     if 'keyword_dict' in merged_config:
@@ -932,11 +962,12 @@ def _coerce_dict_fields(merged_config):
         gam = merged_config['group_api_map']
         if isinstance(gam, dict):
             clean = {}
+            api_count = len(merged_config.get('api_configs', []))
             for k, v in gam.items():
                 k = str(k).strip()
                 try:
                     vi = int(v)
-                    if k and vi >= 0:
+                    if k and 0 <= vi < api_count:
                         clean[k] = vi
                 except (ValueError, TypeError):
                     pass
@@ -949,11 +980,12 @@ def _coerce_dict_fields(merged_config):
         cam = merged_config['chat_api_map']
         if isinstance(cam, dict):
             clean = {}
+            api_count = len(merged_config.get('api_configs', []))
             for k, v in cam.items():
                 k = str(k).strip()
                 try:
                     vi = int(v)
-                    if k and vi >= -1:
+                    if k and (vi == -1 or 0 <= vi < api_count):
                         clean[k] = vi
                 except (ValueError, TypeError):
                     pass
@@ -1021,6 +1053,7 @@ def save_config(config_data):
         _coerce_list_fields(merged_config)
         _coerce_float_fields(merged_config)
         _coerce_int_range_fields(merged_config)
+        _coerce_api_fields(merged_config)
         _coerce_dict_fields(merged_config)
 
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
@@ -1054,6 +1087,7 @@ def save_config_route():
         _coerce_bool_fields(merged_config)
         _coerce_list_fields(merged_config)
         _coerce_float_fields(merged_config)
+        _coerce_api_fields(merged_config)
         _coerce_dict_fields(merged_config)
 
         if save_config(merged_config):
@@ -1089,6 +1123,64 @@ def _build_test_api_client(tmp_config):
     if sdk == "DusAPI":
         return DusAPI(tmp_config)
     raise ValueError("不支持的 SDK 类型")
+
+
+_TINY_PNG_BASE64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
+)
+
+
+def _run_api_image_test(api, sdk):
+    """用内置极小 PNG 测试当前接口是否支持图片输入。"""
+    if sdk not in ("OpenAI SDK", "DusAPI"):
+        return {
+            'status': 'skipped',
+            'message': '当前接口类型暂不支持通用图片测试'
+        }
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as f:
+            f.write(base64.b64decode(_TINY_PNG_BASE64))
+            tmp_path = f.name
+        reply = api.chat(
+            "请只回复 OK",
+            stream=False,
+            prompt="你是图片识别连通性测试助手。请确认你能读取图片，并只回复 OK。",
+            history=[],
+            image_path=tmp_path,
+        )
+        raw_reply = str(reply or "")
+        cleaned_reply = clean_ai_reply_text(raw_reply)
+        if not raw_reply or raw_reply == "API返回错误，请稍后再试":
+            return {
+                'status': 'error',
+                'message': '图片测试未返回有效文本，请确认模型支持视觉输入'
+            }
+        return {
+            'status': 'success',
+            'reply': cleaned_reply or '（清洗后为空）',
+            'raw_length': len(raw_reply),
+            'cleaned': cleaned_reply != raw_reply,
+        }
+    except TypeError as e:
+        return {
+            'status': 'skipped',
+            'message': f'当前接口类暂不支持图片参数：{e}'
+        }
+    except Exception as e:
+        msg = str(e)
+        if len(msg) > 500:
+            msg = msg[:500] + '...'
+        return {
+            'status': 'error',
+            'message': f'图片测试失败：{msg}'
+        }
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
 
 
 @app.route('/test_api_config', methods=['POST'])
@@ -1891,8 +1983,8 @@ def main():
         if not os.path.exists(CONFIG_FILE):
             default_config = {
                 "api_configs": [
-                    {"sdk": "", "key": "", "url": "", "model": ""},
-                    {"sdk": "", "key": "", "url": "", "model": ""},
+                    {"sdk": "", "key": "", "url": "", "model": "", "fallback_api_index": -1},
+                    {"sdk": "", "key": "", "url": "", "model": "", "fallback_api_index": -1},
                 ],
                 "api_index": 0,
                 "prompt": "你是一个ai回复助手，请根据用户的问题给出回答,回复尽量保持在30字以内",

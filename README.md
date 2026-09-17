@@ -1,6 +1,6 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-v4.7.32-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
+[![Version](https://img.shields.io/badge/version-v4.7.33-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
 [![Python](https://img.shields.io/badge/python-3.10+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
@@ -257,8 +257,8 @@ python web_server.py
 ```json
 {
     "api_configs": [
-        {"sdk": "OpenAI API 格式兼容接口", "key": "your-api-key", "url": "https://api.example.com/v1", "model": "gpt-5"},
-        {"sdk": "Dify", "key": "your-api-key", "url": "https://api.example.com/v1", "model": "workflow-id"}
+        {"sdk": "OpenAI API 格式兼容接口", "key": "your-api-key", "url": "https://api.example.com/v1", "model": "gpt-5", "fallback_api_index": 1},
+        {"sdk": "Dify", "key": "your-api-key", "url": "https://api.example.com/v1", "model": "workflow-id", "fallback_api_index": -1}
     ],
     "api_index": 0,
     "admin": "文件传输助手",
@@ -395,7 +395,7 @@ python web_server.py
 
 | 配置项 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
-| `api_configs` | array | — | AI 接口配置列表，每项含 `sdk`/`key`/`url`/`model` |
+| `api_configs` | array | — | AI 接口配置列表，每项含 `sdk`/`key`/`url`/`model`/`fallback_api_index`；`-1` 表示无备用接口 |
 | `api_index` | integer | `0` | 当前使用的接口索引（0-based） |
 | `admin` | string | `"文件传输助手"` | 管理员昵称，可发送管理命令 |
 | `AllListen_switch` | boolean | `false` | `false`=白名单模式，`true`=黑名单（全局）模式 |
