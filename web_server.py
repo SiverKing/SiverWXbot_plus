@@ -1,21 +1,58 @@
-# /mnt/data/web_server.py
-# ---------------------------------------------
+# ============================================================
 # 机器人管理网页（含关键词与群欢迎概率扩展）
-# ---------------------------------------------
+# ============================================================
+
 """
 机器人管理网页
 使用 Flask 框架开发，提供机器人控制、配置管理等功能
 """
+
+# ============================================================
+# 【新增配置字段检查清单】改配置结构前必须读完本段
+#
+# 本文件已不含任何「逐字段」的配置代码：默认值 / 类型校验 / 迁移都集中在
+# config_defaults.py，本文件的 dashboard() 与 save_config() 只走通用流水线。
+# 所以新增字段时**不需要改 web_server.py**（下面只是全流程索引）。
+#
+# 全流程 = 5 步必改 + 1 步可选。各文件顶部有该文件的局部清单，编号与此处一致：
+#
+#   ① 默认值与类型校验 —— config_defaults.py
+#        · 默认值加进 DEFAULT_CONFIG
+#        · 字段类型加进对应的 _coerce_* 名单（共 6 个：bool / list /
+#          float_range / int_range / api / dict）
+#        · 需要旧值迁移或跨字段规范化时，加进 migrate() / normalize()
+#   ② 前端控件 + 初始值 —— templates/dashboard.html
+#        · 在对应的 <div class="config-panel" id="tab-xxx"> 内加控件
+#        · 布尔：{% if config.get('字段名', False) %}checked{% endif %}
+#        · 文本：value="{{ config.字段名 }}"
+#   ③ 前端采集 —— templates/static/dashboard.js
+#        · saveConfig() 里的 var configData={ ... } 加一行
+#   ④ 运行时读取 —— wxbot_core.py
+#        · WXBotConfig.__init__ 的属性默认值
+#        · update_global_config() 里的 self.xxx = self.config.get(...)
+#   ⑤ 生效方式声明 —— config_apply.py
+#        · 只在启动初始化阶段被读取的字段（监听注册 / 定时任务注册）加进
+#          RESTART_REASONS，否则面板会误报「已生效」
+#        · 接口类字段（需要重建默认 API 客户端）加进 API_REBUILD_REASONS
+#
+#   可选 ⑥ 面板状态展示 —— wxbot_core.py → get_status()
+#
+# 缺任何一处都不会报错，只会表现为「面板能改、保存也成功，但重启后被打回默认值」
+# 或「改了不生效 / 面板误报已生效」。
+# 老配置缺键的兜底由 config_defaults.apply_defaults 统一处理，
+# 本文件的 dashboard() 与前端都不需要再补 setdefault。
+# ============================================================
+
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 import json
 import os
+import sys
 import shutil
 import base64
 import tempfile
 import hashlib
 import certifi
 import re
-from werkzeug.utils import secure_filename
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 from datetime import datetime, timedelta
@@ -23,7 +60,20 @@ import logging
 from functools import wraps
 import threading
 from wxbot_core import CozeAPI, DifyAPI, DusAPI, OpenAIAPI, WXBot, clean_ai_reply_text, version as BOT_VERSION
-from wxbot_core import OPENAI_SDK_ALIASES, OPENAI_SDK_NAME, _normalize_api_configs
+from wxbot_core import OPENAI_SDK_ALIASES, OPENAI_SDK_NAME, _write_json_atomic
+from config_store import ConfigStore, ConfigError, ConfigConflictError, ConfigReadError
+import config_defaults
+# 「配置什么时候生效」的唯一约定（立即生效 / 需重建接口客户端 / 必须重启）
+import config_apply
+# 机器人启停的唯一入口：实例/线程/状态/停止 Event 都在这里，本文件不再自己维护
+from bot_lifecycle import BotLifecycle
+# 记忆目录归属规则只有一份：memory_store.py（wxbot_core 也导入同一份）。
+# 面板不要自己再写一套"剔除非法字符"的规则，否则两边会算出不同目录名。
+from memory_store import (
+    get_memory_manager,
+    is_internal_dir_name,
+    read_original_name,
+)
 from logger import log
 import logger
 import pythoncom
@@ -39,19 +89,56 @@ import secrets
 from collections import defaultdict, deque
 from urllib.parse import urljoin, urlparse
 
-# fix_paths.py
-import sys
+# ============================================================
+# 路径与运行时工具
+# ============================================================
+
+
 def resource_path(relative_path):
     """ 获取资源的绝对路径（打包后指向 _MEIPASS，用于只读资源如 templates）"""
     if hasattr(sys, '_MEIPASS'):
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.join(os.path.abspath("."), relative_path)
 
+
 def base_dir():
     """获取运行时基础目录（打包后为 exe 所在目录，开发时为脚本所在目录）"""
     if hasattr(sys, '_MEIPASS'):
         return os.path.dirname(sys.executable)
     return os.path.abspath(".")
+
+
+def _is_path_within(base_dir, path):
+    """判断 path 是否严格位于 base_dir 内部（Windows 下大小写不敏感）。
+
+    两侧都过 realpath 再比较：'..'、'.'、绝对路径、UNC 路径、软链接/junction
+    都会先被归一化，因此拼进来的路径段没法借这些形式跳出 base_dir。
+    注意是「严格」内部——等于 base_dir 本身也判 False。
+    """
+    base = os.path.normcase(os.path.realpath(base_dir))
+    target = os.path.normcase(os.path.realpath(path))
+    return target.startswith(base + os.sep)
+
+
+def _resolve_path_within(base_dir, name):
+    """把 name 拼到 base_dir 下，并校验结果严格落在 base_dir 内。
+
+    删除、重命名这类不可逆操作必须先过这一关：wx_id / chat_name / Prompt 名都
+    直接来自 URL 路径段或请求体，拼出来就是 shutil.rmtree / os.remove 的目标。
+    传 '..'（或 Windows 下的 '..%5C..'）原本能指到 base_dir 的上一级，
+    从而删掉项目目录。
+
+    :return: 通过 → (target, None)；拒绝 → (None, 拒绝原因)
+    """
+    target = os.path.realpath(os.path.join(base_dir, name))
+    if not _is_path_within(base_dir, target):
+        return None, '目标路径不在允许的目录内，已拒绝'
+    return target, None
+
+
+# ============================================================
+# Flask 应用与全局配置常量
+# ============================================================
 
 # 初始化 Flask 应用
 app = Flask(__name__, template_folder=resource_path('templates'), static_folder=resource_path('templates/static'))
@@ -66,7 +153,6 @@ app.config.update(
 )
 
 # 配置参数
-PORT = 10001
 CONFIG_FILE = os.path.join(base_dir(), 'config', 'config.json')
 ADMIN_FILE  = os.path.join(base_dir(), 'config', 'admin.json')
 EMAIL_FILE  = os.path.join(base_dir(), 'config', 'email.txt')
@@ -83,6 +169,10 @@ DEFAULT_PROMPT_CONTENT = "你是一个ai回复助手，请根据用户的问题�
 # 启动时确保目录存在
 os.makedirs(os.path.join(base_dir(), 'config'),      exist_ok=True)
 os.makedirs(os.path.join(base_dir(), 'panel_logs'),  exist_ok=True)
+
+# ============================================================
+# 启动期初始化（持久 CA 证书包 / 面板会话密钥）
+# ============================================================
 
 
 def install_persistent_ca_bundle():
@@ -134,19 +224,32 @@ def load_panel_secret_key():
 
 app.secret_key = load_panel_secret_key()
 
+# ============================================================
+# 后台账密：密码哈希、模块动态加载与账密文件读写
+# ============================================================
+
 
 def hash_password(password):
+    """生成后台密码的 PBKDF2-SHA256 哈希（写入 admin.json 用，不存明文）。"""
     return generate_password_hash(password, method='pbkdf2:sha256', salt_length=16)
 
 
 def verify_password(password, password_hash):
+    """校验明文密码与存储哈希是否匹配。
+
+    故意吞掉异常并返回 False：旧版本/损坏的哈希格式不应导致登录接口 500。
+    """
     try:
         return check_password_hash(password_hash, password)
     except Exception:
         return False
 
 
+# --- SiverPanel 客户端模块动态加载（可选组件：缺失或加载失败只降级，不阻断面板启动）---
+
+
 def load_siver_panel_manager_class():
+    """从 siver_panel.py 动态加载 SiverPanelManager 类；模块缺失或加载失败返回 None。"""
     module_path = resource_path('siver_panel.py')
     if not os.path.exists(module_path):
         log('WARNING', f'SiverPanel 客户端模块不存在: {module_path}')
@@ -166,8 +269,14 @@ def load_siver_panel_manager_class():
         log('ERROR', f'加载 SiverPanel 客户端模块失败: {e}')
         return None
 
+# --- 账密文件读取（含旧版明文密码自动迁移为哈希存储）---
+
+
 def load_admin_credentials():
-    """从 admin.json 读取账密，文件不存在时自动创建默认账密文件"""
+    """从 admin.json 读取后台账密；文件缺失时创建默认账密，读取失败时回退默认值。
+
+    兼容旧版明文密码：若存在 password 字段且无 password_hash，自动迁移为哈希并写回文件。
+    """
     default_password = "123456"
     default = {"username": "admin", "password_hash": hash_password(default_password)}
     if not os.path.exists(ADMIN_FILE):
@@ -205,6 +314,10 @@ def load_admin_credentials():
 # 用户认证信息（从 admin.json 加载）
 USERS = load_admin_credentials()
 
+# ============================================================
+# 登录失败限制与请求上下文
+# ============================================================
+
 LOGIN_FAIL_LIMIT = 8
 LOGIN_FAIL_WINDOW_SEC = 15 * 60
 LOGIN_BAN_SEC = 30 * 60
@@ -223,6 +336,10 @@ FORCE_ADMIN_CHANGE_ALLOWED_PATHS = {
 
 
 def get_client_ip():
+    """取客户端真实 IP：优先 X-Forwarded-For 首段，其次 X-Real-IP，最后 remote_addr。
+
+    面板支持反向代理（SiverPanel 远程访问），直连时 remote_addr 才是真实来源。
+    """
     forwarded_for = request.headers.get('X-Forwarded-For', '')
     if forwarded_for:
         return forwarded_for.split(',')[0].strip()
@@ -233,6 +350,10 @@ def get_client_ip():
 
 
 def is_remote_panel_request():
+    """判断当前请求是否来自 SiverPanel 反向代理（而非本机直连）。
+
+    依据：代理注入的 X-Siver-Remote 标记，或 X-Forwarded-Prefix 以 /panel/ 开头。
+    """
     if request.headers.get('X-Siver-Remote', '').strip() == '1':
         return True
     forwarded_prefix = request.headers.get('X-Forwarded-Prefix', '').strip()
@@ -240,6 +361,7 @@ def is_remote_panel_request():
 
 
 def is_default_admin_credentials():
+    """当前后台账号是否仍是默认的 admin / 123456（远程访问时的强制改密依据）。"""
     return (
         USERS.get("username") == DEFAULT_ADMIN_USERNAME
         and verify_password(DEFAULT_ADMIN_PASSWORD, USERS.get("password_hash", ""))
@@ -247,6 +369,10 @@ def is_default_admin_credentials():
 
 
 def is_force_admin_change_required():
+    """是否需要强制改密：仅「远程访问 + 已登录 + 仍用默认账密」三个条件同时成立才为真。
+
+    本机直连不触发，避免用户在自己电脑上被反复拦截。
+    """
     if not session.get('logged_in'):
         return False
     if not is_remote_panel_request():
@@ -255,6 +381,10 @@ def is_force_admin_change_required():
 
 
 def get_remote_connect_block_reason(*, manual: bool) -> tuple[str, str] | None:
+    """远程访问连接前置校验：仍用默认账密时返回 (错误码, 提示语)，否则返回 None。
+
+    作为 connect_guard 传给 SiverPanelManager，由 siver_panel 在每次连接前调用。
+    """
     if not is_default_admin_credentials():
         return None
     message = '当前后台仍在使用默认账号密码 admin / 123456。为安全起见，请先在“账号密码”里修改后台账号密码后，再连接远程访问服务。'
@@ -263,11 +393,13 @@ def get_remote_connect_block_reason(*, manual: bool) -> tuple[str, str] | None:
 
 
 def is_remote_connect_block_required():
+    """面板进入前台时是否需要弹「先改默认密码」提示（远程访问已开启 + 仍用默认账密）。"""
     config = read_config() or {}
     return bool(config.get('siver_panel_enabled') and is_default_admin_credentials())
 
 
 def is_login_ip_banned(ip):
+    """查询 IP 是否处于登录封禁期，返回 (是否封禁, 剩余秒数)；过期自动解封。"""
     expire_ts = login_bans.get(ip)
     if not expire_ts:
         return False, 0
@@ -279,6 +411,11 @@ def is_login_ip_banned(ip):
 
 
 def record_login_failure(ip):
+    """记录一次登录失败；滑动窗口内累计达到 LOGIN_FAIL_LIMIT 次则封禁该 IP。
+
+    窗口外的历史失败会先被丢弃，因此偶发输错不会累积成封禁。
+    返回 True 表示本次触发了封禁。
+    """
     now = time.time()
     bucket = login_failures[ip]
     while bucket and now - bucket[0] > LOGIN_FAIL_WINDOW_SEC:
@@ -292,24 +429,35 @@ def record_login_failure(ip):
 
 
 def clear_login_failures(ip):
+    """登录成功后清空该 IP 的失败记录与封禁状态。"""
     login_failures.pop(ip, None)
     login_bans.pop(ip, None)
 
 
 def is_safe_redirect_target(target):
+    """校验跳转目标是否安全（防开放重定向）：必须与本站同源且为 http/https。"""
     if not target:
         return False
     ref_url = urlparse(request.host_url)
     test_url = urlparse(urljoin(request.host_url, target))
     return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
 
+# ============================================================
+# 重定向与响应安全头
+# ============================================================
+
 
 def absolute_url_for(endpoint, **values):
+    """生成带完整域名的 URL（反向代理下的重定向用，路径前缀由 ProxyFix 处理）。"""
     return url_for(endpoint, _external=True, **values)
 
 
 @app.after_request
 def apply_panel_security_headers(response):
+    """所有响应统一补安全头；并给反向代理场景下漏标的会话 Cookie 补 Secure。
+
+    背景：经 SiverPanel 代理时 Flask 认为不是 https，Secure 只能在这里按 request.is_secure 补。
+    """
     session_cookie_name = app.config.get('SESSION_COOKIE_NAME', 'session')
     cookies = response.headers.getlist('Set-Cookie')
     if request.is_secure and cookies:
@@ -330,8 +478,12 @@ def apply_panel_security_headers(response):
 
 
 def get_panel_server_port():
+    """供 SiverPanel 客户端回查本地面板端口（端口在 main() 里动态分配）。"""
     return panel_server_port
 
+# ============================================================
+# SiverPanel 客户端实例化（可选组件，初始化失败只记日志、不阻断面板）
+# ============================================================
 
 SIVER_PANEL_MANAGER_CLASS = load_siver_panel_manager_class()
 siver_panel_manager = None
@@ -349,18 +501,18 @@ if SIVER_PANEL_MANAGER_CLASS is not None:
 if siver_panel_manager is not None:
     atexit.register(siver_panel_manager.shutdown)
 
-# 日志颜色映射
-LOG_COLORS = {
-    'INFO': 'text-primary',
-    'WARNING': 'text-warning',
-    'ERROR': 'text-danger',
-    'DEBUG': 'text-secondary',
-    'SUCCESS': 'text-success'
-}
+# ============================================================
+# 登录装饰器
+# ============================================================
 
-log_messages = []
 
 def login_required(f):
+    """登录校验装饰器。
+
+    未登录：API/JSON 请求返回 401 JSON，页面请求 302 跳登录页（带 next 回跳）。
+    已登录但命中「远程访问 + 仍用默认账密」：只放行 FORCE_ADMIN_CHANGE_ALLOWED_PATHS，
+    其余请求一律拦截，防止远程访问时用默认密码长期使用面板。
+    """
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not session.get('logged_in'):
@@ -384,22 +536,11 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-def log_server(level, msg):
-    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    log_entry = {
-        'time': timestamp,
-        'level': level,
-        'message': msg,
-        'color': LOG_COLORS.get(level.upper(), 'text-dark')
-    }
-    log_messages.append(log_entry)
-    if len(log_messages) > 1000:
-        log_messages.pop(0)
-    print(f"[{timestamp}] [{level}] {msg}")
 
-# ----------------------------------------------------------
+# ============================================================
 # Prompt 文件管理辅助函数
-# ----------------------------------------------------------
+# ============================================================
+
 
 def _ensure_prompt_dir():
     """确保 prompt 目录存在，若为空则创建默认 prompt 文件"""
@@ -414,6 +555,7 @@ def _ensure_prompt_dir():
                 f.write(DEFAULT_PROMPT_CONTENT)
         except Exception as e:
             log('ERROR', f'创建默认 prompt 文件失败: {e}')
+
 
 def _get_prompts_list():
     """扫描 PROMPT_DIR，返回 [{name, content}]，"默认" 排第一"""
@@ -436,6 +578,30 @@ def _get_prompts_list():
     prompts.sort(key=lambda p: (0 if p['name'] == '默认' else 1, p['name']))
     return prompts
 
+
+def _prompt_reference_sources(name):
+    """列出配置里仍引用 Prompt 名 name 的位置，用于重命名后的提示。
+
+    只读不改：面板与运行中的机器人各持一份配置快照（见 _push_config_to_running_bot），
+    由保存路由之外的代码代改 config.json 会引入新的同步问题。因此重命名时把引用
+    摆到明面上，由用户决定改配置还是改回名字。
+
+    :return: 引用位置描述列表，没有引用时返回空列表
+    """
+    sources = []
+    config = read_config() or {}
+    if str(config.get('default_prompt', '默认')) == name:
+        sources.append('default_prompt（默认 AI 设定）')
+    for key, label in (('chat_prompt_map', '用户专属 Prompt'),
+                       ('group_prompt_map', '群聊专属 Prompt')):
+        mapping = config.get(key)
+        if isinstance(mapping, dict):
+            for target, prompt_name in mapping.items():
+                if str(prompt_name) == name:
+                    sources.append(f'{label}（{target}）')
+    return sources
+
+
 def _migrate_prompt_from_config(config):
     """若 config dict 中存在旧 prompt 字段，迁移到 默认.md，返回 True 表示需要写回。
     注意：不在迁移前调用 _ensure_prompt_dir()，避免其提前创建空白默认文件
@@ -454,9 +620,10 @@ def _migrate_prompt_from_config(config):
         log('ERROR', f'迁移 prompt 文件失败: {e}，旧 prompt 字段已保留')
         return False
 
-# ----------------------------------------------------------
+# ============================================================
 # 数据备份辅助函数
-# ----------------------------------------------------------
+# ============================================================
+
 
 def _do_backup():
     """
@@ -549,14 +716,23 @@ def _check_and_auto_backup():
         log('INFO', f'检测到版本变更（{old_ver} → {BOT_VERSION}），自动备份中...')
         _do_backup()
 
-# 读取配置文件
+# ============================================================
+# 配置读取与定时字段校验
+# ============================================================
+
+
 def read_config():
+    """读取 config.json；失败时返回 None。
+
+    注意：故意不抛异常，历史调用点已统一按 `read_config() or {}` 兜底。
+    """
     try:
         with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
     except Exception as e:
         log('ERROR', f'读取配置文件失败: {str(e)}')
         return None
+
 
 def _parse_hhmm_config(value, field_name):
     """解析 `HH:MM` 格式的时间字段，非法时返回错误信息而不是抛异常。"""
@@ -569,13 +745,22 @@ def _parse_hhmm_config(value, field_name):
     except ValueError:
         return None, f'{field_name} 格式无效: {value}，应为 HH:MM'
 
+# ============================================================
+# 登录页与登出路由
+# ============================================================
+
+
 @app.route('/api/check_auth')
 def check_auth():
     return jsonify({'authenticated': session.get('logged_in', False)})
 
-# 登录页
+
 @app.route('/', methods=['GET', 'POST'])
 def login():
+    """登录页：GET 渲染表单，POST 校验账密并建立会话。
+
+    同一 IP 在 LOGIN_FAIL_WINDOW_SEC 内失败 LOGIN_FAIL_LIMIT 次即封禁 LOGIN_BAN_SEC。
+    """
     if session.get('logged_in'):
         return redirect(absolute_url_for('dashboard'))
     logout_success = request.args.get('logout') == 'success'
@@ -586,7 +771,7 @@ def login():
         blocked, remaining = is_login_ip_banned(client_ip)
         if blocked:
             log('WARNING', f'登录被拒绝：IP {client_ip} 仍处于封禁期，剩余 {remaining}s')
-            return render_template('login.html', error=f'登录失败次数过多，请 {remaining} 秒后再试', logout_success=logout_success)
+            return render_template('login.html', error=f'登录失败次数过多，请 {remaining} 秒后再试', logout_success=logout_success, bot_version=BOT_VERSION)
 
         username = (request.form.get('username') or '').strip()
         password = request.form.get('password') or ''
@@ -604,9 +789,10 @@ def login():
         else:
             record_login_failure(client_ip)
             log('WARNING', f'登录失败: 用户名或密码错误 (用户名: {username})')
-            return render_template('login.html', error='用户名或密码错误')
+            return render_template('login.html', error='用户名或密码错误', bot_version=BOT_VERSION)
 
-    return render_template('login.html', error=error, logout_success=logout_success)
+    return render_template('login.html', error=error, logout_success=logout_success, bot_version=BOT_VERSION)
+
 
 @app.route('/logout')
 def logout():
@@ -615,181 +801,49 @@ def logout():
     session.pop('username', None)
     return redirect(absolute_url_for('login'))
 
-# 仪表盘
+# ============================================================
+# 仪表盘路由：旧配置迁移 + 新增字段兜底
+# ============================================================
+
+
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    config = read_config()
-    if not config:
+    """渲染配置面板。
+
+    流程：
+      ① 读盘（拿到配置 + 版本号）
+      ② 旧 prompt 字段迁到 config/prompt/默认.md
+      ③ 统一的「迁移 -> 补默认值 -> 规范化」流水线（config_defaults.prepare，幂等）
+      ④ 内容真的变了才写回一次（原来打开一次页面最多写盘 4 次）
+      ⑤ 注入模板变量（config / prompts / 版本号 / 强制改密与远程访问标记）
+
+    ⚠ 新增配置字段只需改 config_defaults.py：默认值加进 DEFAULT_CONFIG，
+      类型归属加进对应的 coerce 名单。这里不用再补 setdefault。
+    """
+    try:
+        config, config_rev = CONFIG_STORE.read()
+    except ConfigReadError:
         return render_template('error.html', message='无法读取配置文件')
 
-    # 旧配置迁移：只要旧字段存在就迁移并写回磁盘（无论 api_configs 是否已有）
-    if 'api_sdk' in config:
-        config['api_configs'] = [
-            {'sdk': config.get('api_sdk', ''), 'key': config.get('api_key', ''),
-             'url': config.get('base_url', ''), 'model': config.get('model1', ''),
-             'fallback_api_index': -1},
-            {'sdk': config.get('api_sdk', ''), 'key': config.get('api_key', ''),
-             'url': config.get('base_url', ''), 'model': config.get('model2', ''),
-             'fallback_api_index': -1},
-        ]
-        config['api_index'] = 0
-        for old_key in ('api_sdk', 'api_key', 'base_url', 'model1', 'model2', 'api_sdk_list'):
-            config.pop(old_key, None)
-        try:
-            with open(CONFIG_FILE, 'w', encoding='utf-8') as _f:
-                json.dump(config, _f, ensure_ascii=False, indent=4)
-            log('SUCCESS', '旧 API 配置已自动迁移为新格式并保存')
-        except Exception as _e:
-            log('ERROR', f'迁移配置写入失败: {_e}')
-    config.setdefault('api_configs', [
-        {"sdk": "", "key": "", "url": "", "model": "", "fallback_api_index": -1},
-        {"sdk": "", "key": "", "url": "", "model": "", "fallback_api_index": -1},
-    ])
-    if not isinstance(config.get('api_configs'), list):
-        config['api_configs'] = [
-            {"sdk": "", "key": "", "url": "", "model": "", "fallback_api_index": -1},
-            {"sdk": "", "key": "", "url": "", "model": "", "fallback_api_index": -1},
-        ]
-    config['api_configs'] = _normalize_api_configs(config['api_configs'])
-    config.setdefault('api_index', 0)
+    _before = dict(config)
 
-    # 接口名称迁移：OpenAI SDK → OpenAI API 格式兼容接口（兼容旧配置）
-    _sdk_renamed = False
-    for _cfg in config.get('api_configs', []):
-        if _cfg.get('sdk') == 'OpenAI SDK':
-            _cfg['sdk'] = OPENAI_SDK_NAME
-            _sdk_renamed = True
-    if _sdk_renamed:
-        try:
-            with open(CONFIG_FILE, 'w', encoding='utf-8') as _f:
-                json.dump(config, _f, ensure_ascii=False, indent=4)
-            log('SUCCESS', '接口名称已自动更新：OpenAI SDK → OpenAI API 格式兼容接口')
-        except Exception as _e:
-            log('ERROR', f'接口名称更新写入失败: {_e}')
+    # 旧 prompt 字段 -> config/prompt/默认.md（涉及文件写入，单独一步）
+    _migrate_prompt_from_config(config)
 
-    # —— 新增字段默认值（关键）——
-    config.setdefault('group_api_map', {})                   # 群组专属接口映射
-    config.setdefault('group_welcome_random', 1.0)          # 新人欢迎概率
-    config.setdefault('chat_listen_only', False)             # 私聊只监听不 AI 回复
-    config.setdefault('special_session_name', [])            # 全局监听特殊会话过滤名单（用户附加项）
-    config.setdefault('group_listen_only', False)            # 群聊只监听不 AI 回复
-    config.setdefault('chat_keyword_switch', False)          # 私聊关键词开关
-    config.setdefault('group_keyword_switch', False)         # 群组关键词开关
-    config.setdefault('group_keyword_at_only', False)        # 群聊关键词仅@时回复
-    config.setdefault('keyword_reply_quote', config.get('group_keyword_reply_quote', False))  # 关键词回复是否引用消息
-    config.setdefault('group_keyword_reply_at_msg', False)   # 群聊关键词回复是否@发言人
-    config.setdefault('keyword_dict', {})                    # 关键词字典
-    config.setdefault('scheduled_msg_switch', config.get('everyday_msg_switch', False))  # 定时消息开关
-    config.setdefault('scheduled_msg_list', [])              # 定时消息任务列表
-    config.setdefault('scheduled_moments_switch', False)     # 定时朋友圈开关
-    config.setdefault('scheduled_moments_list', [])          # 定时朋友圈任务列表
-    config.setdefault('moments_like_switch', False)          # 随机朋友圈点赞开关
-    config.setdefault('moments_like_min', 60)                # 随机点赞最小间隔（分钟）
-    config.setdefault('moments_like_max', 120)               # 随机点赞最大间隔（分钟）
-    config.setdefault('random_moments_switch', False)        # 随机定时朋友圈开关
-    config.setdefault('random_moments_list', [])             # 随机定时朋友圈任务列表
-    # 旧配置迁移：everyday_msg_dict -> scheduled_msg_list
-    if not config.get('scheduled_msg_list') and config.get('everyday_msg_dict'):
-        import uuid
-        migrated = []
-        for target, tasks in config.get('everyday_msg_dict', {}).items():
-            for task in tasks:
-                migrated.append({
-                    'id': str(uuid.uuid4())[:8],
-                    'enabled': True,
-                    'targets': [target],
-                    'time': task.get('time', '08:00'),
-                    'repeat_type': 'daily',
-                    'weekdays': [],
-                    'dates': [],
-                    'msgs': task.get('msgs', []),
-                })
-        config['scheduled_msg_list'] = migrated
-    # 旧配置迁移：target(str) -> targets(list)
-    _target_migrated = False
-    for task in config.get('scheduled_msg_list', []):
-        if 'targets' not in task:
-            old = task.pop('target', '')
-            task['targets'] = [old] if old else []
-            _target_migrated = True
-    if _target_migrated:
-        try:
-            with open(CONFIG_FILE, 'w', encoding='utf-8') as _f:
-                json.dump(config, _f, ensure_ascii=False, indent=4)
-            log('SUCCESS', '定时消息发送目标格式已自动迁移 target -> targets')
-        except Exception as _e:
-            log('ERROR', f'迁移定时消息目标格式写入失败: {_e}')
-    config.setdefault('everyday_start_stop_bot_switch', False)
-    config.setdefault('everyday_start_bot_time', "08:00")
-    config.setdefault('everyday_stop_bot_time', "23:00")
-    config.setdefault('memory_switch', True)
-    config.setdefault('memory_max_count', 3000)
-    config.setdefault('memory_context_count', 1000)
-    config.setdefault('reply_delay_switch', True)
-    config.setdefault('reply_delay_min', 1)
-    config.setdefault('reply_delay_max', 5)
-    config.setdefault('clean_ai_reply_switch', True)
-    config.setdefault('new_friend_remark_use_nickname', True)
-    config.setdefault('new_friend_remark_prefix_timestamp', False)
-    config.setdefault('new_friend_remark_suffix_timestamp', False)
-    config.setdefault('chat_image_recognition_switch', False)   # 私聊图片识别开关
-    config.setdefault('chat_image_recognition_api',    0)        # 私聊识别接口索引
-    config.setdefault('group_image_recognition_switch', False)  # 群组图片识别开关
-    config.setdefault('group_image_recognition_api',   0)        # 群组识别接口索引
-    config.setdefault('custom_forward_switch', False)            # 自定义转发总开关
-    config.setdefault('custom_forward_list', [])                 # 自定义转发规则列表
+    # 统一的「迁移 -> 补默认值 -> 规范化」流水线（幂等，定义在 config_defaults.py）
+    config = config_defaults.prepare(config)
 
-    # 多 Prompt：迁移旧 prompt 字段 + 补充新字段默认值
-    config.setdefault('siver_panel_enabled', False)
-    config.setdefault('siver_panel_activation_code', '')
-    config.setdefault('siver_panel_activation_code_applied_hash', '')
-    config.setdefault('siver_panel_activation_code_failed_hash', '')
-    config.setdefault('siver_panel_slug', '')
-    config.setdefault('siver_panel_install_id', '')
-    config.setdefault('siver_panel_machine_fingerprint', '')
-    config.setdefault('siver_panel_device_id', '')
-    config.setdefault('siver_panel_device_secret', '')
-    if config.get('siver_panel_base_url') == LEGACY_SIVER_PANEL_BASE_URL:
-        config['siver_panel_base_url'] = SIVER_PANEL_BASE_URL
-    if config.get('siver_panel_ws_url') == LEGACY_SIVER_PANEL_WS_URL:
-        config['siver_panel_ws_url'] = SIVER_PANEL_WS_URL
-    config.setdefault('siver_panel_base_url', SIVER_PANEL_BASE_URL)
-    config.setdefault('siver_panel_ws_url', SIVER_PANEL_WS_URL)
-    config.setdefault('siver_panel_panel_url', '')
-    config.setdefault('siver_panel_service_expire_at', '')
-    config.setdefault('siver_panel_last_error_code', '')
-    config.setdefault('siver_panel_last_error_message', '')
-
-    if _migrate_prompt_from_config(config):
+    # 只有内容真的变了才写回，避免"打开一次页面写盘多次"
+    if config != _before:
         try:
-            with open(CONFIG_FILE, 'w', encoding='utf-8') as _f:
-                json.dump(config, _f, ensure_ascii=False, indent=4)
-            log('SUCCESS', '旧 prompt 字段已迁移，config.json 已更新')
-        except Exception as _e:
-            log('ERROR', f'迁移后写回 config.json 失败: {_e}')
+            config, config_rev = CONFIG_STORE.write(config)
+            log('SUCCESS', '配置已按当前格式规范化并写回')
+        except ConfigError as e:
+            log('ERROR', f'配置规范化写回失败: {e}')
+
     _ensure_prompt_dir()
     prompts = _get_prompts_list()
-    config.setdefault('default_prompt', '默认')
-    config.setdefault('chat_prompt_map', {})
-    config.setdefault('chat_api_map', {})
-    config.setdefault('chat_max_round_map', {})
-    config.setdefault('group_prompt_map', {})
-    config.setdefault('api_error_reply', '在忙，我稍后回复您')   # 接口调用失败时的固定回复
-    config.setdefault('api_error_reply_once', False)       # 接口失败固定回复是否同一用户只发一次
-    config.setdefault('chat_max_round_switch', False)      # 单用户最大回复轮数限制开关
-    config.setdefault('chat_max_round_default', 99)        # 默认最多回复次数
-    config.setdefault('chat_max_round_reset_days', 0)      # 计数重置周期，0=不重置
-    config.setdefault('chat_max_round_reply', '')          # 超限后固定话术
-    config.setdefault('chat_max_round_reply_once', False)  # 超限话术是否同一用户只发一次
-    config.setdefault('chat_split_reply_switch', False)   # 私聊拆分多条回复开关
-    config.setdefault('chat_split_max_chars', 100)        # 私聊单条最大字数
-    config.setdefault('chat_split_max_count', 4)          # 私聊最多条数
-    config.setdefault('group_reply_at_msg', True)          # 群聊回复是否@发言人
-    config.setdefault('group_reply_quote', False)          # 群聊回复是否引用消息
-    config.setdefault('group_split_reply_switch', False)  # 群聊拆分多条回复开关
-    config.setdefault('group_split_max_chars', 100)       # 群聊单条最大字数
-    config.setdefault('group_split_max_count', 4)         # 群聊最多条数
 
     force_admin_change_required = is_force_admin_change_required()
     return render_template(
@@ -799,7 +853,14 @@ def dashboard():
         prompts=prompts,
         force_admin_change_required=force_admin_change_required,
         remote_connect_block_required=is_remote_connect_block_required(),
+        bot_version=BOT_VERSION,
+        config_rev=config_rev,
     )
+
+# ============================================================
+# 面板日志接口
+# ============================================================
+
 
 @app.route('/get_logs')
 @login_required
@@ -812,293 +873,138 @@ def get_logs():
         except ValueError:
             after_id = None
     return jsonify(logger.get_logs_after(after_id, limit=50))
+# 字段类型校验（6 个 coerce）、默认值与迁移统一放在 config_defaults.py。
+# 新增配置字段时：默认值加进 DEFAULT_CONFIG，类型归属加进对应的 coerce 名单。
 
-def _coerce_bool_fields(merged_config):
-    boolean_fields = [
-        'AllListen_switch',
-        'AllListen_filter_mute',
-        'chat_listen_only',
-        'group_switch',
-        'group_listen_only',
-        'group_reply_at',
-        'group_reply_at_msg',
-        'group_reply_quote',
-        'group_welcome',
-        'new_friend_switch',
-        'new_friend_reply_switch',
-        'new_friend_remark_use_nickname',
-        'new_friend_remark_prefix_timestamp',
-        'new_friend_remark_suffix_timestamp',
-        # —— 新增布尔字段 ——
-        'chat_keyword_switch',
-        'group_keyword_switch',
-        'group_keyword_at_only',
-        'keyword_reply_quote',
-        'group_keyword_reply_at_msg',
-        'scheduled_msg_switch',
-        'random_msg_switch',                # 随机定时消息开关
-        'scheduled_moments_switch',         # 定时朋友圈开关
-        'moments_like_switch',              # 随机朋友圈点赞开关
-        'random_moments_switch',            # 随机定时朋友圈开关
-        'everyday_start_stop_bot_switch',   # 新增
-        'memory_switch',                    # 记忆开关
-        'reply_delay_switch',               # 发送延迟开关
-        'clean_ai_reply_switch',            # AI 回复清洗开关
-        'chat_image_recognition_switch',    # 私聊图片识别开关
-        'group_image_recognition_switch',   # 群组图片识别开关
-        'custom_forward_switch',            # 自定义转发总开关
-        'chat_split_reply_switch',          # 私聊拆分多条回复开关
-        'group_split_reply_switch',         # 群聊拆分多条回复开关
-        'siver_panel_enabled',
-        'api_error_reply_once',             # API错误只回复一次
-        'chat_max_round_switch',            # 单用户最大回复轮数限制开关
-        'chat_max_round_reply_once',        # 超限后只回复一次
-    ]
-    for field in boolean_fields:
-        if field in merged_config:
-            v = merged_config[field]
-            if isinstance(v, str):
-                merged_config[field] = (v.lower() in ('on', 'true', '1'))
-            else:
-                merged_config[field] = bool(v)
+# ============================================================
+# 配置保存管线
+# ============================================================
 
-def _coerce_list_fields(merged_config):
-    list_fields = ['listen_list', 'special_session_name', 'group', 'new_friend_msg', 'new_friend_tags', 'scheduled_msg_list', 'random_msg_list', 'scheduled_moments_list', 'random_moments_list', 'custom_forward_list']
-    for field in list_fields:
-        if field in merged_config and not isinstance(merged_config[field], list):
-            if isinstance(merged_config[field], str):
-                merged_config[field] = [merged_config[field]] if merged_config[field] else []
-            else:
-                merged_config[field] = []
-        if field in merged_config:
-            merged_config[field] = [item for item in merged_config[field] if str(item).strip()]
-    if 'special_session_name' in merged_config:
-        merged_config['special_session_name'] = list(dict.fromkeys(
-            str(item).strip() for item in merged_config['special_session_name'] if str(item).strip()
-        ))
 
-def _coerce_float_fields(merged_config):
-    # 仅当前需要 group_welcome_random，限定 [0.0, 1.0]
-    if 'group_welcome_random' in merged_config:
-        try:
-            val = float(merged_config['group_welcome_random'])
-            if val < 0.0: val = 0.0
-            if val > 1.0: val = 1.0
-            merged_config['group_welcome_random'] = val
-        except (TypeError, ValueError):
-            # 若非法，则保持原值或回退默认
-            merged_config['group_welcome_random'] = float(read_config().get('group_welcome_random', 1.0))
+def _normalize_config(config):
+    """保存前的统一规范化：委托给 config_defaults.normalize（单一来源）。"""
+    return config_defaults.normalize(config)
 
-def _coerce_int_range_fields(merged_config):
-    """对整数范围字段做类型校验和区间限制"""
-    int_range_fields = {
-        'new_friend_check_min': (60, 3600, 60),
-        'new_friend_check_max': (60, 3600, 300),
-        'chat_max_round_default': (1, 99999, 99),
-        'chat_max_round_reset_days': (0, 365, 0),
-    }
-    for field, (lo, hi, default) in int_range_fields.items():
-        if field in merged_config:
-            try:
-                val = int(merged_config[field])
-                merged_config[field] = max(lo, min(hi, val))
-            except (TypeError, ValueError):
-                merged_config[field] = default
-    # 保证 min <= max
-    if 'new_friend_check_min' in merged_config and 'new_friend_check_max' in merged_config:
-        if merged_config['new_friend_check_min'] > merged_config['new_friend_check_max']:
-            merged_config['new_friend_check_max'] = merged_config['new_friend_check_min']
 
-def _coerce_api_fields(merged_config):
-    """校验接口列表及所有依赖接口下标的配置项。"""
-    if 'api_configs' not in merged_config:
-        return
+# config.json 的唯一读写入口。
+# 「读 → 改 → 校验 → 写」由 ConfigStore 在一次路径锁内完成，
+# 因此面板、机器人、siver_panel 三方不会互相覆盖。
+CONFIG_STORE = ConfigStore(CONFIG_FILE, normalize=_normalize_config)
 
-    api_configs = merged_config.get('api_configs')
-    if not isinstance(api_configs, list):
-        api_configs = []
-    merged_config['api_configs'] = _normalize_api_configs(api_configs)
-    api_count = len(api_configs)
 
-    for field in ('api_index', 'chat_image_recognition_api', 'group_image_recognition_api'):
-        if field not in merged_config:
-            continue
-        try:
-            value = int(merged_config[field])
-        except (TypeError, ValueError):
-            value = 0
-        merged_config[field] = value if 0 <= value < api_count else 0
+def save_config(config_data, expected_rev=None):
+    """把配置写入 config.json。
 
-def _coerce_dict_fields(merged_config):
-    # keyword_dict 支持：dict / JSON字符串 / list[{key, value}]
-    if 'keyword_dict' in merged_config:
-        kd = merged_config['keyword_dict']
-        if isinstance(kd, dict):
-            pass
-        if isinstance(kd, str):
-            try:
-                obj = json.loads(kd)
-                if isinstance(obj, dict):
-                    merged_config['keyword_dict'] = obj
-                    kd = obj
-            except Exception:
-                pass
-        if isinstance(kd, list):
-            out = {}
-            for item in kd:
-                if isinstance(item, dict):
-                    key = str(item.get('key', '')).strip()
-                    val = str(item.get('value', ''))
-                    if key:
-                        out[key] = val
-            merged_config['keyword_dict'] = out
-            kd = out
-        # 其他情况回退空 dict
-        if not isinstance(kd, dict):
-            merged_config['keyword_dict'] = {}
+    入参是**要改的字段**，不是完整快照：ConfigStore 在路径锁内完成
+    「读盘 → 浅合并 → 规范化 → 原子写」，所以两个调用方先后保存不会互相覆盖；
+    未在入参里出现的键（含未知字段）保留磁盘上的现值。
 
-    # group_api_map: 值必须为 int 接口索引，非法值自动过滤
-    if 'group_api_map' in merged_config:
-        gam = merged_config['group_api_map']
-        if isinstance(gam, dict):
-            clean = {}
-            api_count = len(merged_config.get('api_configs', []))
-            for k, v in gam.items():
-                k = str(k).strip()
-                try:
-                    vi = int(v)
-                    if k and 0 <= vi < api_count:
-                        clean[k] = vi
-                except (ValueError, TypeError):
-                    pass
-            merged_config['group_api_map'] = clean
-        else:
-            merged_config['group_api_map'] = {}
-
-    # chat_api_map: 同 group_api_map，适用于私聊白名单用户
-    if 'chat_api_map' in merged_config:
-        cam = merged_config['chat_api_map']
-        if isinstance(cam, dict):
-            clean = {}
-            api_count = len(merged_config.get('api_configs', []))
-            for k, v in cam.items():
-                k = str(k).strip()
-                try:
-                    vi = int(v)
-                    if k and (vi == -1 or 0 <= vi < api_count):
-                        clean[k] = vi
-                except (ValueError, TypeError):
-                    pass
-            merged_config['chat_api_map'] = clean
-        else:
-            merged_config['chat_api_map'] = {}
-
-    # chat_max_round_map: 白名单模式下私聊用户专属回复次数上限，范围 1~99999
-    if 'chat_max_round_map' in merged_config:
-        cmrm = merged_config['chat_max_round_map']
-        if isinstance(cmrm, dict):
-            clean = {}
-            for k, v in cmrm.items():
-                k = str(k).strip()
-                try:
-                    vi = int(v)
-                    if k:
-                        clean[k] = max(1, min(99999, vi))
-                except (ValueError, TypeError):
-                    pass
-            merged_config['chat_max_round_map'] = clean
-        else:
-            merged_config['chat_max_round_map'] = {}
-
-    # chat_prompt_map: 值为非空字符串（prompt 文件名）
-    if 'chat_prompt_map' in merged_config:
-        cpm = merged_config['chat_prompt_map']
-        if isinstance(cpm, dict):
-            clean = {}
-            for k, v in cpm.items():
-                k = str(k).strip()
-                v = str(v).strip()
-                if k and v:
-                    clean[k] = v
-            merged_config['chat_prompt_map'] = clean
-        else:
-            merged_config['chat_prompt_map'] = {}
-
-    # group_prompt_map: 同 chat_prompt_map，适用于群组
-    if 'group_prompt_map' in merged_config:
-        gpm = merged_config['group_prompt_map']
-        if isinstance(gpm, dict):
-            clean = {}
-            for k, v in gpm.items():
-                k = str(k).strip()
-                v = str(v).strip()
-                if k and v:
-                    clean[k] = v
-            merged_config['group_prompt_map'] = clean
-        else:
-            merged_config['group_prompt_map'] = {}
-
-# 保存配置文件
-def save_config(config_data):
+    :param expected_rev: 页面加载时拿到的版本号。与磁盘现值不一致时拒绝写入，
+                         避免"旧页面保存把别处的改动静默覆盖"。
+                         传 None 表示不做校验。
+    :return: (是否成功, 版本号, 错误标记)
+             成功      -> (True,  新版本号, None)
+             版本冲突  -> (False, 磁盘现值, 'conflict')
+             其它失败  -> (False, None,    错误文本)
+    """
+    patch = dict(config_data)
+    patch.pop('_rev', None)   # _rev 是控制字段，不落盘
     try:
-        original_config = read_config() or {}
-        merged_config = {**original_config, **config_data}
-
-        # 若已有新格式 api_configs，清除旧 API 字段
-        if 'api_configs' in merged_config:
-            for _k in ('api_sdk', 'api_key', 'base_url', 'model1', 'model2', 'api_sdk_list'):
-                merged_config.pop(_k, None)
-
-        _coerce_bool_fields(merged_config)
-        _coerce_list_fields(merged_config)
-        _coerce_float_fields(merged_config)
-        _coerce_int_range_fields(merged_config)
-        _coerce_api_fields(merged_config)
-        _coerce_dict_fields(merged_config)
-
-        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-            json.dump(merged_config, f, ensure_ascii=False, indent=4)
+        _merged, rev = CONFIG_STORE.update(patch, expected_rev=expected_rev)
         log('SUCCESS', '配置文件保存成功')
-        return True
-    except Exception as e:
-        log('ERROR', f'保存配置文件失败: {str(e)}')
-        return False
+        return True, rev, None
+    except ConfigConflictError as e:
+        log('WARNING', f'保存被拒绝（版本冲突）: {e}')
+        return False, e.actual, 'conflict'
+    except ConfigError as e:
+        log('ERROR', f'保存配置文件失败: {e}')
+        return False, None, str(e)
 
 #   保存配置
 update_config_status = False # 记录是否更新了定时启停状态
+
+
 @app.route('/save_config', methods=['POST'])
 @login_required
 def save_config_route():
+    """面板「保存配置」接口。
+
+    返回的状态（前端据此给不同提示）：
+      · status=error/conflict  -> 未保存
+      · status=success + apply_state=applied       -> 已保存且全部改动已生效
+      · status=success + apply_state=partial       -> 部分立即生效，其余需重启
+      · status=success + apply_state=needs_restart -> 改动只在重启后生效
+      · status=success + apply_state=not_running   -> 机器人未运行，下次启动生效
+      · status=success + apply_state=failed        -> 已保存但推送失败
+
+    另附 needs_restart / restart_fields / restart_hint：本次改动里"必须重启"的部分
+    （监听注册、定时任务注册只在启动时做）。分类见 config_apply.py ——
+    面板、机器人与验收脚本共用同一份，不在这里再维护第二份字段列表。
+
+    ⚠ 保存成功后必须置 update_config_status = True，定时启停线程靠这个标志
+      在下一轮循环里重新加载启停时间（见 time_start_stop）。漏掉则改时间不生效。
+    """
     try:
         config_data = request.get_json()
         if not config_data:
-            return jsonify({'status': 'error', 'message': '无效的配置数据'})
+            return jsonify({'status': 'error', 'message': '无效的配置数据'}), 400
 
-        current_config = read_config() or {}
+        # _rev 是前端回传的配置版本号（控制字段，不写入配置）
+        expected_rev = config_data.pop('_rev', None)
 
-        merged_config = {**current_config, **config_data}
+        # 保存前的快照：用于判断"改动的字段是否**真的变了**"。
+        # 面板提交的是整张表单，listen_list / group / scheduled_msg_list 这些键
+        # 每次都在（哪怕只改了回复延迟），所以不能只看"提交内容里有没有它们"。
+        before, _ = CONFIG_STORE.read_or_empty()
 
-        # 若已有 api_configs，清理旧 API 字段（兼容保存时自动完成迁移）
-        if 'api_configs' in merged_config:
-            for _k in ('api_sdk', 'api_key', 'base_url', 'model1', 'model2', 'api_sdk_list'):
-                merged_config.pop(_k, None)
+        # 读盘/合并/规范化/版本校验统一由 CONFIG_STORE 在锁内完成，
+        # 这里不再重复读一次盘、合并一次、coerce 一遍
+        ok, rev, err = save_config(config_data, expected_rev=expected_rev)
 
-        # 预处理（与 save_config 二次校验互补）
-        _coerce_bool_fields(merged_config)
-        _coerce_list_fields(merged_config)
-        _coerce_float_fields(merged_config)
-        _coerce_api_fields(merged_config)
-        _coerce_dict_fields(merged_config)
+        if not ok and err == 'conflict':
+            # 409：让前端区分"版本冲突"和"普通保存失败"，并保留用户正在编辑的内容
+            return jsonify({
+                'status': 'conflict',
+                'message': '配置已被其他改动更新，本次保存未生效',
+                'rev': rev,
+            }), 409
+        if not ok:
+            return jsonify({'status': 'error', 'message': err or '配置保存失败'}), 500
 
-        if save_config(merged_config):
-            global update_config_status
-            update_config_status = True # 执行了保存配置
-            return jsonify({'status': 'success', 'message': '配置保存成功'})
-        else:
-            return jsonify({'status': 'error', 'message': '配置保存失败'})
+        global update_config_status
+        update_config_status = True # 执行了保存配置
+
+        after, _ = CONFIG_STORE.read_or_empty()
+        changed = {k for k in set(before) | set(after) if before.get(k) != after.get(k)}
+
+        # 区分"已保存"与"已应用"：推送失败不影响保存结果，但要让界面知道
+        apply_result = _push_config_to_running_bot(changed)
+
+        # 需重启的提示只在"机器人正在运行且确实有重启类改动"时给：
+        # 未运行时下次启动自然就加载了新配置，提示重启反而误导。
+        restart_fields = apply_result['restart_fields']
+        needs_restart = bool(restart_fields) and apply_result['apply_state'] != 'not_running'
+
+        return jsonify({
+            'status': 'success',
+            'message': '配置保存成功',
+            'rev': rev,
+            'apply_state': apply_result['apply_state'],
+            'apply_message': apply_result['apply_message'],
+            'applied_fields': apply_result['applied_fields'],
+            'api_rebuilt': apply_result['api_rebuilt'],
+            'needs_restart': needs_restart,          # 需点"重启载入新配置"才生效
+            'restart_fields': restart_fields,
+            'restart_hint': apply_result['restart_hint'],
+        })
     except Exception as e:
         log('ERROR', f'保存配置出错: {str(e)}')
-        return jsonify({'status': 'error', 'message': str(e)})
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# ============================================================
+# 接口连通性测试（模型配置页的「测试」按钮）
+# ============================================================
 
 
 class _TempAPIConfig:
@@ -1231,14 +1137,16 @@ def test_api_config_route():
             msg = msg[:800] + '...'
         return jsonify({'status': 'error', 'message': f'接口测试失败：{msg}'})
 
-# ----------------------------------------------------------
+# ============================================================
 # Prompt 文件管理路由
-# ----------------------------------------------------------
+# ============================================================
+
 
 @app.route('/list_prompts')
 @login_required
 def list_prompts_route():
     return jsonify({'status': 'success', 'prompts': _get_prompts_list()})
+
 
 @app.route('/save_prompt', methods=['POST'])
 @login_required
@@ -1260,13 +1168,38 @@ def save_prompt_route():
         if not re.fullmatch(r'[\u4e00-\u9fff\w\s\-]+', name):
             return jsonify({'status': 'error', 'msg': 'Prompt 名称含非法字符（只允许中文、字母、数字、空格、_ 和 -）'})
         _ensure_prompt_dir()
-        # 重命名：删除旧文件
+        # 重命名只改名字：旧名称同样来自请求体，先做目录内校验（越界直接拒绝，
+        # 不做任何删除）。真正的删除挪到「新文件确认写成功」之后，见下面的步骤 2/3。
+        old_path = None
         if old_name and old_name != name:
-            old_path = os.path.join(PROMPT_DIR, f'{old_name}.md')
-            if os.path.exists(old_path):
-                os.remove(old_path)
-        # 原子写入
-        target = os.path.join(PROMPT_DIR, f'{name}.md')
+            old_path, old_err = _resolve_path_within(PROMPT_DIR, f'{old_name}.md')
+            if old_err:
+                log('WARNING', f'拒绝重命名 Prompt：旧名称越界 old_name={old_name!r}')
+                return jsonify({'status': 'error', 'msg': '旧 Prompt 名称非法，已拒绝'})
+
+        # 步骤 1/3：确定新文件路径（name 已过白名单，此处只做兜底校验）
+        target, path_err = _resolve_path_within(PROMPT_DIR, f'{name}.md')
+        if path_err:
+            log('WARNING', f'拒绝保存 Prompt：名称越界 name={name!r}')
+            return jsonify({'status': 'error', 'msg': 'Prompt 名称非法，已拒绝'})
+
+        # 新旧两个名字是否指向同一个文件（Windows 大小写不敏感：'abc' 改 'ABC' 就是
+        # 同一个文件，此时绝不能把旧名字当"旧文件"删掉，否则删的是刚写好的新内容）
+        same_file = False
+        if old_path is not None:
+            try:
+                same_file = os.path.samefile(old_path, target)
+            except OSError:
+                same_file = (os.path.normcase(os.path.realpath(old_path))
+                             == os.path.normcase(os.path.realpath(target)))
+
+        # 重名规则：目标名已存在且不是旧名字时按「覆盖保存」处理（与直接保存同名
+        # Prompt 行为一致）。因为覆盖发生在旧文件删除之前，覆盖对象不会是被删的旧文件。
+        overwrote = os.path.exists(target) and not same_file
+
+        # 步骤 2/3：先把新内容原子写入新名字（临时文件 + os.replace）。
+        # 这一步失败就直接抛错返回，旧 Prompt 一个字都没动——不会出现
+        # 「新文件没写成、旧 Prompt 已经删掉」的空档。
         tmp_fd, tmp_path = tempfile.mkstemp(dir=PROMPT_DIR, suffix='.tmp')
         try:
             with os.fdopen(tmp_fd, 'w', encoding='utf-8') as tf:
@@ -1278,11 +1211,39 @@ def save_prompt_route():
             except Exception:
                 pass
             raise
+
+        # 步骤 3/3：新文件已落盘，才删除旧名字文件
+        warnings = []
+        if old_path is not None and not same_file and os.path.exists(old_path):
+            try:
+                os.remove(old_path)
+            except OSError as e:
+                # 新文件已经就位，此时不再回滚（回滚要再动一次已写好的新文件，风险更大）；
+                # 结果是新旧两个 .md 并存，记 WARNING 提示手工删除。
+                warnings.append(f'新 Prompt 已保存为 {name}.md，但旧文件 {old_name}.md 删除失败：{e}')
+                log('WARNING', warnings[-1])
+
+        # 配置引用规则：重命名不改写 config.json（面板与运行中的机器人各持一份配置快照，
+        # 代改会引入新的同步问题），只把「仍有引用指向旧名称」摆到明面上：
+        # default_prompt / chat_prompt_map / group_prompt_map 引用旧名称时记 WARNING，
+        # 并在响应里回给前端，提醒改配置，避免运行期静默回退到默认 Prompt 或空内容。
+        if old_path is not None:
+            refs = _prompt_reference_sources(old_name)
+            if refs:
+                warnings.append(f'配置里仍引用旧名称「{old_name}」：{"、".join(refs)}；请改到「{name}」，否则运行时会回退默认 Prompt')
+                log('WARNING', warnings[-1])
+
+        if overwrote:
+            log('INFO', f'Prompt 已覆盖同名文件：{name}.md')
         log('SUCCESS', f'Prompt 已保存：{name}.md')
-        return jsonify({'status': 'success'})
+        result = {'status': 'success'}
+        if warnings:
+            result['warnings'] = warnings
+        return jsonify(result)
     except Exception as e:
         log('ERROR', f'保存 Prompt 失败: {e}')
         return jsonify({'status': 'error', 'msg': str(e)})
+
 
 @app.route('/delete_prompt', methods=['POST'])
 @login_required
@@ -1295,11 +1256,15 @@ def delete_prompt_route():
         if not name:
             return jsonify({'status': 'error', 'msg': '名称不能为空'})
         _ensure_prompt_dir()
+        # name 直接来自请求体，拼出来的删除目标必须在 PROMPT_DIR 内
+        target, path_err = _resolve_path_within(PROMPT_DIR, f'{name}.md')
+        if path_err:
+            log('WARNING', f'拒绝删除 Prompt：名称越界 name={name!r}')
+            return jsonify({'status': 'error', 'msg': 'Prompt 名称非法，已拒绝'})
         # 不允许删除最后一个
         md_files = [f for f in os.listdir(PROMPT_DIR) if f.endswith('.md')]
         if len(md_files) <= 1:
             return jsonify({'status': 'error', 'msg': '不允许删除最后一个 Prompt'})
-        target = os.path.join(PROMPT_DIR, f'{name}.md')
         if os.path.exists(target):
             os.remove(target)
         log('SUCCESS', f'Prompt 已删除：{name}.md')
@@ -1309,8 +1274,193 @@ def delete_prompt_route():
         return jsonify({'status': 'error', 'msg': str(e)})
 
 # 启动/停止机器人
-bot = None
-bot_thread = None
+# --- 机器人运行态：实例、线程、状态、停止信号统一由 BotLifecycle 持有 ---
+#
+# ⚠ 不要再在本文件里自己起机器人线程，也不要再维护 bot / bot_thread 两个全局变量。
+#   手动启动（/start_bot）、定时启动（time_start_stop）、停止、重启**全部只调它**。
+#   曾经"各管各的"留下的三个窗口：
+#     a) 线程已活而实例还没赋值 → 停止入口直接调 bot.stop_wxbot() 撞 None；
+#     b) 初始化期间的停止请求 → 初始化完成后又被 run_flag=True 抹掉；
+#     c) 停止没等线程退完就清空引用 → 再启动时与旧线程重叠，两个机器人同时监听。
+#   三者都在 bot_lifecycle 里统一解决（含"停止没完成不放行下一次启动"）。
+BOT_LIFECYCLE = BotLifecycle('siver_wxbot')
+
+
+def _bot_runner(handle):
+    """机器人线程体：构造实例 → 登记 → 进主循环。
+
+    只在 BotLifecycle 起的线程里执行。停止收尾不在这里做：主动停止由生命周期对象
+    调用实例的 stop_wxbot()，正常/异常退出由 WXBot.main() 的 finally 统一收尾。
+    """
+    pythoncom.CoInitialize()
+    try:
+        # 防睡眠必须在本线程设置：SetThreadExecutionState 是线程作用域的，
+        # 在调用方线程（Flask 请求线程 / 定时调度线程）设置、在机器人线程恢复是无效的。
+        # 放在 WXBot() 之前——构造含授权校验与监听初始化，耗时数秒，期间同样可能息屏。
+        _prevent_sleep()
+
+        # 启动前兜底清理上一次运行留下的监听：正常情况下上一轮退出时已经清理干净
+        # （WXBot.shutdown() 幂等），这里是防"线程异常死亡导致监听残留"。
+        previous = BOT_LIFECYCLE.take_previous_bot()
+        if previous is not None:
+            try:
+                previous.shutdown('启动前清理上一次运行的残留监听')
+            except Exception as _e:
+                log('WARNING', f'清理上一次运行的残留监听时出错（可忽略）: {_e}')
+
+        # 把生命周期的停止信号交给机器人：初始化期间点停止时，它靠这个信号收尾，
+        # 而不是把 run_flag 设 False 之后就无人过问。
+        bot = WXBot(stop_event=handle.stop_event)
+        handle.bind(bot)      # 登记之后，停止入口才可能拿到实例（此前只有停止信号）
+
+        if handle.should_stop():
+            # 初始化期间（授权校验 / 拉起微信 / 注册监听，数秒）收到的停止请求
+            log('WARNING', '初始化期间收到停止请求，已放弃进入主循环并收尾')
+            bot.stop_wxbot()
+            return
+
+        bot.run()
+    finally:
+        # 谁设置、谁恢复：防睡眠与 COM 都在本线程设置，也都在本线程释放
+        _restore_sleep()
+        pythoncom.CoUninitialize()
+
+
+def _spawn_bot_thread(reason='手动启动'):
+    """启动机器人线程；手动启动与定时启动共用这一份实现。
+
+    只调 BOT_LIFECYCLE.start()：重复点击、上一次停止还没走完就抢跑，
+    都会被生命周期对象挡住（不会出现两条线程同时监听）。
+
+    :return: (是否已接受启动, 提示信息)
+    """
+    outcome = BOT_LIFECYCLE.start(_bot_runner, reason=reason)
+    return outcome.started, outcome.message
+
+
+@app.route('/start_bot', methods=['POST'])
+@login_required
+def start_bot():
+    """启动机器人（在面板进程内起一个后台线程，不是子进程）。
+
+    实际启动逻辑见 _spawn_bot_thread()：与定时启动共用同一份实现，
+    由 BotLifecycle 保证"任何时刻最多一个实例、一条线程"。
+    """
+    log('INFO', '机器人启动请求已接收')
+    started, message = _spawn_bot_thread('手动启动')
+    state = BOT_LIFECYCLE.state
+    if started:
+        return jsonify({'status': 'success', 'message': message, 'state': state})
+    if BOT_LIFECYCLE.is_running():
+        # 已在运行：不算失败，但把真实状态回给前端
+        return jsonify({'status': 'success', 'message': message, 'state': state,
+                        'already_running': True})
+    # 上一次停止还没走完：此时启动会与旧线程重叠，必须明确拒绝
+    return jsonify({'status': 'error', 'message': message, 'state': state,
+                    'code': 'not_stopped'}), 409
+
+
+@app.route('/stop_bot', methods=['POST'])
+@login_required
+def stop_bot():
+    """停止机器人：**等线程真的退出**才算成功。
+
+    返回 status=success 表示已确认停止（state=stopped）；未确认时返回 409，
+    并带上 code 说明原因：
+      · code=timeout    —— 线程未在确认窗口内退出，可以继续轮询 /get_status；
+      · code=superseded —— 停止期间另一次启动已经跑起来了（并发调用），
+                           此时不该当成"还在停"，前端应提示"已被重新启动"。
+    """
+    log('INFO', '机器人停止请求已接收')
+    outcome = BOT_LIFECYCLE.stop(reason='面板停止')
+    if outcome.stopped:
+        return jsonify({'status': 'success', 'message': outcome.message,
+                        'state': outcome.state, 'code': outcome.code})
+    return jsonify({
+        'status': 'error',
+        'message': outcome.message,
+        'state': outcome.state,
+        'code': outcome.code,
+    }), 409
+
+
+def _push_config_to_running_bot(changed_fields=None):
+    """把磁盘上的新配置推给运行中的机器人实例，并如实回报生效范围。
+
+    面板与机器人是同一个进程：面板保存只写盘，而 bot 内存里仍是启动时加载的
+    旧快照。此后任意一条会写盘的微信命令（/群开关、/记忆开关…）都会把旧快照
+    整体写回，导致面板的改动被静默回滚。
+
+    ⚠ 生效约定见 config_apply.py：
+      · 立即生效（hot）：同步属性；
+      · 立即生效但需重建默认 API 客户端（api_configs / api_index）；
+      · 必须重启（restart）：监听注册 / 定时任务注册只在启动时做 —— 只报"需重启"，
+        绝不把"刷新了几个属性"当成"全部生效"。
+      实例是否"在运行"只看 BOT_LIFECYCLE：启动中（实例已登记）也算运行中，
+      停止中则不再推送（推了也会被丢弃）。
+
+    :param changed_fields: 本次真正变化的配置键（面板有保存前/后的磁盘差异，最准）
+    :return: dict(apply_state, apply_message, applied_fields, restart_fields,
+                  restart_hint, api_rebuilt)
+              apply_state ∈ {'applied', 'partial', 'needs_restart', 'not_running', 'failed'}
+    """
+    def _payload(state, message, applied=(), restart=(), hint='', api_rebuilt=False):
+        return {
+            'apply_state': state,
+            'apply_message': message,
+            'applied_fields': list(applied),
+            'restart_fields': list(restart),
+            'restart_hint': hint,
+            'api_rebuilt': bool(api_rebuilt),
+        }
+
+    bot = BOT_LIFECYCLE.bot
+    if bot is None or not BOT_LIFECYCLE.is_running():
+        return _payload('not_running', '机器人当前未运行，配置将在下次启动时生效')
+    try:
+        result = bot.apply_config(changed_fields)
+    except Exception as e:
+        log('WARNING', f'推送新配置给运行中的机器人失败（配置已保存）: {e}')
+        return _payload('failed', f'配置已保存，但推送给运行中的机器人失败：{e}')
+
+    hot_labels = config_apply.describe_soft(result['hot_fields'])
+    api_labels = config_apply.describe_soft(result['api_fields'])
+    restart_labels = result['restart_labels']
+    applied = list(result['hot_fields']) + list(result['api_fields'])
+    restart = list(result['restart_fields'])
+    applied_count = len(applied)
+
+    # 立即生效部分的说法：接口类字段有中文名就点名，其余长尾按数量汇总
+    if api_labels and hot_labels:
+        applied_desc = f'{api_labels} 等 {applied_count} 项改动'
+    elif api_labels:
+        applied_desc = api_labels
+    else:
+        applied_desc = f'{applied_count} 项改动'
+
+    if result['errors']:
+        return _payload('failed',
+                        '配置已保存，但应用时出错：' + '；'.join(result['errors']),
+                        applied=applied, restart=restart, hint=restart_labels,
+                        api_rebuilt=result['api_rebuilt'])
+
+    if restart and applied:
+        message = f'已保存：{applied_desc}已立即生效；{restart_labels} 需重启才生效'
+        return _payload('partial', message, applied=applied, restart=restart,
+                        hint=restart_labels, api_rebuilt=result['api_rebuilt'])
+    if restart:
+        message = f'已保存：本次改动（{restart_labels}）需点「重启载入新配置」才生效'
+        return _payload('needs_restart', message, restart=restart, hint=restart_labels)
+    if applied:
+        if api_labels:
+            message = f'运行中的机器人已应用新配置：{applied_desc}'
+        else:
+            message = f'运行中的机器人已应用新配置（{applied_desc}）'
+        if result['api_rebuilt']:
+            message += '，默认接口客户端已重建'
+        return _payload('applied', message, applied=applied,
+                        api_rebuilt=result['api_rebuilt'])
+    return _payload('applied', '配置已保存（本次改动不影响运行中的机器人）')
 
 # ============================================================
 # 防锁屏 / 防睡眠工具函数（Windows SetThreadExecutionState）
@@ -1318,6 +1468,7 @@ bot_thread = None
 _ES_CONTINUOUS       = 0x80000000
 _ES_SYSTEM_REQUIRED  = 0x00000001
 _ES_DISPLAY_REQUIRED = 0x00000002
+
 
 def _prevent_sleep():
     """阻止 Windows 自动锁屏、黑屏、睡眠，机器人运行期间保持系统唤醒状态"""
@@ -1329,6 +1480,7 @@ def _prevent_sleep():
     except Exception as e:
         log('WARNING', f'【防锁屏】设置防睡眠状态失败: {e}')
 
+
 def _restore_sleep():
     """恢复 Windows 原有的锁屏、黑屏、睡眠策略"""
     try:
@@ -1337,60 +1489,23 @@ def _restore_sleep():
     except Exception as e:
         log('WARNING', f'【防锁屏】恢复睡眠策略失败: {e}')
 
-# 服务器进程异常退出时兜底恢复
-atexit.register(_restore_sleep)
+# 这里原本有一句 atexit.register(_restore_sleep) 作为“进程退出兜底”，已移除：
+# SetThreadExecutionState 是线程作用域的，atexit 回调运行在主线程上，而主线程从未
+# 调用过 _prevent_sleep()；它再调 _restore_sleep() 只会清掉主线程自己的状态（本来就没有），
+# 对机器人线程持有的 DISPLAY/SYSTEM 请求毫无作用 —— 留着会让人误以为存在进程级兜底。
+# 现在是“谁设置、谁恢复”：机器人在 run_bot() 所属线程内设置，并在同一线程的 finally 恢复。
 
-@app.route('/start_bot', methods=['POST'])
-@login_required
-def start_bot():
-    log('INFO', '机器人启动请求已接收')
-    global bot_thread
-    if bot_thread and bot_thread.is_alive():
-        log("WARNING", "状态：机器人已在运行")
-        return jsonify({'status': 'success', 'message': '机器人已在运行'})
+# ============================================================
+# 机器人启停路由
+# ============================================================
+# /start_bot 与 /stop_bot 的实现已上移到本文件「启动/停止机器人」一节
+# （紧挨着 BOT_LIFECYCLE 定义），两条路由都只是对生命周期对象的一次调用。
+# 这里不再保留第二份实现 —— 同一件事有两处实现，正是过去启停行为不一致的根源。
 
-    def run_bot():
-        pythoncom.CoInitialize()
-        global bot
-        try:
-            # 启动前先清理旧实例的残留监听，防止崩溃重启后同一群/用户被双重注册导致双回调
-            if bot:
-                try:
-                    bot.stop()
-                    log('INFO', '已清理上次残留的 WeChat 监听')
-                except Exception as _e:
-                    log('WARNING', f'清理旧监听时出错（可忽略）: {_e}')
-            bot = WXBot()
-            bot.run()
-        finally:
-            pythoncom.CoUninitialize()
-            _restore_sleep()
-    try:
-        bot_thread = threading.Thread(target=run_bot, daemon=True)
-        bot_thread.start()
-        _prevent_sleep()
-    except Exception as e:
-        log('ERROR', f'启动机器人失败: {str(e)}')
-    return jsonify({'status': 'success', 'message': '机器人启动命令已发送'})
+# ============================================================
+# 激活码与版本更新
+# ============================================================
 
-@app.route('/stop_bot', methods=['POST'])
-@login_required
-def stop_bot():
-    log('INFO', '机器人停止请求已接收')
-    global bot_thread, bot
-    if bot_thread and bot_thread.is_alive():
-        if bot.stop_wxbot():
-            log('SUCCESS', '机器人已停止')
-            bot_thread = None
-            bot = None
-            _restore_sleep()
-            return jsonify({'status': 'success', 'message': '机器人已停止'})
-        else:
-            log('ERROR', '停止机器人失败')
-            return jsonify({'status': 'error', 'message': '停止机器人失败'})
-    else:
-        log('WARNING', '状态：机器人未运行')
-        return jsonify({'status': 'error', 'message': '机器人未运行'})
 
 @app.route('/check_activate')
 @login_required
@@ -1401,6 +1516,7 @@ def check_activate():
         return jsonify({'status': 'success', 'data': {'activated': bool(activated)}})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
+
 
 @app.route('/activate', methods=['POST'])
 @login_required
@@ -1421,6 +1537,7 @@ def activate():
     except Exception as e:
         log('ERROR', f'激活出错: {e}')
         return jsonify({'status': 'error', 'message': str(e)})
+
 
 @app.route('/check_update')
 @login_required
@@ -1450,19 +1567,38 @@ def check_update():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
 
+# ============================================================
+# 状态查询与 SiverPanel 远程访问接口
+# ============================================================
+
+
 @app.route('/get_status')
 @login_required
 def get_status():
-    global bot, bot_thread
-    if bot_thread and bot_thread.is_alive() and bot:
+    """返回机器人运行状态（含真实生命周期状态）。
+
+    · ``bot_running``：是否"大概在跑"（启动中/运行中），状态面板沿用这个字段；
+    · ``bot_state``：``stopped`` / ``starting`` / ``running`` / ``stopping``，
+      重启流程靠它判断"是不是真的停住了"—— 不能再用固定秒数猜。
+    机器人未运行时只回 bot_running=False + bot_state=stopped。
+    """
+    snap = BOT_LIFECYCLE.snapshot()
+    bot = BOT_LIFECYCLE.bot
+    data = {
+        'bot_running': snap['bot_running'],
+        'bot_state': snap['state'],
+        'bot_state_label': snap['state_label'],
+    }
+    if snap['bot_running'] and bot is not None:
         try:
-            status = bot.get_status()
-            status['bot_running'] = True
-            return jsonify({'status': 'success', 'data': status})
+            data.update(bot.get_status())
         except Exception as e:
-            return jsonify({'status': 'success', 'data': {'bot_running': True, 'error': str(e)}})
-    else:
-        return jsonify({'status': 'success', 'data': {'bot_running': False}})
+            data['error'] = str(e)
+        # 生命周期状态是权威值，不被 bot 自己的快照覆盖
+        data['bot_running'] = snap['bot_running']
+        data['bot_state'] = snap['state']
+        data['bot_state_label'] = snap['state_label']
+    return jsonify({'status': 'success', 'data': data})
 
 
 @app.route('/api/siver-panel/status')
@@ -1505,6 +1641,11 @@ def disconnect_siver_panel():
         log('ERROR', f'SiverPanel 断开连接失败: {e}')
         return jsonify({'status': 'error', 'message': str(e)})
 
+# ============================================================
+# 面板配置读取路由 / 后台账号 / 邮件告警 / Webhook 告警
+# ============================================================
+
+
 @app.route('/load_config')
 @login_required
 def load_config():
@@ -1512,6 +1653,7 @@ def load_config():
     if not config:
         return jsonify({'status': 'error', 'message': '无法读取配置文件'})
     return jsonify({'status': 'success', 'config': config})
+
 
 @app.route('/get_admin_config')
 @login_required
@@ -1526,6 +1668,7 @@ def get_admin_config():
         })
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
+
 
 @app.route('/save_admin_config', methods=['POST'])
 @login_required
@@ -1560,6 +1703,7 @@ def save_admin_config():
         log('ERROR', f'保存账号密码失败: {e}')
         return jsonify({'status': 'error', 'message': str(e)})
 
+
 @app.route('/get_email_config')
 @login_required
 def get_email_config():
@@ -1577,6 +1721,7 @@ def get_email_config():
         return jsonify({'status': 'success', 'host': '', 'port': '', 'user': '', 'pass': ''})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
+
 
 @app.route('/save_email_config', methods=['POST'])
 @login_required
@@ -1598,9 +1743,7 @@ def save_email_config():
         log('ERROR', f'保存邮件配置失败: {e}')
         return jsonify({'status': 'error', 'message': str(e)})
 
-import threading
-
-_tk_lock = threading.Lock()  # 确保同一时刻只弹一个文件选择框
+_tk_lock = threading.Lock()  # 确保同一时刻只弹一个文件选择框（threading 已在文件顶部导入）
 
 
 @app.route('/get_webhook_config')
@@ -1611,6 +1754,7 @@ def get_webhook_config():
         return jsonify({'status': 'success', **config})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
+
 
 @app.route('/save_webhook_config', methods=['POST'])
 @login_required
@@ -1624,6 +1768,7 @@ def save_webhook_config():
         log('ERROR', f'保存 Webhook 配置失败: {e}')
         return jsonify({'status': 'error', 'message': str(e)})
 
+
 @app.route('/test_webhook', methods=['POST'])
 @login_required
 def test_webhook():
@@ -1635,13 +1780,36 @@ def test_webhook():
         log('ERROR', f'测试 Webhook 失败: {e}')
         return jsonify({'status': 'error', 'message': str(e)})
 
+# ============================================================
+# 系统文件选择接口（调 Windows 原生对话框，不属于配置管线）
+# ============================================================
+
+
 @app.route('/pick_image_file', methods=['GET'])
 @login_required
 def pick_image_file():
     """
-    打开 Windows 原生文件选择对话框，让用户选择一张本地图片，
+    打开 Windows 原生文件选择对话框，让用户选择一张本地图片或一个视频文件，
     返回其绝对路径。前端直接将路径填入输入框，无需上传文件。
+
+    远程访问时**直接拒绝**：对话框弹在运行面板这台电脑的桌面上，远程用户
+    看不到也点不到；而 tkinter 的主循环会一直阻塞在那里，请求也就一直挂着
+    （代理侧超时后远程恢复，本机这个对话框仍在等）。远程用户请手动填路径。
     """
+    if is_remote_panel_request():
+        log('WARNING', '远程访问请求「选择本地图片」已被拒绝：'
+                       '文件选择框只会弹在运行面板那台电脑的桌面上')
+        return jsonify({
+            'status': 'error',
+            'code': 'remote_not_supported',
+            'message': (
+                '远程访问时用不了「选择本地图片」：文件选择框会弹在'
+                '<b>运行面板那台电脑</b>的桌面上，你这边看不到也点不到。<br><br>'
+                '请直接手动填写图片路径 —— 路径要写<b>运行面板那台电脑</b>上的位置，'
+                '例如 <code>C:\\图片\\hello.png</code>。<br>'
+                '如果图片现在在你自己电脑上，需要先把它传到运行面板那台电脑。'
+            ),
+        })
     try:
         import tkinter as tk
         from tkinter import filedialog
@@ -1653,9 +1821,11 @@ def pick_image_file():
             root.lift()
             path = filedialog.askopenfilename(
                 parent=root,
-                title='选择图片文件',
+                title='选择图片/视频文件',
                 filetypes=[
-                    ('图片文件', '*.png *.jpg *.jpeg *.gif *.bmp *.webp *.PNG *.JPG *.JPEG'),
+                    ('图片/视频', '*.png *.jpg *.jpeg *.gif *.bmp *.webp *.mp4 *.mov *.avi *.mkv *.wmv *.flv'),
+                    ('图片文件', '*.png *.jpg *.jpeg *.gif *.bmp *.webp'),
+                    ('视频文件', '*.mp4 *.mov *.avi *.mkv *.wmv *.flv'),
                     ('所有文件', '*.*'),
                 ]
             )
@@ -1669,59 +1839,39 @@ def pick_image_file():
         log('ERROR', f'文件选择框出错: {e}')
         return jsonify({'status': 'error', 'message': str(e)})
 
+# ============================================================
+# 记忆库路径工具与记忆管理路由
+#
+# ⚠ 路径规则只能有一份：全部来自 memory_store.py（wxbot_core 也导入同一份）。
+#   面板若自己再写一遍「把非法字符删掉得到目录名」的规则，就会出现
+#   「面板看到的目录」和「机器人写的目录」对不上 —— 这正是身份碰撞事故里
+#   面板侧复制规则带来的风险。这里只保留薄封装，禁止再定义第二套规则。
+# ============================================================
+
 MEMORY_BASE = os.path.join(base_dir(), 'memory')
-WINDOWS_RESERVED_NAMES = {
-    "CON", "PRN", "AUX", "NUL",
-    "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-    "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
-}
-INVALID_FILENAME_CHARS_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
-def _memory_is_windows_reserved_name(name):
-    stem = name.split('.', 1)[0].upper()
-    return stem in WINDOWS_RESERVED_NAMES
 
-def _memory_hash_storage_name(name):
-    raw_name = str(name)
-    return "hash" + hashlib.sha256(raw_name.encode('utf-8')).hexdigest()
+def _memory_manager(wx_id):
+    """取该微信号的记忆管理器（与机器人共用同一个实例/同一把锁）。
 
-def _memory_resolve_storage_name(chat_name):
-    raw_name = str(chat_name)
-    storage_name = INVALID_FILENAME_CHARS_RE.sub('', raw_name)
-    storage_name = storage_name.strip().rstrip('. ')
-    if (
-        not storage_name
-        or storage_name in ('.', '..')
-        or _memory_is_windows_reserved_name(storage_name)
-        or len(storage_name) > 120
-    ):
-        return _memory_hash_storage_name(raw_name)
-    return storage_name
+    机器人没在跑时也能用：get_memory_manager 会按同样规则新建一个实例。
+    """
+    return get_memory_manager(wx_id, MEMORY_BASE)
 
-def _memory_read_original_name(chat_path, fallback):
-    name_path = os.path.join(chat_path, 'name.json')
-    if not os.path.exists(name_path):
-        return fallback
-    try:
-        with open(name_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        name = data.get('name') if isinstance(data, dict) else None
-        return str(name) if name else fallback
-    except Exception:
-        return fallback
 
-def _memory_find_chat_dir(wx_path, chat_name):
-    storage_name = _memory_resolve_storage_name(chat_name)
-    direct_path = os.path.join(wx_path, storage_name)
-    if os.path.isdir(direct_path):
-        return storage_name, direct_path
-    if not os.path.isdir(wx_path):
-        return storage_name, direct_path
-    for item in os.listdir(wx_path):
-        item_path = os.path.join(wx_path, item)
-        if os.path.isdir(item_path) and _memory_read_original_name(item_path, item) == chat_name:
-            return item, item_path
-    return storage_name, direct_path
+def _memory_wx_ids():
+    """列出记忆根目录下的微信号目录（跳过 _quarantine 等内部目录）。"""
+    if not os.path.exists(MEMORY_BASE):
+        return []
+    return [d for d in sorted(os.listdir(MEMORY_BASE))
+            if not is_internal_dir_name(d)
+            and _safe_is_dir(os.path.abspath(MEMORY_BASE), d)]
+
+
+def _memory_read_original_name(chat_path, fallback=None):
+    """读取记忆目录里记录的原始窗口名（展示用）；读不到时用目录名兜底。"""
+    return read_original_name(chat_path, fallback)
+
 
 @app.route('/api/backup_now', methods=['POST'])
 @login_required
@@ -1734,18 +1884,6 @@ def backup_now():
         log('ERROR', f'手动备份失败: {e}')
         return jsonify({'status': 'error', 'message': str(e)})
 
-@app.route('/memory/list')
-@login_required
-def memory_list():
-    """返回所有微信号目录"""
-    try:
-        if not os.path.exists(MEMORY_BASE):
-            return jsonify({'status': 'success', 'wx_ids': []})
-        wx_ids = [d for d in os.listdir(MEMORY_BASE)
-                  if os.path.isdir(os.path.join(MEMORY_BASE, d))]
-        return jsonify({'status': 'success', 'wx_ids': wx_ids})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
 
 def _safe_is_dir(parent_abs, name):
     """os.path.isdir 在 Windows 上对末尾含 '.' 的名称会自动去掉 '.' 导致误判。
@@ -1761,90 +1899,113 @@ def _safe_is_dir(parent_abs, name):
         return False
 
 
+@app.route('/memory/list')
+@login_required
+def memory_list():
+    """返回所有微信号目录（不含 _quarantine 等内部目录）"""
+    try:
+        return jsonify({'status': 'success', 'wx_ids': _memory_wx_ids()})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+
 @app.route('/memory/chats/<wx_id>')
 @login_required
 def memory_chats(wx_id):
-    """返回指定微信号下所有窗口名"""
+    """返回指定微信号下所有窗口名。
+
+    ⚠ 这里会对每个目录名调用一次 resolve_storage_key：
+      面板一打开就会把"归属明确的旧目录"迁到新位置、"归属不明的旧目录"隔离掉，
+      因此列表里不会出现"点了没反应"的旧目录，也不会让两个窗口都指向同一份旧数据。
+    """
     try:
-        wx_path = os.path.join(MEMORY_BASE, wx_id)
-        if not os.path.exists(wx_path):
-            return jsonify({'status': 'success', 'chats': []})
-        wx_abs = os.path.abspath(wx_path)
+        manager = _memory_manager(wx_id)
         chats = []
-        for d in os.listdir(wx_path):
-            if not _safe_is_dir(wx_abs, d):
+        for raw_name in manager.list_storage_keys():
+            # 解析时带上 wx_id：面板与机器人必须算出同一个目录名（含长名字的截断规则）
+            storage_key = manager.resolve_storage_key(raw_name)   # 已带上该管理器的 base_dir + wx_id
+            chat_path = os.path.join(MEMORY_BASE, wx_id, storage_key)
+            # 解析后目录可能已经不存在（旧目录刚被迁移/隔离掉）→ 不列出来
+            if not _safe_is_dir(os.path.abspath(os.path.join(MEMORY_BASE, wx_id)), storage_key):
                 continue
-            chat_path = os.path.join(wx_path, d)
-            display_name = _memory_read_original_name(chat_path, d)
-            chats.append({'name': display_name, 'storage_name': d})
+            chats.append({
+                'name': _memory_read_original_name(chat_path, storage_key),
+                'storage_name': storage_key,
+            })
         return jsonify({'status': 'success', 'chats': chats})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
 
+
 @app.route('/memory/data/<wx_id>/<chat_name>')
 @login_required
 def memory_data(wx_id, chat_name):
-    """返回指定窗口的记忆数据（JSON 列表）"""
+    """返回指定窗口的记忆数据（JSON 列表）。
+
+    ⚠ 读取也走 MemoryManager：归属不明的旧目录会在这里被隔离掉，
+      否则面板会继续展示"多个窗口混在一起"的历史。
+    """
     try:
-        dir_abs = os.path.abspath(os.path.join(MEMORY_BASE, wx_id))
-        _, chat_dir_normal = _memory_find_chat_dir(dir_abs, chat_name)
-        if os.name == 'nt':
-            chat_dir = '\\\\?\\' + chat_dir_normal
-        else:
-            chat_dir = chat_dir_normal
-        if not os.path.exists(chat_dir):
-            return jsonify({'status': 'success', 'messages': []})
-        # 扫目录找实际的 *_memory.json 文件（Windows 可能截断目录名导致文件名与目录名不一致）
-        mem_files = [f for f in os.listdir(chat_dir) if f.endswith('_memory.json')]
-        if not mem_files:
-            return jsonify({'status': 'success', 'messages': []})
-        if os.name == 'nt':
-            file_path = '\\\\?\\' + chat_dir_normal + '\\' + mem_files[0]
-        else:
-            file_path = os.path.join(chat_dir, mem_files[0])
-        with open(file_path, 'r', encoding='utf-8') as f:
-            messages = json.load(f)
-        return jsonify({'status': 'success', 'messages': messages if isinstance(messages, list) else []})
+        manager = _memory_manager(wx_id)
+        messages = manager.get_messages(chat_name, count=manager.MEMORY_READ_LIMIT)
+        return jsonify({'status': 'success', 'messages': messages})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
+
 
 @app.route('/memory/delete_wx/<wx_id>', methods=['DELETE'])
 @login_required
 def memory_delete_wx(wx_id):
     """删除指定微信号的所有记忆"""
     try:
-        if os.name == 'nt':
-            wx_path = '\\\\?\\' + os.path.abspath(os.path.join(MEMORY_BASE, wx_id))
-        else:
-            wx_path = os.path.join(MEMORY_BASE, wx_id)
-        if os.path.exists(wx_path):
-            shutil.rmtree(wx_path)
-        log('SUCCESS', f'已删除微信号 {wx_id} 的所有记忆')
+        # wx_id 直接来自 URL 路径段，删除前先确认目标就是 MEMORY_BASE 下的一层目录。
+        # ⚠ 必须逐个删除目标校验：wx_id = r'..\..\某个目录' 时，
+        #   os.path.join(MEMORY_BASE, wx_id) 会落在 MEMORY_BASE 之外，
+        #   而 delete_account 是按"自己拼出来的目录"遍历的，会跟着删到外面去。
+        target, path_err = _resolve_path_within(MEMORY_BASE, wx_id)
+        if path_err or target != os.path.join(os.path.abspath(MEMORY_BASE), wx_id):
+            log('WARNING', f'拒绝删除越界的记忆目录：wx_id={wx_id!r}')
+            return jsonify({'status': 'error',
+                            'message': path_err or '目标路径不在允许的目录内，已拒绝'})
+        # 删除只允许走记忆存储这一个入口（内部按会话取锁），不再直接 rmtree
+        count = _memory_manager(wx_id).delete_account()
+        log('SUCCESS', f'已删除微信号 {wx_id} 的所有记忆（{count} 条记录）')
         return jsonify({'status': 'success', 'message': '已删除'})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
+
 
 @app.route('/memory/delete_chat/<wx_id>/<chat_name>', methods=['DELETE'])
 @login_required
 def memory_delete_chat(wx_id, chat_name):
     """删除指定窗口的记忆文件"""
     try:
-        parent_abs = os.path.abspath(os.path.join(MEMORY_BASE, wx_id))
-        _, chat_path_normal = _memory_find_chat_dir(parent_abs, chat_name)
-        if os.name == 'nt':
-            chat_path = '\\\\?\\' + chat_path_normal
-        else:
-            chat_path = chat_path_normal
-        if os.path.exists(chat_path):
-            shutil.rmtree(chat_path)
-        log('SUCCESS', f'已删除 {wx_id}/{chat_name} 的记忆')
+        # wx_id 来自 URL 路径段：不校验时 /memory/delete_chat/..%5C..%5C<项目目录名>
+        # 会把项目目录当「聊天窗口」递归删掉
+        parent_abs, path_err = _resolve_path_within(MEMORY_BASE, wx_id)
+        if path_err:
+            log('WARNING', f'拒绝删除越界的记忆目录：wx_id={wx_id!r}')
+            return jsonify({'status': 'error', 'message': path_err})
+        # 删除只允许走记忆存储这一个入口（内部按存储标识取会话锁）。
+        # chat_name 可能是窗口名，也可能是面板列表回传的存储标识，两种都支持；
+        # 带路径分隔符的名字会在 MemoryManager 里被拒绝（不会命中任何目录）。
+        deleted = _memory_manager(wx_id).delete_chat(chat_name)
+        log('SUCCESS', f'已删除 {wx_id}/{chat_name} 的记忆（{deleted}）')
         return jsonify({'status': 'success', 'message': '已删除'})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
 
 
+# ============================================================
+# 定时启停线程
+#
+# 每 10 秒轮询一次系统时间。启停时间只在「线程启动时」和「保存配置后」读取，
+# 不是每轮都读盘——配置变更靠 update_config_status 标志触发重载（见 /save_config）。
+# ============================================================
+
+
 def time_start_stop():
-    """定时启停"""
+    """启动定时启停守护线程（daemon，随面板进程一起退出）。"""
     def is_target_time(target_hour, target_minute):
         """
         校验当前时间是否匹配指定的小时和分钟
@@ -1878,8 +2039,8 @@ def time_start_stop():
 
         return True, start_time, stop_time
     def time_check_thread():
-        """定时检查线程"""
-        global bot_thread, bot, update_config_status
+        """定时检查线程（启停只调 BOT_LIFECYCLE，与手动启停共用同一份状态机）。"""
+        global update_config_status
         # 读取配置文件
         start_hour = start_minute = stop_hour = stop_minute = None
         everyday_start_stop_bot_switch, start_time, stop_time = load_time_schedule_config()
@@ -1908,55 +2069,33 @@ def time_start_stop():
             if everyday_start_stop_bot_switch:
                 if is_target_time(start_hour, start_minute): # 启动时间
                     log('INFO', '到达预定启动时间，正在启动机器人')
-                    if bot_thread and bot_thread.is_alive():
-                        log("WARNING", "状态：机器人已在运行")
-                        log(message="定时启动机器人:机器人已在运行，无需启动")
-                        # email_send.send_email(subject="定时启动机器人", content="机器人已在运行，无需启动")
+                    started, message = _spawn_bot_thread('定时启动')
+                    if started:
+                        log(level='INFO', message="定时启动机器人:机器人已启动")
+                        # email_send.send_email(subject="定时启动机器人", content="机器人已启动")
                     else:
-                        def run_bot():
-                            pythoncom.CoInitialize()  # 防止多线程调用COM组件时出错
-                            global bot
-                            # 启动前先清理旧实例的残留监听，防止崩溃重启后双回调
-                            if bot:
-                                try:
-                                    bot.stop()
-                                    log('INFO', '已清理上次残留的 WeChat 监听')
-                                except Exception as _e:
-                                    log('WARNING', f'清理旧监听时出错（可忽略）: {_e}')
-                            bot = WXBot()
-                            bot.run()
-                            _restore_sleep()
-                            pythoncom.CoUninitialize()  # 释放COM组件
-                        try:
-                            bot_thread = threading.Thread(target=run_bot, daemon=True)
-                            bot_thread.start()
-                            _prevent_sleep()
-                            log(level='INFO', message="定时启动机器人:机器人已启动")
-                            # email_send.send_email(subject="定时启动机器人", content="机器人已启动")
-                        except Exception as e:
-                            log('ERROR', f'启动机器人失败: {str(e)}')
+                        log(level='WARNING', message=f"定时启动机器人:{message}")
                     time.sleep(60) # 防止一分钟内重复启动
                 if is_target_time(stop_hour, stop_minute): # 停止时间
                     log('INFO', '到达预定停止时间，正在停止机器人')
-                    if bot_thread and bot_thread.is_alive():
-                        if bot.stop_wxbot():  # 调用停止函数并检查返回值
-                            log('SUCCESS', '机器人已停止')
-                            bot_thread = None
-                            bot = None
-                            _restore_sleep()
-                            log(message="定时停止机器人:机器人已停止")
-                            # email_send.send_email(subject="定时停止机器人", content="机器人已停止")
-                        else:
-                            log('ERROR', '停止机器人失败')
+                    outcome = BOT_LIFECYCLE.stop(reason='定时停止')
+                    if outcome.stopped:
+                        log(level='SUCCESS', message="定时停止机器人:机器人已停止")
+                        # email_send.send_email(subject="定时停止机器人", content="机器人已停止")
                     else:
-                        log('WARNING', '状态：机器人未运行')
-                        log(message="定时停止机器人:机器人未运行，无需停止")
-                        # email_send.send_email(subject="定时停止机器人", content="机器人未运行，无需停止")
+                        log(level='ERROR', message=f"定时停止机器人:{outcome.message}")
+                    # 不在此处 _restore_sleep()：本线程从未调用过 _prevent_sleep()，
+                    # 防睡眠状态由机器人线程持有，只有机器人线程自己的 finally 能清掉它。
                     time.sleep(60) # 防止一分钟内重复停止
             time.sleep(10)
-    
+
     time_thread = threading.Thread(target=time_check_thread, daemon=True)
     time_thread.start()
+# ============================================================
+# 服务端口选择与程序入口
+# ============================================================
+
+
 def find_free_port(start_port=10001, max_port=11000):
     """从 start_port 开始寻找空闲端口"""
     for port in range(start_port, max_port):
@@ -1981,109 +2120,8 @@ def main():
     log('INFO', '服务器启动中...')
     try:
         if not os.path.exists(CONFIG_FILE):
-            default_config = {
-                "api_configs": [
-                    {"sdk": "", "key": "", "url": "", "model": "", "fallback_api_index": -1},
-                    {"sdk": "", "key": "", "url": "", "model": "", "fallback_api_index": -1},
-                ],
-                "api_index": 0,
-                "prompt": "你是一个ai回复助手，请根据用户的问题给出回答,回复尽量保持在30字以内",
-                "admin": "文件传输助手",
-                "AllListen_switch": False,
-                "AllListen_filter_mute": True,
-                "chat_listen_only": False,
-                "listen_list": [],
-                "special_session_name": [],
-                "group": [],
-                "group_api_map": {},
-                "group_switch": False,
-                "group_listen_only": False,
-                "group_reply_at": False,
-                "group_reply_at_msg": True,
-                "group_reply_quote": False,
-                "group_welcome": False,
-                "group_welcome_random": 1.0,
-                "group_welcome_msg": "欢迎新朋友！请先查看群公告！",
-                "new_friend_switch": False,
-                "new_friend_reply_switch": False,
-                "new_friend_msg": [],
-                "new_friend_check_min": 60,
-                "new_friend_check_max": 300,
-                "new_friend_remark_use_nickname": True,
-                "new_friend_remark_prefix": "",
-                "new_friend_remark_prefix_timestamp": False,
-                "new_friend_remark_suffix": "_机器人备注",
-                "new_friend_remark_suffix_timestamp": False,
-                "new_friend_tags": [],
-                "chat_keyword_switch": False,
-                "group_keyword_switch": False,
-                "group_keyword_at_only": False,
-                "keyword_reply_quote": False,
-                "group_keyword_reply_at_msg": False,
-                "keyword_dict": {},
-                "scheduled_msg_switch": False,
-                "scheduled_msg_list": [],
-                "random_msg_switch": False,
-                "random_msg_list": [],
-                "scheduled_moments_switch": False,
-                "scheduled_moments_list": [],
-                "moments_like_switch": False,
-                "moments_like_min": 60,
-                "moments_like_max": 120,
-                "random_moments_switch": False,
-                "random_moments_list": [],
-                "everyday_start_stop_bot_switch": False,
-                "everyday_start_bot_time": "08:00",
-                "everyday_stop_bot_time": "23:00",
-                "memory_switch": True,
-                "memory_max_count": 3000,
-                "memory_context_count": 1000,
-                "reply_delay_switch": True,
-                "reply_delay_min": 1,
-                "reply_delay_max": 5,
-                "clean_ai_reply_switch": True,
-                "chat_image_recognition_switch": False,
-                "chat_image_recognition_api": 0,
-                "group_image_recognition_switch": False,
-                "group_image_recognition_api": 0,
-                "custom_forward_switch": False,
-                "custom_forward_list": [],
-                "default_prompt": "默认",
-                "chat_prompt_map": {},
-                "chat_api_map": {},
-                "chat_max_round_map": {},
-                "group_prompt_map": {},
-                "api_error_reply": "在忙，我稍后回复您",
-                "api_error_reply_once": False,
-                "chat_max_round_switch": False,
-                "chat_max_round_default": 99,
-                "chat_max_round_reset_days": 0,
-                "chat_max_round_reply": "",
-                "chat_max_round_reply_once": False,
-                "chat_split_reply_switch": False,
-                "chat_split_max_chars": 100,
-                "chat_split_max_count": 4,
-                "group_split_reply_switch": False,
-                "group_split_max_chars": 100,
-                "group_split_max_count": 4,
-                "siver_panel_enabled": False,
-                "siver_panel_activation_code": "",
-                "siver_panel_activation_code_applied_hash": "",
-                "siver_panel_activation_code_failed_hash": "",
-                "siver_panel_slug": "",
-                "siver_panel_install_id": "",
-                "siver_panel_machine_fingerprint": "",
-                "siver_panel_device_id": "",
-                "siver_panel_device_secret": "",
-                "siver_panel_base_url": SIVER_PANEL_BASE_URL,
-                "siver_panel_ws_url": SIVER_PANEL_WS_URL,
-                "siver_panel_panel_url": "",
-                "siver_panel_service_expire_at": "",
-                "siver_panel_last_error_code": "",
-                "siver_panel_last_error_message": "",
-            }
-            with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-                json.dump(default_config, f, ensure_ascii=False, indent=4)
+            default_config = dict(config_defaults.DEFAULT_CONFIG)
+            _write_json_atomic(CONFIG_FILE, default_config)
             log('WARNING', '配置文件不存在，已创建默认配置文件')
         log('INFO', '服务5s后启动')
         # 启动时自动备份检查

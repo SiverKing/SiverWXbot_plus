@@ -7,7 +7,6 @@ import os
 import platform
 import re
 import socket
-import tempfile
 import threading
 import time
 import uuid
@@ -18,6 +17,10 @@ import requests
 from requests import Response
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 from websockets.sync.client import connect as ws_connect
+
+# config.json 的唯一读写入口（零依赖模块；本模块不反向依赖 web_server）
+from config_store import ConfigStore, ConfigReadError
+import config_defaults
 
 DEFAULT_BASE_URL = "https://panel.siver.top"
 DEFAULT_WS_URL = "wss://panel.siver.top/relay/ws"
@@ -85,7 +88,6 @@ class SiverPanelManager:
 
         self._state_lock = threading.Lock()
         self._worker_lock = threading.Lock()
-        self._config_lock = threading.Lock()
         self._manual_stop = threading.Event()
         self._worker: threading.Thread | None = None
         self._websocket = None
@@ -930,20 +932,37 @@ class SiverPanelManager:
             return "slug_mismatch"
         return "auth_error"
 
+    def _config_store(self):
+        """惰性创建 config.json 的 ConfigStore。
+
+        与面板 /save_config、机器人 WXBotConfig.save_config 共用同一把路径锁
+        （config_store 内部按路径共享），因此三方不会互相覆盖。
+        注意：只依赖 config_store（零依赖模块），不反向依赖 web_server。
+        """
+        store = getattr(self, "_store", None)
+        if store is None:
+            store = ConfigStore(
+                self.config_path,
+                defaults=config_defaults.DEFAULT_CONFIG,
+                normalize=config_defaults.prepare,
+            )
+            self._store = store
+        return store
+
     def _load_config(self) -> dict[str, Any]:
         try:
-            with open(self.config_path, "r", encoding="utf-8") as file:
-                payload = json.load(file)
-            return payload if isinstance(payload, dict) else {}
-        except Exception:
+            return self._config_store().read()[0]
+        except ConfigReadError:
             return {}
 
     def _persist_config_updates(self, **updates: Any) -> dict[str, Any]:
-        with self._config_lock:
-            config = self._load_config()
-            config.update(updates)
-            self._atomic_write_json(config)
-            return config
+        """只提交这几个字段，由 ConfigStore 在路径锁内合并到磁盘现值上。
+
+        原来是"读 → update → 整份写回"，自己一把锁且与另外两个写入方不共用，
+        会把面板/机器人同时写入的其它字段覆盖掉。
+        """
+        merged, _rev = self._config_store().update(dict(updates))
+        return merged
 
     def _ensure_identity_persisted(self) -> dict[str, Any]:
         config = self._load_config()
@@ -963,21 +982,6 @@ class SiverPanelManager:
         if updates:
             config = self._persist_config_updates(**updates)
         return config
-
-    def _atomic_write_json(self, payload: dict[str, Any]) -> None:
-        directory = os.path.dirname(self.config_path) or "."
-        os.makedirs(directory, exist_ok=True)
-        fd, temp_path = tempfile.mkstemp(prefix="siver-panel-", suffix=".json", dir=directory)
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as file:
-                json.dump(payload, file, ensure_ascii=False, indent=4)
-            os.replace(temp_path, self.config_path)
-        finally:
-            if os.path.exists(temp_path):
-                try:
-                    os.remove(temp_path)
-                except OSError:
-                    pass
 
     def _wait_local_panel_ready(self) -> bool:
         deadline = time.time() + LOCAL_READY_TIMEOUT

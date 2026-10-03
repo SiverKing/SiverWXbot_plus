@@ -2,8 +2,28 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "v4.7.33"
-version_log = "v4.7.33 - AI接口配置可设置备用接口"
+version = "v4.8.0"
+version_log = "v4.8.0 - 重大更新！底层全面重构·全新架构·安全加固·全新功能，更安全、更稳定、更易维护 详见Github Release"
+
+# ============================================================
+# 【新增配置字段检查清单】本文件内 2 步：④ 必改、⑥ 可选
+# 全流程 5 步必改 + 1 步可选，编号与索引见 web_server.py 顶部
+#
+#   ④ 运行时读取（真正决定程序行为的地方）
+#        · 类属性默认值：class WXBotConfig   →   def __init__
+#        · 运行时读取：def update_global_config()
+#   ⑥ 可选：面板状态展示   →   def get_status()
+#
+#   ⚠ 属性名必须与配置键逐字相同。历史上曾有 3 个把 friend 拼成 frined / frien 的
+#     属性名，已随本次清理修正；新增字段时请直接从配置键复制属性名，不要手敲。
+#
+#   ⚠ update_global_config() 里仍有 3 处直接 int()：api_index、
+#     chat_image_recognition_api、group_image_recognition_api，三者自带 try/except
+#     与越界回退；其余数值字段已统一走 _coerce_int_range()（经 config_defaults 落盘时
+#     也会再钳位一次）。注意调用方 run_bot() 线程没有 except，任何未捕获异常都只表现为
+#     「机器人启动后静默变成未运行」。
+# ============================================================
+
 
 # ============================================================
 # 标准库导入
@@ -17,7 +37,9 @@ import hashlib
 import random
 import calendar
 import threading
+import queue
 import traceback
+import copy
 from datetime import datetime, timedelta
 
 # ============================================================
@@ -26,7 +48,7 @@ from datetime import datetime, timedelta
 import requests
 import base64
 import mimetypes
-import schedule                  # 定时任务库
+import schedule                  # 定时任务库（此处只用 CancelJob 标记；调度器按实例创建）
 from openai import OpenAI        # OpenAI SDK
 
 # Coze 官方 Python 库
@@ -49,14 +71,119 @@ from wxautox4.msgs import *
 from wxautox4 import WxParam
 from wxautox4.utils.useful import check_license
 
-is_wxautox = True  # 标识当前使用的是 wxautox Plus 版本
-
 # ============================================================
 # 本地模块导入
 # ============================================================
 import email_send
 import webhook_send
 from logger import log
+# 原子写与"读-改-写"事务统一由 config_store 提供（零 Flask 依赖）。
+# 「配置什么时候生效」的唯一约定（hot / api_rebuild / restart），面板共用同一份
+import config_apply
+# 沿用 _write_json_atomic 这个名字，历史调用点与 web_server 的导入都不用改。
+from config_store import write_json_atomic as _write_json_atomic
+from config_store import ConfigStore
+import config_defaults
+
+# ============================================================
+# 告警发送队列（有界 + 单个后台线程）
+# ------------------------------------------------------------
+# is_err() 会在 wxautox 消息回调线程与主循环里被调用，而邮件 / Webhook 都是网络操作
+# （邮件最坏要等 SMTP_TIMEOUT=10s，Webhook 默认 timeout=5s），同步发送会卡住调用方，
+# 异常风暴时更会反复阻塞。因此改为：调用方只做非阻塞入队，由单个后台线程串行发送。
+#
+# 策略：
+#   - 队列有界（_ALERT_QUEUE_MAX）：满了直接丢弃本条并计数 + 限频记录日志，
+#     既不阻塞调用方，也不会无限增长
+#   - 相同（标题, 内容）在 _ALERT_DEDUP_WINDOW 秒内重复出现只发送一次（重复合并 / 限流）
+#   - 发送线程是 daemon，随进程退出；进程退出时队列中尚未发送的告警会丢失
+# ============================================================
+_ALERT_QUEUE_MAX = 50           # 队列容量上限
+_ALERT_DEDUP_WINDOW = 60.0      # 相同告警的去重时间窗（秒）
+
+_alert_queue = queue.Queue(maxsize=_ALERT_QUEUE_MAX)
+_alert_dedupe = {}              # (title, content) -> 上次入队时刻（time.monotonic）
+_alert_lock = threading.Lock()
+_alert_worker = None            # 后台发送线程（按需启动，只启动一次）
+_alert_dropped = 0              # 因队列满被丢弃的告警数
+_alert_suppressed = 0           # 因重复被抑制的告警数
+
+
+def _alert_worker_loop():
+    """后台告警线程：串行消费队列，依次发送邮件与 Webhook。"""
+    while True:
+        item = _alert_queue.get()
+        try:
+            if item is None:
+                return
+            title, content = item
+            try:
+                email_send.send_email(subject=title, content=content)
+            except Exception as e:
+                log(level="ERROR", message=f"发送告警邮件失败：{e}")
+            try:
+                ok, message = webhook_send.send_message(title, content)
+                if not ok:
+                    log(level="ERROR", message=f"发送 Webhook 告警失败：{message}")
+            except Exception as e:
+                log(level="ERROR", message=f"发送 Webhook 告警异常：{e}")
+        finally:
+            _alert_queue.task_done()
+
+
+def _ensure_alert_worker():
+    """按需启动后台告警线程（只启动一次）。"""
+    global _alert_worker
+    if _alert_worker is not None and _alert_worker.is_alive():
+        return
+    with _alert_lock:
+        if _alert_worker is not None and _alert_worker.is_alive():
+            return
+        _alert_worker = threading.Thread(
+            target=_alert_worker_loop, name="alert-sender", daemon=True
+        )
+        _alert_worker.start()
+
+
+def enqueue_alert(title, content):
+    """把一条告警放进有界队列后立即返回，不阻塞调用方。
+
+    :return: True=已入队；False=被去重抑制，或队列满被丢弃（两种情况都计数）
+    """
+    global _alert_dropped, _alert_suppressed
+    now = time.monotonic()
+    key = (title, content)
+    with _alert_lock:
+        last = _alert_dedupe.get(key)
+        if last is not None and (now - last) < _ALERT_DEDUP_WINDOW:
+            _alert_suppressed += 1
+            return False
+        # 先占位再入队：队列满被丢弃的告警同样占用去重窗口，
+        # 避免风暴期间对同一条告警反复尝试入队
+        _alert_dedupe[key] = now
+        # 去重表也要有硬上限：先清过期键；窗口内错误种类仍过多时按时间淘汰最旧的
+        _dedupe_cap = _ALERT_QUEUE_MAX * 4
+        if len(_alert_dedupe) > _dedupe_cap:
+            for k in [k for k, t in _alert_dedupe.items() if (now - t) >= _ALERT_DEDUP_WINDOW]:
+                _alert_dedupe.pop(k, None)
+            if len(_alert_dedupe) > _dedupe_cap:
+                for k, _t in sorted(_alert_dedupe.items(), key=lambda kv: kv[1])[:len(_alert_dedupe) - _dedupe_cap]:
+                    _alert_dedupe.pop(k, None)
+
+    _ensure_alert_worker()
+    try:
+        _alert_queue.put_nowait((title, content))
+    except queue.Full:
+        with _alert_lock:
+            _alert_dropped += 1
+            dropped = _alert_dropped
+        # 限频记录：第 1 次和之后每 10 次记一条，避免日志本身变成风暴
+        if dropped == 1 or dropped % 10 == 0:
+            log(level="ERROR",
+                message=f"告警队列已满（上限 {_ALERT_QUEUE_MAX}），本条告警已丢弃；累计丢弃 {dropped} 条")
+        return False
+    return True
+
 
 # ============================================================
 # wxautox 全局参数配置
@@ -84,6 +211,17 @@ OPENAI_SDK_NAME    = "OpenAI API 格式兼容接口"
 OPENAI_SDK_ALIASES = ("OpenAI SDK", OPENAI_SDK_NAME)
 API_ERROR_REPLY    = "API返回错误，请稍后再试"
 
+# ============================================================
+# 文件回复的「载体消息」文案
+# ------------------------------------------------------------
+# 关键词回复配成图片/视频路径时，会先发一条纯文本消息、再发文件本身。
+# 这条文本不是给用户看的内容，它的作用是承载「@发言人」和「引用」两个语义
+# —— 文件消息本身带不了这两样。
+# 内容固定为 "1"，**不取文件名**：文件名出现在聊天记录里既没有信息量也不好看
+# （早期版本用的是 os.path.basename，用户反馈后改为固定文案）。
+# ============================================================
+MEDIA_CARRIER_TEXT = "1"
+
 
 def _normalize_api_configs(api_configs):
     """规范化接口列表，并将非法备用接口索引统一为 -1。"""
@@ -108,6 +246,34 @@ def _normalize_api_configs(api_configs):
             fallback_index = -1
         cfg["fallback_api_index"] = fallback_index
     return normalized
+
+
+# 原子写的实现见 config_store.write_json_atomic（文件顶部已导入）
+
+# 同一个 config.json 共用一个 ConfigStore（它内部按路径持锁，
+# 与面板、siver_panel 的读写排在同一条队列上）
+_CONFIG_STORES: dict = {}
+_CONFIG_STORES_GUARD = threading.Lock()
+
+
+def _get_config_store(path):
+    """取（或创建）某个配置文件对应的 ConfigStore。
+
+    规范化走 config_defaults.prepare（迁移 -> 补默认值 -> 类型校验），
+    与面板 /save_config 完全一致。
+    """
+    key = os.path.abspath(path)
+    with _CONFIG_STORES_GUARD:
+        store = _CONFIG_STORES.get(key)
+        if store is None:
+            store = ConfigStore(
+                key,
+                defaults=config_defaults.DEFAULT_CONFIG,
+                normalize=config_defaults.prepare,
+            )
+            _CONFIG_STORES[key] = store
+        return store
+
 
 # ============================================================
 # 拆分多条回复常量
@@ -150,6 +316,7 @@ SPLIT_PROMPT_TEMPLATE = """\
 # ============================================================
 THINK_BLOCK_RE = re.compile(r'<think\b[^>]*>.*?</think>', re.IGNORECASE | re.DOTALL)
 LEADING_THINK_RE = re.compile(r'^\s*<think\b[^>]*>', re.IGNORECASE)
+
 
 def clean_ai_reply_text(text):
     """清理模型回复中的思考标签，避免把推理过程发送给用户。"""
@@ -243,6 +410,8 @@ def _api_error_summary(error, payload=None, response=None):
 # ============================================================
 # 配置管理类
 # ============================================================
+
+
 class WXBotConfig:
     """
     微信机器人配置类
@@ -251,11 +420,19 @@ class WXBotConfig:
     """
 
     def __init__(self):
+        """初始化配置路径，并登记所有字段的类属性默认值。
+
+        ⚠ 这里的默认值是 config 缺键时的兜底，必须与
+          create_new_config_file() 的 base_config 保持一致。
+          group_welcome_msg 曾因两处不一致导致老配置丢失欢迎语（已修复）。
+        """
         _base = os.path.dirname(sys.executable) if hasattr(sys, '_MEIPASS') else os.path.abspath(".")
         self.CONFIG_FILE = os.path.join(_base, 'config', 'config.json')
         self.prompt_dir  = os.path.join(_base, 'config', 'prompt')
         os.makedirs(os.path.join(_base, 'config'), exist_ok=True)
         self.config = {}
+        self._loaded_snapshot = {}   # 最近一次从磁盘加载的配置，用于算出"改了哪些字段"
+        self.save_failed = False     # 最近一次保存是否失败（管理员命令收尾时据此提示）
 
         # ---------- 全局监听开关 ----------
         self.AllListen_switch = False   # True=黑名单模式，False=白名单模式
@@ -284,12 +461,12 @@ class WXBotConfig:
         self.group_reply_at = False     # 群聊是否仅在被 @ 时才回复
         self.group_welcome = False      # 群新人欢迎语开关
         self.group_welcome_random = 1.0 # 群新人欢迎语触发概率（0.0~1.0）
-        self.group_welcome_msg = "欢迎新朋友！请先查看群公告！本消息由wxautox发送!"
+        self.group_welcome_msg = "欢迎新朋友！请先查看群公告！"
 
         # ---------- 新好友配置 ----------
-        self.new_frined_switch = False        # 自动通过新好友开关
-        self.new_frien_reply_switch = False   # 新好友自动回复开关
-        self.new_frien_msg = []               # 通过后自动发送的打招呼消息列表
+        self.new_friend_switch = False        # 自动通过新好友开关
+        self.new_friend_reply_switch = False   # 新好友自动回复开关
+        self.new_friend_msg = []               # 通过后自动发送的打招呼消息列表
         self.new_friend_remark_use_nickname = True
         self.new_friend_remark_prefix_timestamp = False
         self.new_friend_remark_suffix_timestamp = False
@@ -301,6 +478,11 @@ class WXBotConfig:
         self.keyword_reply_quote = False     # 关键词回复是否引用消息（私聊/群聊均生效）
         self.group_keyword_reply_at_msg = False   # 群聊关键词回复是否@发言人
         self.keyword_dict = {}              # 关键词 -> 回复内容 字典
+
+        # ---------- 多条消息缓冲合并回复配置 ----------
+        self.merge_reply_switch    = False   # 总开关（默认关，行为与未实现前一致）
+        self.merge_reply_window    = 5       # 缓冲等待秒数（窗口内没有新消息才回复）
+        self.merge_reply_max_count = 10      # 最多合并条数，达到即触发
 
         # ---------- 自定义转发配置 ----------
         self.custom_forward_switch = False  # 自定义转发总开关
@@ -363,134 +545,85 @@ class WXBotConfig:
                 self.config = json.load(file)
                 log(message="配置文件加载成功")
         except Exception as e:
-            log(level="ERROR", message="打开配置文件失败，请检查配置文件！" + str(e))
-            # 配置文件损坏或缺失时阻塞程序，避免带着错误配置继续运行
-            while True:
-                time.sleep(100)
+            # 保存已改为原子替换，正常情况下不会读到半截文件；这里防的是极端时序
+            for _ in range(5):
+                time.sleep(0.2)
+                try:
+                    with open(self.CONFIG_FILE, 'r', encoding='utf-8') as file:
+                        self.config = json.load(file)
+                    log(message="配置文件加载成功（重试后）")
+                    break
+                except Exception:
+                    pass
+            else:
+                log(level="ERROR", message="打开配置文件失败，请检查配置文件！" + str(e))
+                # 不带着坏配置继续运行；但也不永久卡死：每 30 秒重试一次，
+                # 用户修好配置文件后会自动恢复，而不是静默挂起到重启为止
+                while True:
+                    time.sleep(30)
+                    try:
+                        with open(self.CONFIG_FILE, 'r', encoding='utf-8') as file:
+                            self.config = json.load(file)
+                        log(message="配置文件已恢复，继续启动")
+                        break
+                    except Exception:
+                        continue
+        # 记录磁盘快照：save_config() 靠它算出"改了哪些字段"，
+        # 从而只提交差异，不再整份内存快照覆盖别处的改动
+        self._loaded_snapshot = copy.deepcopy(self.config)
 
     def create_new_config_file(self):
         """若配置文件不存在，则创建一份包含默认值的配置文件"""
         try:
             if not os.path.exists(self.CONFIG_FILE):
-                base_config = {
-                    "api_configs": [
-                        {"sdk": "", "key": "", "url": "", "model": "", "fallback_api_index": -1},
-                        {"sdk": "", "key": "", "url": "", "model": "", "fallback_api_index": -1},
-                    ],
-                    "api_index": 0,
-                    "prompt": "你是一个ai回复助手，请根据用户的问题给出回答,回复尽量保持在30字以内",
-                    "admin": "文件传输助手",
-                    "AllListen_switch": False,
-                    "AllListen_filter_mute": True,
-                    "chat_listen_only": False,
-                    "listen_list": [],
-                    "special_session_name": [],
-                    "group": [],
-                    "group_api_map": {},
-                    "group_switch": False,
-                    "group_listen_only": False,
-                    "group_reply_at": False,
-                    "group_reply_at_msg": True,
-                    "group_reply_quote": False,
-                    "group_welcome": False,
-                    "group_welcome_random": 1.0,
-                    "group_welcome_msg": "欢迎新朋友！请先查看群公告！",
-                    "new_friend_switch": False,
-                    "new_friend_reply_switch": False,
-                    "new_friend_msg": [],
-                    "new_friend_check_min": 60,
-                    "new_friend_check_max": 300,
-                    "new_friend_remark_use_nickname": True,
-                    "new_friend_remark_prefix": "",
-                    "new_friend_remark_prefix_timestamp": False,
-                    "new_friend_remark_suffix": "_机器人备注",
-                    "new_friend_remark_suffix_timestamp": False,
-                    "new_friend_tags": [],
-                    "chat_keyword_switch": False,
-                    "group_keyword_switch": False,
-                    "group_keyword_at_only": False,
-                    "keyword_reply_quote": False,
-                    "group_keyword_reply_at_msg": False,
-                    "keyword_dict": {},
-                    "custom_forward_switch": False,
-                    "custom_forward_list": [],
-                    "default_prompt": "默认",
-                    "chat_prompt_map": {},
-                    "chat_api_map": {},
-                    "chat_max_round_map": {},
-                    "group_prompt_map": {},
-                    "scheduled_msg_switch": False,
-                    "scheduled_msg_list": [],
-                    "random_msg_switch": False,
-                    "random_msg_list": [],
-                    "scheduled_moments_switch": False,
-                    "scheduled_moments_list": [],
-                    "moments_like_switch": False,
-                    "moments_like_min": 60,
-                    "moments_like_max": 120,
-                    "random_moments_switch": False,
-                    "random_moments_list": [],
-                    "everyday_start_stop_bot_switch": False,
-                    "everyday_start_bot_time": "08:00",
-                    "everyday_stop_bot_time": "23:00",
-                    "memory_switch": True,
-                    "memory_max_count": 3000,
-                    "memory_context_count": 1000,
-                    "reply_delay_switch": True,
-                    "reply_delay_min": 1,
-                    "reply_delay_max": 5,
-                    "clean_ai_reply_switch": True,
-                    "chat_image_recognition_switch": False,
-                    "chat_image_recognition_api": 0,
-                    "group_image_recognition_switch": False,
-                    "group_image_recognition_api": 0,
-                    "api_error_reply": "在忙，我稍后回复您",
-                    "api_error_reply_once": False,
-                    "chat_max_round_switch": False,
-                    "chat_max_round_default": 99,
-                    "chat_max_round_reset_days": 0,
-                    "chat_max_round_reply": "",
-                    "chat_max_round_reply_once": False,
-                    "chat_split_reply_switch": False,
-                    "chat_split_max_chars": 100,
-                    "chat_split_max_count": 4,
-                    "group_split_reply_switch": False,
-                    "group_split_max_chars": 100,
-                    "group_split_max_count": 4,
-                    "siver_panel_enabled": False,
-                    "siver_panel_activation_code": "",
-                    "siver_panel_activation_code_applied_hash": "",
-                    "siver_panel_activation_code_failed_hash": "",
-                    "siver_panel_slug": "",
-                    "siver_panel_install_id": "",
-                    "siver_panel_machine_fingerprint": "",
-                    "siver_panel_device_id": "",
-                    "siver_panel_device_secret": "",
-                    "siver_panel_base_url": "https://panel.siver.top",
-                    "siver_panel_ws_url": "wss://panel.siver.top/relay/ws",
-                    "siver_panel_panel_url": "",
-                    "siver_panel_service_expire_at": "",
-                    "siver_panel_last_error_code": "",
-                    "siver_panel_last_error_message": "",
-                }
-                with open(self.CONFIG_FILE, "w", encoding="utf-8") as f:
-                    json.dump(base_config, f, ensure_ascii=False, indent=4)
+                base_config = dict(config_defaults.DEFAULT_CONFIG)
+                _get_config_store(self.CONFIG_FILE).write(base_config)
                 log(message=f"已创建默认配置文件：\n{os.path.abspath(self.CONFIG_FILE)}\n请根据需求修改配置后重启")
         except Exception as e:
             log(level="ERROR", message="创建默认配置文件失败，请检查配置文件！" + str(e))
+            # 同 load_config：不永久卡死，每 30 秒重试，磁盘恢复后自动继续
             while True:
-                time.sleep(100)
+                time.sleep(30)
+                try:
+                    _get_config_store(self.CONFIG_FILE).write(dict(config_defaults.DEFAULT_CONFIG))
+                    log(message="默认配置文件已创建，继续启动")
+                    break
+                except Exception:
+                    continue
 
     def save_config(self):
-        """将当前 self.config 字典持久化写回 config.json"""
+        """把**改动过的字段**提交给 ConfigStore（不再整份内存快照写回）。
+
+        原来直接写 self.config：bot 内存里是启动时的快照，面板刚保存的改动
+        会被整份覆盖回去。现在只提交与"最近一次加载"不同的键，
+        由 ConfigStore 在路径锁内合并到磁盘现值上，两边的改动都不会丢。
+
+        :return: True=已落盘（或无改动）；False=写盘失败。
+                 调用方必须据此决定要不要报"已完成"，不能再无条件报成功。
+        """
         try:
-            with open(self.CONFIG_FILE, 'w', encoding='utf-8') as file:
-                json.dump(self.config, file, ensure_ascii=False, indent=4)
+            patch = {
+                k: v for k, v in self.config.items()
+                if k not in self._loaded_snapshot or self._loaded_snapshot[k] != v
+            }
+            removed = [k for k in self._loaded_snapshot if k not in self.config]
+            if not patch and not removed:
+                return True
+            merged, _rev = _get_config_store(self.CONFIG_FILE).update(patch, delete=removed)
+            # 同步回内存，保持"快照 == 磁盘现状"，下一次差异计算才准确
+            self.config = merged
+            self._loaded_snapshot = copy.deepcopy(merged)
+            return True
         except Exception as e:
             log(level="ERROR", message="保存配置文件失败:" + str(e))
+            return False
 
     def refresh_config(self):
-        """重新加载配置文件，并将最新值同步到所有属性"""
+        """重新加载配置文件，并将最新值同步到所有属性。
+
+        ⚠ 只覆盖"立即生效"的字段。默认 API 客户端与监听/定时任务注册不在这里，
+          运行中的应用入口是 WXBot.apply_config()，约定见 config_apply.py。
+        """
         self.load_config()
         self.update_global_config()
 
@@ -547,31 +680,30 @@ class WXBotConfig:
     # ----------------------------------------------------------
 
     def update_global_config(self):
-        """将 self.config 字典中的各配置项同步到对应实例属性"""
-        # AI 接口列表（新格式）
-        # 旧配置迁移：若 api_configs 不存在则从旧字段迁移并立即写回
-        if 'api_configs' not in self.config and 'api_sdk' in self.config:
-            self.config['api_configs'] = [
-                {
-                    'sdk':   self.config.get('api_sdk', ''),
-                    'key':   self.config.get('api_key', ''),
-                    'url':   self.config.get('base_url', ''),
-                    'model': self.config.get('model1', ''),
-                    'fallback_api_index': -1,
-                },
-                {
-                    'sdk':   self.config.get('api_sdk', ''),
-                    'key':   self.config.get('api_key', ''),
-                    'url':   self.config.get('base_url', ''),
-                    'model': self.config.get('model2', ''),
-                    'fallback_api_index': -1,
-                },
-            ]
-            self.config['api_index'] = 0
-            for old_key in ('api_sdk', 'api_key', 'base_url', 'model1', 'model2', 'api_sdk_list'):
-                self.config.pop(old_key, None)
+        """把 self.config 里的每个配置键同步到实例属性（运行期只读属性，不再读字典）。
+
+        本函数是「配置键 → 运行行为」的唯一映射点，按配置域分段，每段用
+        `# --- xxx ---` 标注。新增字段时在对应段里加一行 self.xxx = self.config.get(...)。
+
+        ⚠ 三个必须知道的既有行为：
+          1. 部分字段调用 self.config.get('键') 时不给默认值（如 AllListen_switch /
+             group_switch / group_welcome），配置缺键时属性是 None 而不是 False。
+             新增字段请显式给默认值。
+          2. 数值字段已统一改用 _coerce_int_range()（类型转换 + 区间钳位）。
+             仅剩 3 处直接 int()：api_index、chat_image_recognition_api、
+             group_image_recognition_api，三者自带 try/except 与越界回退，可安全保留。
+             注意调用方 run_bot() 线程没有 except，任何未捕获异常都只表现为
+             「机器人启动后立刻变成未运行」。
+          3. 函数内部会主动写盘（旧格式迁移、补默认值），老配置文件首次启动会被重写一次。
+        """
+        # --- AI 接口列表（新格式）与旧格式迁移 ---
+        # 迁移 + 默认值 + 规范化统一走 config_defaults.prepare（幂等、新字段优先），
+        # 与面板 /dashboard 是同一份实现，保证两条入口结果一致。
+        _before_migrate = dict(self.config)
+        config_defaults.prepare(self.config)
+        if self.config != _before_migrate:
             self.save_config()
-            log(message="旧 API 配置已自动迁移为新格式并保存")
+            log(message="旧配置已迁移/规范化并补齐默认值，已写回配置文件")
 
         _api_configs = self.config.get('api_configs', [
             {"sdk": "", "key": "", "url": "", "model": "", "fallback_api_index": -1},
@@ -601,7 +733,7 @@ class WXBotConfig:
             self.save_config()
             log(message="接口名称已自动更新：OpenAI SDK → OpenAI API 格式兼容接口")
 
-        # 从当前接口配置派生兼容属性（供 AI 接口类使用）
+        # --- 从当前接口派生兼容属性（api_sdk / api_key / base_url / model1）---
         _cur = self.api_configs[self.api_index] if self.api_configs else {}
         self.api_sdk  = _cur.get('sdk', '')
         self.api_key  = _cur.get('key', '')
@@ -609,7 +741,7 @@ class WXBotConfig:
         self.model1   = _cur.get('model', '')
         self.prompt   = self.config.get('prompt', "")
 
-        # 微信基础配置
+        # --- 微信基础配置（管理员 / 监听名单 / 全局监听模式）---
         self.cmd            = self.config.get('admin', "")
         self.listen_list          = self.config.get('listen_list', [])
         self.AllListen_switch     = self.config.get('AllListen_switch')
@@ -637,7 +769,7 @@ class WXBotConfig:
                 WxParam.SPECIAL_SESSION_NAME.append(_session_name)
                 _CONFIG_SPECIAL_SESSION_NAMES.add(_session_name)
 
-        # 群聊配置
+        # --- 群聊配置 ---
         self.group                = self.config.get('group', [])
         self.group_api_map        = self.config.get('group_api_map', {})
         self.group_switch         = self.config.get('group_switch')
@@ -647,14 +779,14 @@ class WXBotConfig:
         self.group_reply_quote    = bool(self.config.get('group_reply_quote', False))
         self.group_welcome        = self.config.get('group_welcome')
         self.group_welcome_random = self.config.get('group_welcome_random')
-        self.group_welcome_msg    = self.config.get('group_welcome_msg', '')
+        self.group_welcome_msg    = self.config.get('group_welcome_msg', '欢迎新朋友！请先查看群公告！')
 
-        # 新好友配置
-        self.new_frined_switch       = self.config.get('new_friend_switch')
-        self.new_frien_reply_switch  = self.config.get('new_friend_reply_switch', False)
-        self.new_frien_msg           = self.config.get('new_friend_msg', [])
-        self.new_friend_check_min    = max(60, int(self.config.get('new_friend_check_min', 60)))
-        self.new_friend_check_max    = min(3600, max(self.new_friend_check_min, int(self.config.get('new_friend_check_max', 300))))
+        # --- 新好友配置（自动通过 / 自动回复 / 备注规则）---
+        self.new_friend_switch       = self.config.get('new_friend_switch')
+        self.new_friend_reply_switch  = self.config.get('new_friend_reply_switch', False)
+        self.new_friend_msg           = self.config.get('new_friend_msg', [])
+        self.new_friend_check_min    = self._coerce_int_range(self.config.get('new_friend_check_min'), 60, 60, 3600)
+        self.new_friend_check_max    = self._coerce_int_range(self.config.get('new_friend_check_max'), 300, self.new_friend_check_min, 3600)
         self.new_friend_remark_use_nickname = bool(self.config.get('new_friend_remark_use_nickname', True))
         self.new_friend_remark_prefix = self.config.get('new_friend_remark_prefix', '')
         self.new_friend_remark_prefix_timestamp = bool(self.config.get('new_friend_remark_prefix_timestamp', False))
@@ -662,7 +794,7 @@ class WXBotConfig:
         self.new_friend_remark_suffix_timestamp = bool(self.config.get('new_friend_remark_suffix_timestamp', False))
         self.new_friend_tags         = self.config.get('new_friend_tags', [])
 
-        # 关键词配置
+        # --- 关键词回复配置 ---
         self.chat_keyword_switch   = self.config.get('chat_keyword_switch')
         self.group_keyword_switch  = self.config.get('group_keyword_switch')
         self.group_keyword_at_only = self.config.get('group_keyword_at_only', False)
@@ -673,25 +805,25 @@ class WXBotConfig:
         self.group_keyword_reply_at_msg = bool(self.config.get('group_keyword_reply_at_msg', False))
         self.keyword_dict          = self.config.get('keyword_dict', {})
 
-        # 定时消息配置
+        # --- 定时消息配置 ---
         self.scheduled_msg_switch = self.config.get('scheduled_msg_switch',
                                                      self.config.get('everyday_msg_switch', False))
         self.scheduled_msg_list   = self.config.get('scheduled_msg_list', [])
 
-        # 随机定时消息配置
+        # --- 随机定时消息配置 ---
         self.random_msg_switch = self.config.get('random_msg_switch', False)
         self.random_msg_list   = self.config.get('random_msg_list', [])
 
-        # 定时朋友圈配置
+        # --- 定时朋友圈配置 ---
         self.scheduled_moments_switch = self.config.get('scheduled_moments_switch', False)
         self.scheduled_moments_list   = self.config.get('scheduled_moments_list', [])
 
-        # 随机朋友圈点赞配置
+        # --- 随机朋友圈点赞配置 ---
         self.moments_like_switch = self.config.get('moments_like_switch', False)
-        self.moments_like_min    = max(1,    int(self.config.get('moments_like_min', 60)))
-        self.moments_like_max    = max(self.moments_like_min, int(self.config.get('moments_like_max', 120)))
+        self.moments_like_min    = self._coerce_int_range(self.config.get('moments_like_min'), 60, 1, 1440)
+        self.moments_like_max    = self._coerce_int_range(self.config.get('moments_like_max'), 120, self.moments_like_min, 1440)
 
-        # 随机定时朋友圈配置
+        # --- 随机定时朋友圈配置 ---
         self.random_moments_switch = self.config.get('random_moments_switch', False)
         self.random_moments_list   = self.config.get('random_moments_list', [])
 
@@ -723,25 +855,18 @@ class WXBotConfig:
             self.save_config()
             log(message="已自动迁移定时消息发送目标格式 target -> targets 并写回配置文件")
 
-        # 对话记忆配置
+        # --- 对话记忆配置 ---
         self.memory_switch        = self.config.get('memory_switch', True)
-        self.memory_max_count     = int(self.config.get('memory_max_count', 3000))
-        self.memory_context_count = int(self.config.get('memory_context_count', 1000))
+        self.memory_max_count     = self._coerce_int_range(self.config.get('memory_max_count'), 3000, 1, 99999)
+        self.memory_context_count = self._coerce_int_range(self.config.get('memory_context_count'), 1000, 1, 99999)
 
-        # 发送延迟配置（若旧配置文件中不存在则自动补写默认值）
-        _delay_defaults = {'reply_delay_switch': True, 'reply_delay_min': 1, 'reply_delay_max': 5}
-        _needs_save = any(k not in self.config for k in _delay_defaults)
-        for k, v in _delay_defaults.items():
-            self.config.setdefault(k, v)
-        if _needs_save:
-            self.save_config()
-            log(message="已自动补充发送延迟配置默认值并写回配置文件")
+        # --- 发送延迟配置（缺键已由上面的 apply_defaults 统一补齐）---
         self.reply_delay_switch = bool(self.config.get('reply_delay_switch', True))
-        self.reply_delay_min    = max(1, int(self.config.get('reply_delay_min', 1)))
-        self.reply_delay_max    = max(1, int(self.config.get('reply_delay_max', 5)))
+        self.reply_delay_min    = self._coerce_int_range(self.config.get('reply_delay_min'), 1, 1, 3600)
+        self.reply_delay_max    = self._coerce_int_range(self.config.get('reply_delay_max'), 5, 1, 3600)
         self.clean_ai_reply_switch = bool(self.config.get('clean_ai_reply_switch', True))
 
-        # 图片识别配置
+        # --- 图片识别配置 ---
         self.chat_image_recognition_switch  = bool(self.config.get('chat_image_recognition_switch', False))
         try:
             self.chat_image_recognition_api = int(self.config.get('chat_image_recognition_api', 0))
@@ -757,11 +882,11 @@ class WXBotConfig:
         if self.group_image_recognition_api < 0 or self.group_image_recognition_api >= len(self.api_configs):
             self.group_image_recognition_api = 0
 
-        # 自定义转发配置
+        # --- 自定义转发配置 ---
         self.custom_forward_switch = bool(self.config.get('custom_forward_switch', False))
         self.custom_forward_list   = self.config.get('custom_forward_list', [])
 
-        # 多 Prompt 配置
+        # --- 多 Prompt 配置（含 prompt 目录初始化）---
         self.default_prompt   = self.config.get('default_prompt', '默认')
         self.chat_prompt_map  = self.config.get('chat_prompt_map', {})
         self.chat_api_map     = self.config.get('chat_api_map', {})
@@ -771,60 +896,51 @@ class WXBotConfig:
         self.group_prompt_map = self.config.get('group_prompt_map', {})
         self.init_prompt_dir()
 
-        # 接口调用失败时的固定回复
+        # --- 接口调用失败时的固定回复 ---
         self.api_error_reply = self.config.get('api_error_reply', '在忙，我稍后回复您')
         self.api_error_reply_once = bool(self.config.get('api_error_reply_once', False))
 
-        # 单用户最大回复轮数限制配置
+        # --- 单用户最大回复轮数限制配置 ---
         self.chat_max_round_switch = bool(self.config.get('chat_max_round_switch', False))
         self.chat_max_round_default = self._coerce_int_range(self.config.get('chat_max_round_default', 99), 99, 1, 99999)
         self.chat_max_round_reset_days = self._coerce_int_range(self.config.get('chat_max_round_reset_days', 0), 0, 0, 365)
         self.chat_max_round_reply = self.config.get('chat_max_round_reply', '')
         self.chat_max_round_reply_once = bool(self.config.get('chat_max_round_reply_once', False))
 
-        # 拆分多条回复配置
+        # --- 拆分多条回复配置 ---
         self.chat_split_reply_switch  = bool(self.config.get('chat_split_reply_switch', False))
-        self.chat_split_max_chars     = max(1, int(self.config.get('chat_split_max_chars', 100)))
-        self.chat_split_max_count     = max(1, int(self.config.get('chat_split_max_count', 4)))
+        self.chat_split_max_chars     = self._coerce_int_range(self.config.get('chat_split_max_chars'), 100, 1, 99999)
+        self.chat_split_max_count     = self._coerce_int_range(self.config.get('chat_split_max_count'), 4, 1, 999)
         self.group_split_reply_switch = bool(self.config.get('group_split_reply_switch', False))
-        self.group_split_max_chars    = max(1, int(self.config.get('group_split_max_chars', 100)))
-        self.group_split_max_count    = max(1, int(self.config.get('group_split_max_count', 4)))
-        _siver_panel_defaults = {
-            'siver_panel_enabled': False,
-            'siver_panel_activation_code': '',
-            'siver_panel_slug': '',
-            'siver_panel_install_id': '',
-            'siver_panel_machine_fingerprint': '',
-            'siver_panel_device_id': '',
-            'siver_panel_device_secret': '',
-            'siver_panel_base_url': 'https://panel.siver.top',
-            'siver_panel_ws_url': 'wss://panel.siver.top/relay/ws',
-            'siver_panel_panel_url': '',
-            'siver_panel_service_expire_at': '',
-            'siver_panel_last_error_code': '',
-            'siver_panel_last_error_message': '',
-        }
-        _siver_panel_needs_save = any(k not in self.config for k in _siver_panel_defaults)
-        if self.config.get('siver_panel_base_url') == 'https://wxbot-panel.siverking.online':
-            self.config['siver_panel_base_url'] = 'https://panel.siver.top'
-            _siver_panel_needs_save = True
-        if self.config.get('siver_panel_ws_url') == 'wss://wxbot-panel.siverking.online/relay/ws':
-            self.config['siver_panel_ws_url'] = 'wss://panel.siver.top/relay/ws'
-            _siver_panel_needs_save = True
-        for k, v in _siver_panel_defaults.items():
-            self.config.setdefault(k, v)
-        if _siver_panel_needs_save:
-            self.save_config()
-            log(message='已自动补充 SiverPanel 远程访问配置默认值')
+        self.group_split_max_chars    = self._coerce_int_range(self.config.get('group_split_max_chars'), 100, 1, 99999)
+        self.group_split_max_count    = self._coerce_int_range(self.config.get('group_split_max_count'), 4, 1, 999)
+
+        # --- 多条消息缓冲合并回复配置 ---
+        self.merge_reply_switch    = bool(self.config.get('merge_reply_switch', False))
+        self.merge_reply_window    = self._coerce_int_range(self.config.get('merge_reply_window'), 5, 1, 300)
+        self.merge_reply_max_count = self._coerce_int_range(self.config.get('merge_reply_max_count'), 10, 1, 100)
+        # --- SiverPanel 远程访问配置 ---
+        # 缺键与旧域名迁移都已由上面的 config_defaults.migrate / apply_defaults 统一处理
 
         log(message="全局配置更新完成")
 
     def set_config(self, id, new_content):
-        """修改指定配置项并保存"""
+        """修改指定配置项并保存。
+
+        :return: True=已落盘；False=写盘失败（调用方不得再报"已完成"）。
+        """
         self.config[id] = new_content
-        self.save_config()
+        if not self.save_config():
+            self._mark_save_failed(id)
+            return False
         self.refresh_config()
         log(message=id + "已更改为:" + str(self.config[id]))
+        return True
+
+    def _mark_save_failed(self, key):
+        """记录一次保存失败；管理员命令收尾时会据此如实提示。"""
+        self.save_failed = True
+        log(level="ERROR", message=f"{key} 保存失败，本次修改未写入配置文件")
 
     # ----------------------------------------------------------
     # 监听用户管理
@@ -834,7 +950,8 @@ class WXBotConfig:
         """将用户添加到监听列表（白名单/黑名单）"""
         if name not in self.config.get('listen_list', []):
             self.config['listen_list'].append(name)
-            self.save_config()
+            if not self.save_config():
+                self._mark_save_failed('listen_list')
             self.refresh_config()
             log(message="添加后的监听用户列表:" + str(self.config['listen_list']))
         else:
@@ -844,7 +961,8 @@ class WXBotConfig:
         """从监听列表中删除指定用户"""
         if name in self.listen_list:
             self.config['listen_list'].remove(name)
-            self.save_config()
+            if not self.save_config():
+                self._mark_save_failed('listen_list')
             self.refresh_config()
             log(message="删除后的监听用户列表:" + str(self.config['listen_list']))
         else:
@@ -858,7 +976,8 @@ class WXBotConfig:
         """将群组添加到监听列表"""
         if name not in self.config.get('group', []):
             self.config['group'].append(name)
-            self.save_config()
+            if not self.save_config():
+                self._mark_save_failed('group')
             self.refresh_config()
             log(message="添加后的监听群组列表:" + str(self.config['group']))
         else:
@@ -868,7 +987,8 @@ class WXBotConfig:
         """从监听列表中删除指定群组"""
         if name in self.config.get('group', []):
             self.config['group'].remove(name)
-            self.save_config()
+            if not self.save_config():
+                self._mark_save_failed('group')
             self.refresh_config()
             log(message="删除后的监听群组列表:" + str(self.config['group']))
         else:
@@ -877,19 +997,14 @@ class WXBotConfig:
     def set_group_switch(self, switch_value):
         """设置群机器人总开关"""
         self.config['group_switch'] = switch_value
-        self.save_config()
+        if not self.save_config():
+            self._mark_save_failed('group_switch')
         self.refresh_config()
         log(message="群开关设置为" + str(self.config['group_switch']))
 
     # ----------------------------------------------------------
     # 工具方法（静态）
     # ----------------------------------------------------------
-
-    @staticmethod
-    def now_time(time_format="%Y/%m/%d %H:%M:%S "):
-        """获取当前时间字符串（当前暂由公共 log 模块显示时间，此处返回空串）"""
-        return ""  # 暂时采用公共类的 log 显示时间
-        return datetime.now().strftime(time_format)
 
     @staticmethod
     def split_long_text(text, chunk_size=2000):
@@ -942,202 +1057,27 @@ class WXBotConfig:
 
 # ============================================================
 # 对话记忆管理类
+#
+# ⚠ 记忆目录归属规则、会话锁、旧目录迁移的实现全部在 memory_store.py 里，
+#   面板（web_server.py）也导入同一份实现。这里只做转发导入，
+#   不允许再在本文件里另写一套路径规则（两边规则不一致会导致
+#   「面板看到的」和「机器人写的」对不上）。
 # ============================================================
 
-class MemoryManager:
-    """
-    对话记忆管理类
-    按窗口分文件存储收发消息，并在 AI 请求时提供历史上下文。
-    存储路径：{base_path}/{wx_id}/{storage_name}/{storage_name}_memory.json
-    """
-
-    WINDOWS_RESERVED_NAMES = {
-        "CON", "PRN", "AUX", "NUL",
-        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
-    }
-    INVALID_FILENAME_CHARS_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
-
-    def __init__(self, wx_id, base_path):
-        self.wx_id     = wx_id
-        self.base_path = base_path  # 根目录：{base_dir}/memory/
-        self._locks    = {}         # chat_name -> threading.Lock()
-
-    def _get_lock(self, chat_name):
-        if chat_name not in self._locks:
-            self._locks[chat_name] = threading.Lock()
-        return self._locks[chat_name]
-
-    @classmethod
-    def _is_windows_reserved_name(cls, name):
-        stem = name.split('.', 1)[0].upper()
-        return stem in cls.WINDOWS_RESERVED_NAMES
-
-    @staticmethod
-    def _hash_storage_name(name):
-        raw_name = str(name)
-        return "hash" + hashlib.sha256(raw_name.encode('utf-8')).hexdigest()
-
-    @classmethod
-    def _resolve_storage_name(cls, chat_name):
-        """
-        将微信窗口名转换为 Windows 可用的目录/文件名前缀。
-        非法符号直接剔除；剔除后为空或仍不适合作为 Windows 名称时使用 hash 前缀兜底。
-        """
-        raw_name = str(chat_name)
-        storage_name = cls.INVALID_FILENAME_CHARS_RE.sub('', raw_name)
-        storage_name = storage_name.strip().rstrip('. ')
-        if (
-            not storage_name
-            or storage_name in ('.', '..')
-            or cls._is_windows_reserved_name(storage_name)
-            or len(storage_name) > 120
-        ):
-            return cls._hash_storage_name(raw_name), True
-        return storage_name, storage_name != raw_name
-
-    @staticmethod
-    def _write_original_name(dir_path, chat_name):
-        name_path = os.path.join(dir_path, 'name.json')
-        try:
-            with open(name_path, 'w', encoding='utf-8') as f:
-                json.dump({"name": str(chat_name)}, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            log(level="WARNING", message=f"写入记忆原始名称记录失败: {e}")
-
-    def _get_memory_path(self, chat_name):
-        """返回记忆文件路径，并确保目录存在"""
-        storage_name, should_write_name = self._resolve_storage_name(chat_name)
-        dir_path = os.path.join(self.base_path, self.wx_id, storage_name)
-        os.makedirs(dir_path, exist_ok=True)
-        if should_write_name:
-            self._write_original_name(dir_path, chat_name)
-        return os.path.join(dir_path, f"{storage_name}_memory.json")
-
-    @staticmethod
-    def _normalize_message_time(message_time=None):
-        """将外部传入的时间统一转成记忆文件使用的字符串格式。"""
-        if isinstance(message_time, datetime):
-            return message_time.strftime("%Y/%m/%d %H:%M:%S")
-        if isinstance(message_time, str):
-            message_time = message_time.strip()
-            if message_time:
-                return message_time
-        return datetime.now().strftime("%Y/%m/%d %H:%M:%S")
-
-    @staticmethod
-    def _parse_message_time(message_time):
-        """解析记忆时间字符串；解析失败时返回 None，避免影响主流程。"""
-        if not message_time:
-            return None
-        try:
-            return datetime.strptime(str(message_time), "%Y/%m/%d %H:%M:%S")
-        except Exception:
-            return None
-
-    def _append_message_in_order(self, messages, entry, recent_count=5):
-        """在最近 recent_count 条范围内按时间插入，修正回调并发导致的乱序写入。"""
-        current_dt = self._parse_message_time(entry.get("time"))
-        if current_dt is None or not messages:
-            messages.append(entry)
-            return messages
-
-        recent_start = max(0, len(messages) - recent_count)
-        recent_messages = messages[recent_start:]
-        has_later_recent = False
-        for item in recent_messages:
-            item_dt = self._parse_message_time(item.get("time"))
-            if item_dt and item_dt > current_dt:
-                has_later_recent = True
-                break
-
-        if not has_later_recent:
-            messages.append(entry)
-            return messages
-
-        # 只重排尾部最近几条，既能修正本次乱序，也避免每次写入都全量排序。
-        sortable_recent = []
-        for idx, item in enumerate(recent_messages):
-            item_dt = self._parse_message_time(item.get("time")) or datetime.max
-            sortable_recent.append((item_dt, idx, item))
-        sortable_recent.append((current_dt, len(recent_messages), entry))
-        sortable_recent.sort(key=lambda x: (x[0], x[1]))
-        messages[recent_start:] = [item for _, _, item in sortable_recent]
-        return messages
-
-    def save_message(self, chat_name, sender, content, msg_type, msg_attr, max_count, message_time=None):
-        """写入一条消息到记忆文件，超出 max_count 时删除最旧的"""
-        path  = self._get_memory_path(chat_name)
-        entry_time = self._normalize_message_time(message_time)
-        entry = {
-            "time":    entry_time,
-            "type":    str(msg_type),
-            "attr":    str(msg_attr),
-            "sender":  str(sender),
-            "content": str(content),
-        }
-        with self._get_lock(chat_name):
-            if os.path.exists(path):
-                try:
-                    with open(path, 'r', encoding='utf-8') as f:
-                        messages = json.load(f)
-                    if not isinstance(messages, list):
-                        messages = []
-                except Exception:
-                    messages = []
-            else:
-                messages = []
-            messages = self._append_message_in_order(messages, entry, recent_count=5)
-            if len(messages) > max_count:
-                messages = messages[-max_count:]
-            with open(path, 'w', encoding='utf-8') as f:
-                json.dump(messages, f, ensure_ascii=False, indent=2)
-
-    def get_messages(self, chat_name, count):
-        """读取最近 count 条记忆，返回 list"""
-        path = self._get_memory_path(chat_name)
-        if not os.path.exists(path):
-            return []
-        try:
-            with open(path, 'r', encoding='utf-8') as f:
-                messages = json.load(f)
-            if isinstance(messages, list):
-                return messages[-count:]
-        except Exception:
-            pass
-        return []
-
-    def clear_messages(self, chat_name):
-        """清空指定会话的对话记忆"""
-        path = self._get_memory_path(chat_name)
-        with self._get_lock(chat_name):
-            try:
-                with open(path, 'w', encoding='utf-8') as f:
-                    json.dump([], f, ensure_ascii=False)
-            except Exception:
-                pass
-
-    def clear_all_messages(self):
-        """清空所有会话的对话记忆，返回清除的会话数"""
-        count = 0
-        base = os.path.join(self.base_path, self.wx_id)
-        if not os.path.exists(base):
-            return count
-        for chat_dir in os.listdir(base):
-            memory_file = os.path.join(base, chat_dir, f"{chat_dir}_memory.json")
-            if os.path.exists(memory_file):
-                try:
-                    with open(memory_file, 'w', encoding='utf-8') as f:
-                        json.dump([], f, ensure_ascii=False)
-                    count += 1
-                except Exception:
-                    pass
-        return count
+from memory_store import (                       # noqa: E402  (放在此处便于阅读)
+    MemoryManager,
+    LegacyMigration,
+    resolve_storage_key,
+    read_original_name,
+    is_storage_key,
+    get_memory_manager,
+)
 
 
 # ============================================================
 # 回复计数器管理类
 # ============================================================
+
 
 class ReplyCountStore:
     """
@@ -1148,6 +1088,7 @@ class ReplyCountStore:
     DEFAULT_DATA = {"meta": {"last_reset_date": ""}, "users": {}}
 
     def __init__(self, file_path):
+        """加载计数文件，并建立进程内可重入锁（保护多线程读改写）。"""
         self.file_path = file_path
         self._lock = threading.RLock()
         self.data = self._load()
@@ -1288,11 +1229,22 @@ class ReplyCountStore:
             return True
 
     @staticmethod
-    def was_send_success(result):
+    def was_send_success(result, none_is_success=False):
+        """判断一次发送是否算成功。
+
+        :param none_is_success: 是否把 ``None`` 当作成功。
+            wxautox 的 ``SendFiles`` 经常"发成功了也没有返回值"（返回 None），
+            这些调用点显式传 True。
+            ⚠ 默认值必须是 False、不能全局放宽：本文件里 ``result = None`` 同时被当作
+            "发送抛异常"的哨兵值（例如异常分支 ``result = None; send_aborted = True``），
+            全局把 None 当成功，会把真正的发送异常计成成功。
+        """
         if result is True:
             return True
-        if result is False or result is None:
+        if result is False:
             return False
+        if result is None:
+            return bool(none_is_success)
         if isinstance(result, dict):
             status = str(result.get("status", "")).lower()
             if status in ("success", "ok", "true", "成功"):
@@ -1317,19 +1269,86 @@ class ReplyCountStore:
             return str(result)
 
 
+class SendOutcome(dict):
+    """
+    一次发送（可能含多段）的统一结果。
+
+    与 wxautox4 的 WxResponse 同构：dict 形态（status / message / data），
+    且只有“成功”状态为真。这样 ReplyCountStore.was_send_success()、
+    ReplyCountStore.send_result_message() 以及回调里的 if not result
+    都能原样消费，不需要改动既有消费方。
+
+    状态取值：成功 = 全部段成功；部分成功 = 至少一段成功且有失败段；
+              失败 = 全部段都没发出去。
+    """
+
+    def __init__(self, status="成功", message=None, data=None):
+        super().__init__(status=status, message=message, data=data)
+
+    def __bool__(self):
+        return self["status"] == "成功"
+
+    @classmethod
+    def success(cls, message=None, data=None):
+        return cls("成功", message, data)
+
+    @classmethod
+    def partial(cls, message=None, data=None):
+        return cls("部分成功", message, data)
+
+    @classmethod
+    def failure(cls, message="", data=None):
+        return cls("失败", message, data)
+
+
+class _MergedMessage:
+    """合并缓冲 flush 时传给 process_message 的合成消息对象。
+
+    只提供下游真正读取的字段（content / sender / type / merged_image）；
+    其余属性（quote 等）代理给最后一条真实消息，所以合并后的消息仍然可以引用、
+    @，不会"引用失败就降级"。
+    """
+
+    def __init__(self, content, sender, msg_type, merged_image, last_msg):
+        self.content      = content
+        self.sender       = sender
+        self.type         = msg_type
+        self.merged_image = merged_image
+        # 用 __dict__ 存，避免 __getattr__ 在属性缺失时递归
+        self.__dict__['_last_msg'] = last_msg
+
+    def quote(self, *args, **kwargs):
+        return self.__dict__['_last_msg'].quote(*args, **kwargs)
+
+    def __getattr__(self, name):
+        # 只在正常属性查不到时触发（如 attr / id / download）
+        return getattr(self.__dict__['_last_msg'], name)
+
+
 # ============================================================
 # AI 接口类
 # ============================================================
+
+# ----------------------------------------------------------
+# UnconfiguredAPI：未配置接口时的占位实现（保证非 AI 功能可用）
+# ----------------------------------------------------------
+
 
 class UnconfiguredAPI:
     """未配置 AI 接口时的轻量占位实现，保证非 AI 功能可以正常运行。"""
 
     def __init__(self, config):
+        """只取 model1 作为展示用的模型名，不建立任何客户端连接。"""
         self.DS_NOW_MOD = getattr(config, 'model1', '') or ''
 
     def chat(self, *args, **kwargs):
         log(level="WARNING", message="未配置 API 接口，已跳过 AI 调用")
         return "API返回错误，请稍后再试"
+
+
+# ----------------------------------------------------------
+# OpenAIAPI：OpenAI API 格式兼容接口（DeepSeek / 通义 等）
+# ----------------------------------------------------------
 
 
 class OpenAIAPI:
@@ -1339,6 +1358,7 @@ class OpenAIAPI:
     """
 
     def __init__(self, config):
+        """按配置建立 OpenAI 兼容客户端（含超时与自定义 headers）。"""
         self.config = config
         self.DS_NOW_MOD = config.model1  # 当前使用的模型，默认为 model1
         # 添加更详细的日志配置和自定义 headers（用于备用方案）
@@ -1562,6 +1582,11 @@ class OpenAIAPI:
             return "API返回错误，请稍后再试"
 
 
+# ----------------------------------------------------------
+# DifyAPI：Dify 对话工作流（HTTP 接口）
+# ----------------------------------------------------------
+
+
 class DifyAPI:
     """
     Dify 平台 API 封装类
@@ -1569,6 +1594,7 @@ class DifyAPI:
     """
 
     def __init__(self, config):
+        """准备 Dify 请求参数；model1 在 Dify 中填工作流 / 应用的 ID。"""
         self.config = config
         self.DS_NOW_MOD = config.model1             # 当前模型标识（Dify 中通常为工作流 ID）
         self.api_key = "Bearer " + config.api_key   # Dify 使用 Bearer Token 鉴权
@@ -1694,6 +1720,11 @@ class DifyAPI:
             return {"success": False, "error": error_info}
 
 
+# ----------------------------------------------------------
+# CozeAPI：扣子平台（官方 cozepy SDK 流式对话）
+# ----------------------------------------------------------
+
+
 class CozeAPI:
     """
     扣子（Coze）平台 API 封装类
@@ -1701,6 +1732,7 @@ class CozeAPI:
     """
 
     def __init__(self, config):
+        """准备扣子请求参数；model1 填机器人 ID（从 Coze 页面 URL 末尾复制）。"""
         self.config = config
         self.DS_NOW_MOD = config.model1             # 当前模型标识
         self.bot_id     = config.model1             # Coze 机器人 ID（从页面 URL 末尾复制）
@@ -1761,6 +1793,11 @@ class CozeAPI:
             return "API返回错误，请稍后再试"
 
 
+# ----------------------------------------------------------
+# DusAPI：按模型名自动切换协议（claude → Anthropic / gpt → OpenAI）
+# ----------------------------------------------------------
+
+
 class DusAPI:
     """
     DusAPI 兼容接口封装类
@@ -1770,6 +1807,7 @@ class DusAPI:
     """
 
     def __init__(self, config):
+        """准备 DusAPI 请求参数；具体走哪套协议在 chat() 里按模型名判定。"""
         self.config = config
         self.DS_NOW_MOD = config.model1
         self.api_key = config.api_key
@@ -2192,17 +2230,42 @@ class DusAPI:
 # 微信机器人主类
 # ============================================================
 
+
 class WXBot:
     """
     微信机器人主类
     整合配置管理、AI 接口、微信监听、消息处理、命令分发等核心功能。
     """
 
-    def __init__(self):
+    def __init__(self, stop_event=None):
+        """装配机器人：加载配置、初始化默认 AI 客户端、准备运行期统计字段。
+
+        :param stop_event: 外部（面板的 BotLifecycle）持有的停止信号。
+            面板停止机器人时先置这个 Event、再调 stop_wxbot()；直接运行本文件
+            （python wxbot_core.py）时不传，自动新建一份，行为不变。
+
+        ⚠ 本构造会调用 WXBotConfig() → update_global_config()，后者抛异常时本构造
+          也会失败；面板侧由 bot_lifecycle 的线程体统一捕获并记录，不再静默死亡。
+        """
         self.ver      = version
         self.ver_log  = version_log
+        # 停止信号：面板/定时/生命周期"请求停止"时置位。初始化期间也必须能收到信号，
+        # 因此这里先建好，绝不等到主循环才开始关心停止。
+        self._stop_event = stop_event if stop_event is not None else threading.Event()
         self.run_flag = True                    # 主循环运行标志
+        # 保护 _listening_started：停止可能来自 Flask 请求线程，而初始化/收尾在机器人线程，
+        # 两边会并发读写这个标志。
+        self._wx_lock = threading.Lock()
+        self._listening_started = False         # wxautox 监听器是否已启动（决定收尾要不要 StopListening）
         self.config   = WXBotConfig()           # 加载配置
+
+        # 本实例专属的定时任务调度器
+        #
+        # ⚠ 绝不能用 schedule 的模块级全局调度器：它是进程级的，旧实例停止后
+        #   任务仍留在全局注册表里（清理只在对应开关打开时才做），新实例的
+        #   run_pending() 会照样执行这些任务，而它们绑定的是已经停掉的旧实例。
+        #   每个机器人实例一个 Scheduler，停止时 clear() 自己的任务，互不影响。
+        self.scheduler = schedule.Scheduler()
 
         # 根据配置中的 api_sdk 字段选择对应的 AI 接口
         self.api = self._init_api()
@@ -2223,6 +2286,12 @@ class WXBot:
         self.msg_replied_count   = 0            # 已回复消息数
         self.last_msg_time       = None         # 最近一条消息的时间字符串
         self.last_msg_sender     = None         # 最近一条消息的发送者
+
+        # 多条消息缓冲合并：key=(窗口名, 发送人) -> 缓冲项。
+        # ⚠ 群聊必须按发送人分开，否则群里 A、B 同时说话会被拼成一条，AI 张冠李戴。
+        # ⚠ flush 只在主循环线程里做（_check_merge_buffers），绝不新开线程碰 wxautox。
+        self._merge_buffers = {}
+        self._merge_lock    = threading.Lock()
 
         # 私聊回复轮数计数器
         _base = os.path.dirname(sys.executable) if hasattr(sys, '_MEIPASS') else os.path.abspath(".")
@@ -2414,22 +2483,17 @@ class WXBot:
         """
         记录错误信息并发送告警通知。
 
-        :param id:  错误标题（邮件主题）
+        本地记录（print + log）仍是同步的；告警（邮件 / Webhook）改为异步：
+        只把内容放进有界队列后立即返回，由后台单线程串行发送 —— 本方法会在
+        wxautox 回调线程与主循环里被调用，同步发网络请求会卡住它们。
+
+        :param id:  错误标题（邮件主题 / Webhook 标题）
         :param err: 错误详情（可为异常对象或字符串）
         """
         print(traceback.format_exc())
         log(level="ERROR", message=f"出现错误：{err}")
         content = '错误信息：\n' + traceback.format_exc() + "\nerr信息：\n" + str(err)
-        try:
-            email_send.send_email(subject=id, content=content)
-        except Exception as e:
-            log(level="ERROR", message=f"发送告警邮件失败：{e}")
-        try:
-            ok, message = webhook_send.send_message(id, content)
-            if not ok:
-                log(level="ERROR", message=f"发送 Webhook 告警失败：{message}")
-        except Exception as e:
-            log(level="ERROR", message=f"发送 Webhook 告警异常：{e}")
+        enqueue_alert(id, content)
 
     def key_pass(self, year, month, day, hour, minute, second):
         """
@@ -2479,11 +2543,6 @@ class WXBot:
             return set()
         return {who for who in (self._subwindow_who(chat) for chat in chats) if who}
 
-    def _get_all_subwindow_names(self):
-        """获取当前所有已监听子窗口名称集合。"""
-        listened_names = self._try_get_all_subwindow_names()
-        return listened_names if listened_names is not None else set()
-
     def _get_verified_subwindow(self, nickname):
         """通过 GetSubWindow 获取并校验单个监听子窗口。"""
         try:
@@ -2506,8 +2565,16 @@ class WXBot:
 
     def _verify_initial_listeners(self, expected_chats, retry_count=3):
         """
-        初始化监听完成后，用 GetAllSubWindow 校验所有应监听对象。
-        未出现在子窗口列表中的对象最多重试 retry_count 次，仍失败则跳过实际监听。
+        初始化监听完成后，逐个用 GetSubWindow 校验应监听对象。
+
+        ⚠ 校验依据必须与"是否需要注册"的判定相互独立：原先两边都用
+          GetAllSubWindow 的名称集合，于是"因已在列表中而跳过注册"的对象
+          必然通过校验——循环论证，校验等于没做；而且 RemoveListenChat 后
+          子窗口可能仍然存在，名称集合会把没注册成功的对象判成已监听。
+          这里改用 GetSubWindow(nickname) 并比对 who，逐对象精确校验，
+          是比名称集合更严格的独立依据。
+
+        未通过校验的对象最多重试 retry_count 次，仍失败则跳过实际监听。
         """
         expected = []
         seen = set()
@@ -2518,8 +2585,7 @@ class WXBot:
         if not expected:
             return
 
-        listened_names = self._get_all_subwindow_names()
-        missing = [nickname for nickname in expected if nickname not in listened_names]
+        missing = [nickname for nickname in expected if not self._get_verified_subwindow(nickname)]
         if not missing:
             log(message="初始化监听子窗口校验通过")
             return
@@ -2529,8 +2595,7 @@ class WXBot:
             for nickname in missing:
                 time.sleep(0.5)
                 self._add_listen_chat_once(nickname, "初始化重试")
-            listened_names = self._get_all_subwindow_names()
-            missing = [nickname for nickname in missing if nickname not in listened_names]
+            missing = [nickname for nickname in missing if not self._get_verified_subwindow(nickname)]
             if not missing:
                 log(message=f"初始化监听子窗口重试第 {attempt} 次后校验通过")
                 return
@@ -2596,6 +2661,13 @@ class WXBot:
         - 绑定机器人 @ 标识
         - 添加管理员、白名单用户、群组的监听回调
         - 注册每日定时消息任务
+
+        ⚠ 只能在主线程调用（当前唯一调用点是 main() 启动时）。
+          绝不能在 wxautox 消息回调线程（message_handle_callback 及其下游）里调用：
+          内部的 StopListening() 会 join 自己所在的监听线程池，抛
+          RuntimeError: cannot join current thread；随后 callback_is_die 置位，
+          主循环会停掉整个机器人。
+          需要热重载配置时，请在回调里只置标志位，由主循环或独立线程来执行本方法。
         """
         result = None
         # 若尚未实例化微信客户端则进行初始化
@@ -2616,6 +2688,11 @@ class WXBot:
         log(message='绑定@：' + self.config.AtMe)
 
         # 初始化记忆管理器
+        #
+        # ⚠ 存储标识（目录名）带原始窗口名的 sha256：旧规则把窗口名里的 <>:"/\|?*
+        #   直接删掉，导致 "A:B"/"A?B"/"AB" 共用一个目录、共用一个记忆文件，
+        #   且会话锁按原始窗口名取 → 两个窗口各拿一把锁写同一个文件，等于没锁。
+        #   现在锁按最终存储标识取，读写清空都走 MemoryManager 这一个入口。
         try:
             my_info = self.wx.GetMyInfo()
             wx_id   = my_info.get('id', f'{self.wx.nickname}')
@@ -2623,14 +2700,19 @@ class WXBot:
             wx_id = f'{self.wx.nickname}'
         _base       = os.path.dirname(sys.executable) if hasattr(sys, '_MEIPASS') else os.path.abspath(".")
         memory_base = os.path.join(_base, 'memory')
-        self.memory_manager = MemoryManager(wx_id, memory_base)
+        self.memory_manager = get_memory_manager(wx_id, memory_base)
         log(message=f"记忆管理器已初始化，微信号: {wx_id}")
+        self._report_legacy_memory_dirs()
 
         # 启动 wxautox 消息监听器
         log(message='启动wxautox监听器...')
         self.wx.StopListening()
         time.sleep(1)
         self.wx.StartListening()
+        # 记下"监听已启动"：收尾时据此决定要不要 StopListening（见 shutdown）。
+        # 停止请求可能在初始化期间就到了，那时 StopListening 由收尾统一补做。
+        with self._wx_lock:
+            self._listening_started = True
 
         expected_listeners = []
 
@@ -2678,7 +2760,7 @@ class WXBot:
         if self.config.scheduled_msg_switch:
             log(message="定时消息注册...")
             try:
-                schedule.clear('scheduled_msg')  # 清除旧的定时任务（按 tag 清理）
+                self.scheduler.clear('scheduled_msg')  # 清除本实例旧的定时任务（按 tag 清理）
                 for task in self.config.scheduled_msg_list:
                     if not task.get('enabled', True):
                         continue
@@ -2690,7 +2772,7 @@ class WXBot:
                     weekdays    = task.get('weekdays', [])
                     dates       = task.get('dates', [])
 
-                    schedule.every().day.at(time_str).do(
+                    self.scheduler.every().day.at(time_str).do(
                         self.send_scheduled_msg, targets, msgs, repeat_type, weekdays, dates, task_id
                     ).tag('scheduled_msg')
                     log(message=f"注册定时消息：{repeat_type} {time_str} 给 {targets} 发消息")
@@ -2702,7 +2784,7 @@ class WXBot:
         if self.config.scheduled_moments_switch:
             log(message="定时朋友圈注册...")
             try:
-                schedule.clear('scheduled_moments')
+                self.scheduler.clear('scheduled_moments')
                 for task in self.config.scheduled_moments_list:
                     if not task.get('enabled', True):
                         continue
@@ -2716,7 +2798,7 @@ class WXBot:
                     weekdays    = task.get('weekdays', [])
                     dates       = task.get('dates', [])
 
-                    schedule.every().day.at(time_str).do(
+                    self.scheduler.every().day.at(time_str).do(
                         self.send_scheduled_moments,
                         text, images, privacy, tags, repeat_type, weekdays, dates, task_id
                     ).tag('scheduled_moments')
@@ -2726,6 +2808,43 @@ class WXBot:
                 log(level="ERROR", message=f"定时朋友圈注册失败：{e}")
 
         log(message="监听器初始化完成")
+
+    # ----------------------------------------------------------
+    # 一次性（once）定时任务收尾
+    # ----------------------------------------------------------
+
+    def _once_task_has_future_date(self, dates, now):
+        """once 任务是否还有尚未到来的目标日期。
+
+        用于区分「今天不是目标日期」的两种情况：
+        - 还有未来日期 → 静默跳过、保留注册，等那天到点再执行；
+        - 目标日期已全部过去（或 dates 为空 / 不是合法的 YYYY-MM-DD）
+          → 任务已不可能再执行，注销并把 enabled 置 False。
+        """
+        today = now.date()
+        for item in dates or []:
+            if not isinstance(item, str):
+                continue
+            try:
+                task_date = datetime.strptime(item.strip(), '%Y-%m-%d').date()
+            except ValueError:
+                continue
+            if task_date > today:
+                return True
+        return False
+
+    def _finish_once_task(self, list_name, task_id, label, reason):
+        """一次性计划任务收尾：把 enabled 置 False 并落盘（列表名与配置键同名）。"""
+        tasks = getattr(self.config, list_name, None)
+        if tasks is None:
+            tasks = []
+        for task in tasks:
+            if task.get('id') == task_id:
+                task['enabled'] = False
+                break
+        self.config.config[list_name] = tasks
+        self.config.save_config()
+        log(message=f"一次性{label}任务 {task_id} {reason}，已自动禁用并注销")
 
     # ----------------------------------------------------------
     # 定时消息发送
@@ -2763,24 +2882,36 @@ class WXBot:
         else:
             should_send = True
 
+        # once 任务今天不是目标日期：目标日期还没到就静默跳过、保留注册
+        # （每天某时刻注册一次，绝不能因为"今天不该发"就注销，否则未来日期永远等不到）；
+        # 只有目标日期已经全部过去才收尾注销。
         if not should_send:
-            return schedule.CancelJob if repeat_type == 'once' else None
+            if repeat_type != 'once':
+                return None
+            if self._once_task_has_future_date(dates, now):
+                return None
+            self._finish_once_task('scheduled_msg_list', task_id, '定时消息', '的目标日期已过')
+            return schedule.CancelJob
 
         log(message=f"定时消息时间到（{repeat_type}），目标：{targets}，正在发送...")
         for user in targets:
             for msg in msgs:
                 log(message=f"正在向 {user} 发送定时消息：{msg}")
                 try:
-                    if self.is_image_path(msg):
+                    if self.is_media_path(msg):
                         result = self.wx.SendFiles(who=user, filepath=msg)
+                        # SendFiles 成功也常常不返回任何值（None），这里显式当成功，
+                        # 否则每次发文件都会误报失败、还会触发邮件/Webhook 告警
+                        send_ok = ReplyCountStore.was_send_success(result, none_is_success=True)
                     else:
                         result = self.wx.SendMsg(msg=msg, who=user)
+                        send_ok = bool(result)
                     self.config.human_delay()  # 模拟人工操作延迟（可在面板配置）
-                    if not result:
-                        log(level="ERROR", message=f"定时消息发送失败：{result['message']}")
+                    if not send_ok:
+                        log(level="ERROR", message=f"定时消息发送失败：{ReplyCountStore.send_result_message(result)}")
                         self.is_err(
                             self.wx.nickname + f" wxbot定时消息发送失败！",
-                            f"{user} 定时消息发送失败：{result['message']}",
+                            f"{user} 定时消息发送失败：{ReplyCountStore.send_result_message(result)}",
                         )
                 except Exception as e:
                     log(level="ERROR", message=f"定时消息发送失败：{e}")
@@ -2791,13 +2922,7 @@ class WXBot:
 
         # once 类型执行后自动禁用该任务
         if repeat_type == 'once':
-            for task in self.config.scheduled_msg_list:
-                if task.get('id') == task_id:
-                    task['enabled'] = False
-                    break
-            self.config.config['scheduled_msg_list'] = self.config.scheduled_msg_list
-            self.config.save_config()
-            log(message=f"一次性定时任务 {task_id} 已执行完毕，自动禁用")
+            self._finish_once_task('scheduled_msg_list', task_id, '定时消息', '已执行完毕')
             return schedule.CancelJob  # 取消该 schedule 任务
 
     # ----------------------------------------------------------
@@ -2835,8 +2960,14 @@ class WXBot:
         else:
             should_send = True
 
+        # 与定时消息同理：once 任务目标日期还没到就静默跳过、保留注册，只有日期已过才注销
         if not should_send:
-            return schedule.CancelJob if repeat_type == 'once' else None
+            if repeat_type != 'once':
+                return None
+            if self._once_task_has_future_date(dates, now):
+                return None
+            self._finish_once_task('scheduled_moments_list', task_id, '定时朋友圈', '的目标日期已过')
+            return schedule.CancelJob
 
         log(message=f"定时朋友圈时间到（{repeat_type}），正在发送...")
 
@@ -2890,13 +3021,7 @@ class WXBot:
 
         # once 类型执行后自动禁用该任务
         if repeat_type == 'once':
-            for task in self.config.scheduled_moments_list:
-                if task.get('id') == task_id:
-                    task['enabled'] = False
-                    break
-            self.config.config['scheduled_moments_list'] = self.config.scheduled_moments_list
-            self.config.save_config()
-            log(message=f"一次性定时朋友圈任务 {task_id} 已执行完毕，自动禁用")
+            self._finish_once_task('scheduled_moments_list', task_id, '定时朋友圈', '已执行完毕')
             return schedule.CancelJob
 
     # ----------------------------------------------------------
@@ -3187,6 +3312,182 @@ class WXBot:
                     state['next_fire'] = None
 
     # ----------------------------------------------------------
+    # 多条消息缓冲合并回复
+    #
+    # 收到消息先缓冲，窗口内没有新消息（或达到条数上限）再拼成一条、只调一次 AI。
+    # ⚠ 缓冲在回调线程里做（只碰内存），flush 只在主循环线程里做：
+    #   新开线程调 chat.SendMsg 会变成三个线程并发操作 UI，wxautox 的内部锁
+    #   只能保证单次调用原子，挡不住"切窗口 → 发送"两步之间被插入；
+    #   而且 pythoncom.CoInitialize() 只在机器人线程里调过。
+    # ----------------------------------------------------------
+
+    def _is_ai_reply_target(self, chat):
+        """这条会话是否会走 AI 回复（在监听范围内、未开只监听、非管理员窗口）。
+
+        process_message 里的 is_monitored / chat_listen_only / group_listen_only
+        判定与合并缓冲共用这一份实现，避免两处各写一份、改一处漏一处。
+        """
+        who = chat.who
+        if who == self.config.cmd:
+            return False                    # 管理员窗口走命令分支，不参与 AI 回复
+        if who in self.config.group:
+            # 群聊：群机器人开关关闭时完全不处理；"只监听不回复"时跳过 AI
+            return bool(self.config.group_switch) and not self.config.group_listen_only
+        if self.config.AllListen_switch:
+            in_scope = who not in self.config.listen_list   # 全局模式：listen_list 是黑名单
+        else:
+            in_scope = who in self.config.listen_list       # 白名单模式
+        if not in_scope:
+            return False
+        return not self.config.chat_listen_only
+
+    def _match_keyword_reply(self, chat, message):
+        """命中关键词时返回要回复的内容，未命中返回 None。
+
+        判定口径与 process_message / wx_send_ai 保持一致：私聊看
+        chat_keyword_switch，群聊看 group_keyword_switch（含"仅被 @ 时触发"）。
+        合并缓冲用它把"该立即回复"的消息排除在缓冲之外。
+        """
+        if chat.who in self.config.group:
+            if not self.config.group_keyword_switch:
+                return None
+            if self.config.group_keyword_at_only and self.config.AtMe not in message.content:
+                return None
+        elif not self.config.chat_keyword_switch:
+            return None
+        for keyword in self.config.keyword_dict:
+            if keyword in message.content:
+                return self.config.keyword_dict[keyword]
+        return None
+
+    def _should_buffer_message(self, chat, msg):
+        """这条消息是否进入合并缓冲（只缓冲"本来就会走 AI 回复"的消息）。"""
+        if not self.config.merge_reply_switch:
+            return False
+        if msg.attr != 'friend':
+            return False                    # 命令 / 系统消息走各自分支
+        if msg.type not in ('text', 'voice', 'image'):
+            return False
+        if not self._is_ai_reply_target(chat):
+            return False
+        # 命中关键词要立即回复，延迟一个窗口体验很差
+        if self._match_keyword_reply(chat, msg) is not None:
+            return False
+        # 群聊"仅被 @ 时才回复"：没 @ 的消息本来就不会走 AI，缓冲了也只会被丢掉
+        if (chat.who in self.config.group and self.config.group_reply_at
+                and self.config.AtMe not in msg.content):
+            return False
+        return True
+
+    def _buffer_message(self, chat, msg):
+        """把一条消息放进合并缓冲；到期或达到条数上限由主循环统一处理。"""
+        key     = (chat.who, msg.sender)    # 群聊按发送人分开，A、B 不能混在一起
+        now     = time.monotonic()
+        window  = self.config.merge_reply_window
+        content = str(msg.content)
+        with self._merge_lock:
+            entry = self._merge_buffers.get(key)
+            if entry is None:
+                entry = {
+                    'chat':        chat,
+                    'texts':       [],
+                    'types':       [],
+                    'image_paths': [],
+                    'last_msg':    msg,
+                    'last_sender': msg.sender,
+                    'deadline':    now + window,
+                    'count':       0,
+                }
+                self._merge_buffers[key] = entry
+            entry['texts'].append(content)
+            entry['types'].append(str(msg.type))
+            if msg.type == 'image' and content:
+                entry['image_paths'].append(content)
+            entry['last_msg']    = msg        # 只用于 quote()，见 _MergedMessage
+            entry['last_sender'] = msg.sender
+            entry['deadline']    = now + window   # 窗口内有新消息 → 刷新计时
+            entry['count']      += 1
+            count = entry['count']
+        log(message=(
+            f"[合并回复] {chat.who} / {msg.sender} 第 {count} 条进入缓冲"
+            f"（窗口 {window} 秒，满 {self.config.merge_reply_max_count} 条立即回复）"
+        ))
+
+    def _clear_merge_buffers(self):
+        """清空所有缓冲，返回清掉的组数（停止机器人时用，不做延迟回复）。"""
+        with self._merge_lock:
+            count = len(self._merge_buffers)
+            self._merge_buffers.clear()
+        return count
+
+    def _check_merge_buffers(self):
+        """主循环每轮调用：把到期或达到条数上限的缓冲合并回复。
+
+        ⚠ 必须在主循环线程里执行（原因见本节顶部注释）。
+        """
+        if not self._merge_buffers:
+            return
+        if not self.config.merge_reply_switch:
+            # 运行中把开关关掉 → 丢弃缓冲，不做延迟回复
+            dropped = self._clear_merge_buffers()
+            if dropped:
+                log(level="WARNING", message=f"[合并回复] 开关已关闭，丢弃 {dropped} 组未回复的缓冲")
+            return
+        now       = time.monotonic()
+        max_count = self.config.merge_reply_max_count
+        with self._merge_lock:
+            ready = [k for k, e in self._merge_buffers.items()
+                     if now >= e['deadline'] or e['count'] >= max_count]
+            # 先摘出再 flush：flush 期间新到的消息会新建缓冲，不会被这里连带清掉
+            pending = [(k, self._merge_buffers.pop(k)) for k in ready]
+        for key, entry in pending:
+            try:
+                self._flush_merged(key, entry)
+            except Exception as e:
+                log(level="ERROR", message=f"[合并回复] 合并回复失败：{e}")
+
+    def _flush_merged(self, key, entry):
+        """把一组缓冲消息拼成一条：调一次 process_message，再逐条补写记忆。"""
+        chat        = entry['chat']
+        texts       = entry['texts']
+        types       = entry['types']
+        image_paths = entry['image_paths']
+        image_path  = image_paths[-1] if image_paths else ''   # 接口只收一张，取最后一张
+        merged = _MergedMessage(
+            content      = "\n".join(texts),
+            sender       = entry['last_sender'],
+            msg_type     = 'image' if image_path else 'text',
+            merged_image = image_path,
+            last_msg     = entry['last_msg'],
+        )
+        log(message=(
+            f"[合并回复] {chat.who} / {entry['last_sender']} 合并 {len(texts)} 条"
+            f"（含 {len(image_paths)} 张图）后回复"
+        ))
+        result = self.process_message(chat, merged)
+        # 逐条补写记忆：必须在 process_message 之后 —— 先写会让 AI 读历史时
+        # 当前消息已经在里面，同一条消息进 AI 两次（全局模式踩过这个坑）。
+        if self.config.memory_switch and self.memory_manager:
+            for text, msg_type in zip(texts, types):
+                try:
+                    self.memory_manager.save_message(
+                        chat_name  = chat.who,
+                        sender     = entry['last_sender'],
+                        content    = text,
+                        msg_type   = msg_type,
+                        msg_attr   = 'friend',
+                        max_count  = self.config.memory_max_count,
+                    )
+                except Exception as e:
+                    log(level="WARNING", message=f"写入记忆失败: {e}")
+        if not result:
+            self.is_err(
+                self._nickname() + " wxbot合并回复发送失败！",
+                f"{chat.who} 合并 {len(texts)} 条后回复失败："
+                + ReplyCountStore.send_result_message(result),
+            )
+
+    # ----------------------------------------------------------
     # 消息回调与处理入口
     # ----------------------------------------------------------
 
@@ -3207,6 +3508,8 @@ class WXBot:
                 + f' 发送人：{msg.sender} - 消息：{msg.content}'
             )
             log(message=text)
+
+            buffered = False   # 合并缓冲：本条不立即处理，也不在这里写记忆（flush 后统一逐条补写）
 
             if msg.attr == "friend":
                 # 根据当前会话类型决定是否需要下载图片（识别开关关闭时跳过下载）
@@ -3258,17 +3561,22 @@ class WXBot:
                             log(message=chat.who + " 对话最新消息时间已更新")
                             listen_chat[1] = time.time()
                             break
-                result = self.process_message(chat, msg)
-                # 自定义规则转发处理（在普通消息处理完成后执行，不影响原有流程）
+                if self._should_buffer_message(chat, msg):
+                    # 合并回复：本条只入缓冲，等窗口内没有新消息（或满条数）再一起处理
+                    self._buffer_message(chat, msg)
+                    buffered = True
+                else:
+                    result = self.process_message(chat, msg)
+                # 自定义规则转发处理：缓冲与否都必须立即执行，不能被缓冲延迟
                 if self.config.custom_forward_switch:
                     try:
                         self._handle_custom_forward(chat, msg)
                     except Exception as _fwd_e:
                         log(level="ERROR", message=f"自定义转发处理出错: {_fwd_e}")
-                if not result:
+                if not buffered and not result:
                     self.is_err(
                         self.wx.nickname + f" wxbot处理监听新消息失败！",
-                        text + '\n' + result['message'],
+                        text + '\n' + ReplyCountStore.send_result_message(result),
                     )
 
             elif msg.attr == "system":
@@ -3278,7 +3586,7 @@ class WXBot:
                     if not result:
                         self.is_err(
                             self.wx.nickname + f" wxbot发送群新人欢迎语失败！",
-                            text + '\n' + result['message'],
+                            text + '\n' + ReplyCountStore.send_result_message(result),
                         )
 
             elif msg.attr == "self":
@@ -3292,11 +3600,11 @@ class WXBot:
                     if not result:
                         self.is_err(
                             self.wx.nickname + f" wxbot处理管理员指令失败！",
-                            text + '\n' + result['message'],
+                            text + '\n' + ReplyCountStore.send_result_message(result),
                         )
 
-            # 写入对话记忆
-            if self.config.memory_switch and self.memory_manager:
+            # 写入对话记忆（合并缓冲的消息由 _flush_merged 在处理之后逐条补写）
+            if not buffered and self.config.memory_switch and self.memory_manager:
                 try:
                     self.memory_manager.save_message(
                         chat_name=chat.who,
@@ -3313,6 +3621,44 @@ class WXBot:
             # 回调函数出现未捕获异常时标记 callback_is_die，由主循环检测并处理
             self.callback_is_die = True
             self.is_err(self.wx.nickname + " wxbot回调函数处理出错！处理监听失败！！", e)
+
+    # ----------------------------------------------------------
+    # 旧记忆目录的迁移提示
+    # ----------------------------------------------------------
+
+    def _report_legacy_memory_dirs(self):
+        """打印一次旧记忆目录的处理情况（迁移/隔离），便于用户核对数据去向。
+
+        迁移本身是在第一次访问某个窗口时按需做的（见 memory_store.MemoryManager），
+        这里只做只读扫描 + 日志，不移动任何目录：
+        - 归属明确的目录会被迁到带哈希的新目录，原目录留在 memory/_quarantine/ 下；
+        - 归属不明的目录只隔离、不迁移，宁可让用户手动处理，也不让 AI 读到
+          混在一起的历史。
+        """
+        try:
+            items = self.memory_manager.migration.scan()
+        except Exception as e:
+            log(level="WARNING", message=f"扫描旧记忆目录失败: {e}")
+            return
+        if not items:
+            return
+        migrate_items = [i for i in items if i['action'] == 'migrate']
+        quarantine_items = [i for i in items if i['action'] == 'quarantine']
+        log(level="WARNING", message=(
+            f"发现旧格式记忆目录：可迁移 {len(migrate_items)} 个、"
+            f"归属不明需隔离 {len(quarantine_items)} 个（首次访问该窗口时自动处理）"
+        ))
+        for item in migrate_items:
+            log(level="INFO", message=f"  迁移：{item['wx_id']}/{item['legacy_name']}")
+        for item in quarantine_items:
+            log(level="WARNING", message=(
+                f"  隔离：{item['wx_id']}/{item['legacy_name']} —— {item.get('reason', '')}"
+            ))
+        log(message=(
+            f"隔离区：{self.memory_manager.migration.quarantine_root}"
+            f"（迁移台账：{self.memory_manager.migration.ledger_path}，"
+            "可用 tools/rollback_memory_migration.py 回滚）"
+        ))
 
     # ----------------------------------------------------------
     # 消息分发与处理
@@ -3359,17 +3705,19 @@ class WXBot:
                         if keyword in message.content:
                             log(message=f"群组 {chat.who} 关键字消息：" + message.content)
                             self.config.human_delay()  # 模拟人工操作延迟（可在面板配置）
-                            result = self._send_group_reply(
+                            # 走 _send_keyword_reply(is_group=True)：文字回复行为不变，
+                            # 但关键词内容是图片/视频路径时会先发载体消息再发文件
+                            result = self._send_keyword_reply(
                                 chat,
                                 message,
                                 self.config.keyword_dict[keyword],
-                                at_sender=self.config.group_keyword_reply_at_msg,
-                                quote=self.config.keyword_reply_quote,
+                                is_group=True,
                             )
-                            self.msg_replied_count += 1
+                            if ReplyCountStore.was_send_success(result):
+                                self.msg_replied_count += 1   # 全部失败不计入“已回复”
                             time.sleep(1)
                             return result
-            
+
             if (self.config.AtMe in message.content and self.config.group_reply_at) \
                     or not self.config.group_reply_at:
                 if self.config.group_listen_only:
@@ -3397,7 +3745,17 @@ class WXBot:
                     else:
                         _effective_group_prompt = _base_group_prompt
                     if self.config.group_image_recognition_switch:
-                        if message.type == 'image':
+                        if getattr(message, 'merged_image', ''):
+                            # 合并回复带图片：正文用合并后的文字（已去掉 @），图片取最后一张
+                            rec_index = self.config.group_image_recognition_api
+                            reply = self._call_api_with_fallback(
+                                rec_index,
+                                f"{message.sender}: {content_without_at}",
+                                prompt=_effective_group_prompt,
+                                history=history,
+                                image_path=message.merged_image
+                            )
+                        elif message.type == 'image':
                             # 直接图片消息：content 已被替换为本地路径
                             rec_index = self.config.group_image_recognition_api
                             reply = self._call_api_with_fallback(
@@ -3457,18 +3815,48 @@ class WXBot:
 
                 _at_msg   = self.config.group_reply_at_msg
                 _quote    = self.config.group_reply_quote
+                planned   = len(parts)   # 计划发送的段数
+                sent_ok   = 0            # 实际发送成功的段数
+                sent_fail = 0            # 实际发送失败的段数
+                send_aborted = False     # 中途异常：停止后续发送
                 for i, part in enumerate(parts):
                     self.config.human_delay()   # 每条发送前都延迟（含第一条，与原逻辑等效）
-                    result = self._send_group_reply(
-                        chat,
-                        message,
-                        part,
-                        at_sender=_at_msg and i == 0,
-                        quote=_quote and i == 0,
-                    )
+                    try:
+                        result = self._send_group_reply(
+                            chat,
+                            message,
+                            part,
+                            at_sender=_at_msg and i == 0,
+                            quote=_quote and i == 0,
+                        )
+                    except Exception as e:
+                        # 发送异常已在 _send_group_reply 内部转成失败结果，
+                        # 这里只兜住其它意外，避免穿透到回调最外层触发 callback_is_die
+                        log(level="ERROR", message=f"向 {chat.who} 发送群聊消息失败（第 {i + 1} 段）: {e}")
+                        result = None
+                        send_aborted = True
+                    if ReplyCountStore.was_send_success(result):
+                        sent_ok += 1
+                    else:
+                        sent_fail += 1
+                    if send_aborted:
+                        break
 
-                self.msg_replied_count += 1
-                return result
+                # 汇总本次群聊发送：不能用 bool(SendOutcome.partial) 判断零成功
+                # （部分成功的布尔值就是 False），也不能只看最后一段；未发完一律不算全部成功。
+                if sent_ok == 0:
+                    group_outcome = SendOutcome.failure(
+                        f"发送失败：{planned} 段全部未送达" if planned else "发送失败：没有可发送的段")
+                elif sent_ok == planned:
+                    group_outcome = SendOutcome.success(f"发送完成：共 {planned} 段")
+                else:
+                    group_outcome = SendOutcome.partial(
+                        f"分段发送部分成功：成功 {sent_ok}/{planned} 段，失败 {sent_fail} 段")
+
+                if sent_ok:
+                    # 至少一段实际成功，只计一次；全部失败不计
+                    self.msg_replied_count += 1
+                return group_outcome
 
             return result
 
@@ -3516,7 +3904,12 @@ class WXBot:
         return self.config.get_prompt_content(name)
 
     def _send_group_reply(self, chat, message, content, at_sender=False, quote=False):
-        """发送群聊回复；引用失败时降级为普通发送，避免中断监听回调。"""
+        """发送群聊回复；引用失败时降级为普通发送，避免中断监听回调。
+
+        引用发送与降级后的普通发送若抛异常，统一转成明确的失败结果返回，
+        不再穿透到 message_handle_callback 最外层触发 callback_is_die；
+        这里只包住发送调用本身，不吞掉其它程序错误。
+        """
         if quote:
             try:
                 if at_sender:
@@ -3530,12 +3923,59 @@ class WXBot:
             except Exception as e:
                 log(level="WARNING", message=f"群聊引用回复异常，已降级为普通发送：{e}")
 
-        if at_sender:
-            return chat.SendMsg(msg=content, at=message.sender)
-        return chat.SendMsg(msg=content)
+        try:
+            if at_sender:
+                return chat.SendMsg(msg=content, at=message.sender)
+            return chat.SendMsg(msg=content)
+        except Exception as e:
+            log(level="ERROR", message=f"向 {chat.who} 发送群聊消息失败: {e}")
+            return SendOutcome.failure(f"群聊发送失败：{e}")
 
     def _send_keyword_reply(self, chat, message, content, is_group=False):
-        """发送关键词回复；引用开关对私聊/群聊均生效，@仅对群聊生效。"""
+        """发送关键词回复；引用开关对私聊/群聊均生效，@仅对群聊生效。
+
+        关键词内容是图片/视频路径时：先发一条载体消息，再发送文件本身。
+        载体消息内容固定为 MEDIA_CARRIER_TEXT（"1"），不取文件名 —— 它只用来
+        承载 @ / 引用（群聊按配置带 @ / 引用，私聊按引用开关、引用失败降级普通发送）。
+        载体消息发送失败只记 WARNING，不阻断发文件。
+        """
+        if self.is_media_path(content):
+            carrier = MEDIA_CARRIER_TEXT
+            carrier_result = None
+            try:
+                if is_group:
+                    carrier_result = self._send_group_reply(
+                        chat,
+                        message,
+                        carrier,
+                        at_sender=self.config.group_keyword_reply_at_msg,
+                        quote=self.config.keyword_reply_quote,
+                    )
+                elif self.config.keyword_reply_quote:
+                    carrier_result = message.quote(carrier)
+                    if not ReplyCountStore.was_send_success(carrier_result):
+                        err_msg = ReplyCountStore.send_result_message(carrier_result)
+                        log(level="WARNING", message=f"私聊关键词载体引用失败，已降级为普通发送：{err_msg}")
+                        carrier_result = chat.SendMsg(carrier)
+                else:
+                    carrier_result = chat.SendMsg(carrier)
+            except Exception as e:
+                log(level="WARNING", message=f"关键词文件回复的载体消息发送异常，继续发送文件：{e}")
+            if carrier_result is not None and not ReplyCountStore.was_send_success(carrier_result):
+                log(level="WARNING", message=(
+                    "关键词文件回复的载体消息发送失败，继续发送文件："
+                    + ReplyCountStore.send_result_message(carrier_result)
+                ))
+
+            result = chat.SendFiles(content)
+            # SendFiles 成功也常常不返回任何值（None），这里显式当成功，避免误报发送失败
+            file_ok = ReplyCountStore.was_send_success(result, none_is_success=True)
+            if not file_ok:
+                log(level="ERROR", message=f"关键词文件回复发送失败：{ReplyCountStore.send_result_message(result)}")
+            # 归一化返回：上层（已回复计数 / 分段发送汇总）用的是普通的 was_send_success，
+            # 不归一化的话"发成功但返回 None"会被上层记成失败
+            return True if file_ok else result
+
         if is_group:
             return self._send_group_reply(
                 chat,
@@ -3717,7 +4157,17 @@ class WXBot:
                 else:
                     _effective_prompt = _base_prompt
                 if self.config.chat_image_recognition_switch:
-                    if message.type == 'image':
+                    if getattr(message, 'merged_image', ''):
+                        # 合并回复带图片：正文是合并后的文字，图片取最后一张
+                        rec_index = self.config.chat_image_recognition_api
+                        reply = self._call_api_with_fallback(
+                            rec_index,
+                            message.content,
+                            prompt=_effective_prompt,
+                            history=history,
+                            image_path=message.merged_image
+                        )
+                    elif message.type == 'image':
                         # 直接图片消息：content 已被替换为本地路径（图片识别优先使用图片识别接口）
                         rec_index = self.config.chat_image_recognition_api
                         reply = self._call_api_with_fallback(
@@ -3788,21 +4238,55 @@ class WXBot:
             parts = [reply]
 
         send_success = False
+        send_aborted = False    # 发送抛异常：只结束本条消息的发送，不算基础故障
+        sent_total   = 0        # 实际尝试发送的段数
+        sent_ok      = 0        # 发送成功的段数
         for i, part in enumerate(parts):
             self.config.human_delay()   # 每条发送前都延迟（含第一条，与原逻辑等效）
             if len(part) >= 2000:
                 for j, segment in enumerate(self.config.split_long_text(part)):
-                    if is_keyword and i == 0 and j == 0:
-                        result = self._send_keyword_reply(chat, message, segment)
-                    else:
-                        result = chat.SendMsg(segment)
-                    send_success = send_success or ReplyCountStore.was_send_success(result)
+                    sent_total += 1
+                    try:
+                        if is_keyword and i == 0 and j == 0:
+                            result = self._send_keyword_reply(chat, message, segment)
+                        else:
+                            result = chat.SendMsg(segment)
+                    except Exception as e:
+                        # 普通发送失败：记录后结束本次处理即可。
+                        # 若让它穿透到 message_handle_callback 最外层，会置 callback_is_die，
+                        # 主循环随即 StopListening 停掉全部监听（一条消息发失败 → 机器人整体停机）。
+                        log(level="ERROR", message=f"向 {chat.who} 发送消息失败（第 {i + 1} 条）: {e}")
+                        result = None
+                        send_aborted = True
+                    if ReplyCountStore.was_send_success(result):
+                        send_success = True
+                        sent_ok += 1
+                    if send_aborted:
+                        break
             else:
-                if is_keyword and i == 0:
-                    result = self._send_keyword_reply(chat, message, part)
-                else:
-                    result = chat.SendMsg(part)
-                send_success = send_success or ReplyCountStore.was_send_success(result)
+                sent_total += 1
+                try:
+                    if is_keyword and i == 0:
+                        result = self._send_keyword_reply(chat, message, part)
+                    else:
+                        result = chat.SendMsg(part)
+                except Exception as e:
+                    log(level="ERROR", message=f"向 {chat.who} 发送消息失败（第 {i + 1} 条）: {e}")
+                    result = None
+                    send_aborted = True
+                if ReplyCountStore.was_send_success(result):
+                    send_success = True
+                    sent_ok += 1
+            if send_aborted:
+                break
+
+        # 统一发送结果：不再让 result 被最后一段覆盖（失败+成功曾返回“成功”）
+        if sent_total and sent_ok == sent_total:
+            send_outcome = SendOutcome.success(f"发送完成：共 {sent_total} 段")
+        elif sent_ok:
+            send_outcome = SendOutcome.partial(f"分段发送部分成功：成功 {sent_ok}/{sent_total} 段")
+        else:
+            send_outcome = SendOutcome.failure(f"发送失败：{sent_total} 段全部未送达")
 
         if send_success and api_error_should_mark:
             self.reply_count_store.mark_api_err_notified(user_key)
@@ -3810,8 +4294,10 @@ class WXBot:
         if send_success and self.config.chat_max_round_switch and user_key and not api_error_reply:
             self.reply_count_store.increment_ai_count(user_key)
 
-        self.msg_replied_count += 1
-        return result
+        if send_success:
+            # 全部失败不计入“已回复”
+            self.msg_replied_count += 1
+        return send_outcome
 
     # ----------------------------------------------------------
     # 管理员命令分发
@@ -3829,6 +4315,7 @@ class WXBot:
         result = True
         content = message.content
 
+        # --- 用户与群组管理（监听名单 / 群开关 / 群欢迎语）---
         if content.startswith("/添加用户"):
             result = self.handle_add_user(chat, message)
         elif content.startswith("/删除用户"):
@@ -3857,6 +4344,7 @@ class WXBot:
             result = chat.SendMsg("当前群机器人欢迎语：\n" + self.config.group_welcome_msg)
         elif content.startswith("/更改群机器人欢迎语为"):
             result = self.handle_change_welcome_msg(chat, message)
+        # --- 接口与设定：查看/选择接口、改 AI 设定、热重载配置、查版本 ---
         elif content == "/查看接口列表":
             result = self.handle_list_api_configs(chat, message)
         elif content.startswith("/选择接口"):
@@ -3866,15 +4354,11 @@ class WXBot:
             result = chat.SendMsg(f'当前默认AI设定（{self.config.default_prompt}）：\n' + _default_content)
         elif content.startswith("/更改AI设定为") or content.startswith("/更改ai设定为"):
             result = self.handle_change_prompt(chat, message)
-        elif content == "/更新配置":
-            self.config.refresh_config()
-            self.api_cache = {}   # 配置已更新，清除群组接口缓存
-            self.init_wx_listeners()
-            result = chat.SendMsg(content + ' 完成\n')
         elif content == "/当前版本":
             result = chat.SendMsg(
                 content + 'wxbot_' + self.ver + '\n' + self.ver_log + '\n作者:https://www.siver.top'
             )
+        # --- 指令帮助清单：把分类指令一次性发给管理员 ---
         elif content in ("/指令", "指令"):
             result = self.send_command_list(chat)
         elif content == "/系统状态指令":
@@ -3882,8 +4366,7 @@ class WXBot:
                 '--- 系统状态 ---\n'
                 '[/状态] 完整运行状态摘要\n'
                 '[/接口测试 内容] 测试当前AI接口\n'
-                '[/当前版本] 版本号及更新说明\n'
-                '[/更新配置] 重载配置并重初始化监听'
+                '[/当前版本] 版本号及更新说明'
             )
         elif content == "/用户管理指令":
             result = chat.SendMsg(
@@ -3991,6 +4474,7 @@ class WXBot:
                 f'接口失败只回复一次：{"是" if self.config.api_error_reply_once else "否"}\n'
                 '[/清除计数 昵称] 清除指定用户的回复计数与通知状态'
             )
+        # --- 状态查询与快捷开关（关键词 / 记忆 / 回复延迟 / 暂停恢复 / 接口测试）---
         elif content == "/状态":
             result = self._build_status_msg(chat, message)
         elif content == "/关键词状态":
@@ -4067,6 +4551,7 @@ class WXBot:
             message_re.content = re.sub("/接口测试", "", message.content).strip()
             result = self.wx_send_ai(chat, message_re)
         # --- Prompt 管理 ---
+        # --- Prompt 与记忆操作、其余开关与状态 ---
         elif content == "/Prompt列表":
             result = self.handle_list_prompts(chat, message)
         elif content == "/当前Prompt":
@@ -4141,6 +4626,15 @@ class WXBot:
             if message.attr != "self":
                 result = self.wx_send_ai(chat, message)
 
+        # 本轮命令期间若有配置保存失败，补一条明确警告。
+        # 各分支的"完成"文案不再逐个改：这里统一兜底，避免"失败却报成功"。
+        if self.config.save_failed:
+            self.config.save_failed = False
+            try:
+                chat.SendMsg("⚠ 注意：本次操作的配置未能写入磁盘，重启后可能丢失，请检查磁盘权限/空间")
+            except Exception:
+                pass
+
         return result
 
     def _build_status_msg(self, chat, message):
@@ -4212,8 +4706,8 @@ class WXBot:
         send_msg += "  群聊拆分回复：" + ("开启\n" if self.config.group_split_reply_switch else "关闭\n")
 
         # 新好友状态
-        send_msg += "新好友自动通过：" + ("开启" if self.config.new_frined_switch else "关闭")
-        send_msg += "  自动回复：" + ("开启\n" if self.config.new_frien_reply_switch else "关闭\n")
+        send_msg += "新好友自动通过：" + ("开启" if self.config.new_friend_switch else "关闭")
+        send_msg += "  自动回复：" + ("开启\n" if self.config.new_friend_reply_switch else "关闭\n")
 
         # 当前默认 Prompt
         send_msg += f"当前默认Prompt：{self.config.default_prompt}\n"
@@ -4240,9 +4734,9 @@ class WXBot:
             else:
                 # 注册失败则回滚配置
                 self.config.remove_user(user_to_add)
-                log(level="ERROR", message=f"添加用户 {user_to_add} 监听失败, {result['message']}")
+                log(level="ERROR", message=f"添加用户 {user_to_add} 监听失败, {ReplyCountStore.send_result_message(result)}")
                 return chat.SendMsg(
-                    f"添加用户失败\n{result['message']}\n" + ", ".join(self.config.listen_list)
+                    f"添加用户失败\n{ReplyCountStore.send_result_message(result)}\n" + ", ".join(self.config.listen_list)
                 )
         else:
             # 黑名单模式下只更新配置，无需注册监听
@@ -4275,9 +4769,9 @@ class WXBot:
             else:
                 # 注册失败则回滚配置
                 self.config.remove_group(new_group)
-                log(level="ERROR", message=f"添加群组 {new_group} 监听失败, {result['message']}")
+                log(level="ERROR", message=f"添加群组 {new_group} 监听失败, {ReplyCountStore.send_result_message(result)}")
                 return chat.SendMsg(
-                    f"添加群失败\n{result['message']}\n" + ", ".join(self.config.group)
+                    f"添加群失败\n{ReplyCountStore.send_result_message(result)}\n" + ", ".join(self.config.group)
                 )
         else:
             return chat.SendMsg('添加群完成(群机器人未开启)\n' + ", ".join(self.config.group))
@@ -4290,21 +4784,53 @@ class WXBot:
         return chat.SendMsg('删除群完成\n' + ", ".join(self.config.group))
 
     def handle_enable_group_bot(self, chat, message):
-        """处理 /开启群机器人 指令：开启群机器人并重新初始化监听器"""
-        try:
-            self.config.set_config(id='group_switch', new_content=True)
-            self.init_wx_listeners()
-            return chat.SendMsg(message.content + ' 完成\n' + '当前群：\n' + ", ".join(self.config.group))
-        except Exception as e:
-            # 开启失败则自动回滚为关闭状态
+        """处理 /开启群机器人 指令：开启开关并逐个注册群列表监听。
+
+        ⚠ 本方法运行在 wxautox 的消息回调线程里，绝不能调用 init_wx_listeners()：
+        它内部的 StopListening() 会 join 自己所在的监听线程池，抛
+        RuntimeError: cannot join current thread，随后 callback_is_die 置位，
+        主循环会停掉整个机器人。因此这里与 /关闭群机器人 对称，只逐个注册。
+        """
+        self.config.set_config(id='group_switch', new_content=True)
+
+        if not self.config.group:
+            return chat.SendMsg(message.content + ' 完成，但当前没有配置任何群\n请先用 /添加群 添加群')
+
+        registered, failed = [], []
+        for group_name in self.config.group:
+            try:
+                # 无条件注册，与 init_wx_listeners 一致：子窗口存在不等于"回调已注册"，
+                # 不能用它作为跳过注册的依据（/关闭群机器人 只移除回调，子窗口可能仍在，
+                # 一旦据此跳过，该群将永久不被监听）。
+                time.sleep(0.5)
+                if self._add_listen_chat_once(group_name, "群组"):
+                    registered.append(group_name)
+                else:
+                    failed.append(group_name)
+            except Exception as e:
+                # 逐群捕获：单个群注册异常只算该群失败，不能让整轮注册静默中断后仍回报"完成"
+                log(level="ERROR", message=f"注册群监听时出错（{group_name}）: {e}")
+                failed.append(group_name)
+
+        if registered:
+            try:
+                self._verify_initial_listeners(registered)
+            except Exception as e:
+                log(level="ERROR", message=f"校验群监听时出错: {e}")
+
+        if failed and not registered:
+            # 一个都没注册成功：回滚开关，避免"开关开着却没有任何群被监听"
             self.config.set_config('group_switch', False)
-            self.init_wx_listeners()
-            chat.SendMsg(
-                message.content
-                + ' 失败\n请重新配置群名称或者检查机器人号是否在群或者群名中是否含有非法中文字符\n'
-                + '当前群:' + ", ".join(self.config.group)
-                + '\n当前群机器人状态:' + str(self.config.group_switch)
+            return chat.SendMsg(
+                message.content + ' 失败\n请检查群名称是否正确、机器人号是否在该群内\n'
+                + '注册失败的群：' + ", ".join(failed)
             )
+        if failed:
+            return chat.SendMsg(
+                message.content + ' 部分完成\n注册成功：' + ", ".join(registered)
+                + '\n注册失败：' + ", ".join(failed)
+            )
+        return chat.SendMsg(message.content + ' 完成\n当前群：\n' + ", ".join(self.config.group))
 
     def handle_disable_group_bot(self, chat, message):
         """处理 /关闭群机器人 指令：关闭群机器人并移除所有群组监听"""
@@ -4463,12 +4989,12 @@ class WXBot:
 
     def handle_new_friend_status(self, chat, message):
         """处理 /新好友状态 指令：返回新好友自动通过和自动回复配置"""
-        accept = "开启" if self.config.new_frined_switch      else "关闭"
-        reply  = "开启" if self.config.new_frien_reply_switch else "关闭"
+        accept = "开启" if self.config.new_friend_switch      else "关闭"
+        reply  = "开启" if self.config.new_friend_reply_switch else "关闭"
         use_name = "是" if self.config.new_friend_remark_use_nickname else "否"
         prefix_time = "是" if self.config.new_friend_remark_prefix_timestamp else "否"
         suffix_time = "是" if self.config.new_friend_remark_suffix_timestamp else "否"
-        msgs   = self.config.new_frien_msg if self.config.new_frien_msg else ["（无）"]
+        msgs   = self.config.new_friend_msg if self.config.new_friend_msg else ["（无）"]
         lines  = [
             "--- 新好友状态 ---",
             f"自动通过好友申请：{accept}",
@@ -4520,6 +5046,18 @@ class WXBot:
             first_quote_content = text.split('"')[1]
         return first_quote_content
 
+    def _send_group_welcome_once(self, chat, new_friend):
+        """发送一条群新人欢迎语；发送异常转成失败结果，不穿透到回调最外层。
+
+        只包住 SendMsg 本身：调用方（message_handle_callback 的 system 分支）
+        会按 if not result 消费失败结果并告警，这里不能吞掉其它程序错误。
+        """
+        try:
+            return chat.SendMsg(msg=self.config.group_welcome_msg, at=new_friend)
+        except Exception as e:
+            log(level="ERROR", message=f"{chat.who} 发送群新人欢迎语失败: {e}")
+            return SendOutcome.failure(f"群新人欢迎语发送失败：{e}")
+
     def send_group_welcome_msg(self, chat, message):
         """
         处理群系统消息，若检测到新成员加入则按概率发送欢迎语。
@@ -4536,14 +5074,14 @@ class WXBot:
             new_friend = self.find_new_group_friend(message.content, 1)
             log(message=f"{chat.who} 新群友:" + new_friend)
             time.sleep(5)
-            result = chat.SendMsg(msg=self.config.group_welcome_msg, at=new_friend)
+            result = self._send_group_welcome_once(chat, new_friend)
 
         elif "加入了群聊" in message.content and random.random() < self.config.group_welcome_random:
             # 被邀请加入群聊
             new_friend = self.find_new_group_friend(message.content, 3)
             log(message=f"{chat.who} 新群友:" + new_friend)
             time.sleep(5)
-            result = chat.SendMsg(msg=self.config.group_welcome_msg, at=new_friend)
+            result = self._send_group_welcome_once(chat, new_friend)
 
         return result
 
@@ -4551,16 +5089,19 @@ class WXBot:
     # 新好友处理
     # ----------------------------------------------------------
 
-    def is_image_path(self, s: str) -> bool:
+    def is_media_path(self, s: str) -> bool:
         """
-        判断字符串是否为有效的图片文件完整路径。
+        判断字符串是否为有效的图片/视频文件完整路径。
         支持 Windows（C:\\...）和 Unix（/home/...）风格路径。
 
         :param s: 待判断的字符串
-        :return:  True 表示是图片路径，False 则不是
+        :return:  True 表示是图片/视频路径，False 则不是
         """
-        image_extensions = ('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp')
-        if not s.lower().endswith(image_extensions):
+        media_extensions = (
+            '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp',
+            '.mp4', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.m4v', '.webm',
+        )
+        if not s.lower().endswith(media_extensions):
             return False
         pattern = re.compile(
             r'^('
@@ -4569,7 +5110,7 @@ class WXBot:
             r'(/[^/]+)'             # Unix 绝对路径（/home/...）
             r')'
             r'.+'                   # 中间任意目录层级
-            r'\.(png|jpg|jpeg|gif|bmp|webp)$',
+            r'\.(png|jpg|jpeg|gif|bmp|webp|mp4|mov|avi|mkv|wmv|flv|m4v|webm)$',
             re.IGNORECASE,
         )
         return bool(pattern.match(s))
@@ -4634,7 +5175,7 @@ class WXBot:
         检测并批量通过新好友请求，通过后按需自动发送打招呼消息。
         - new_friend_switch：自动通过新好友申请
         - new_friend_reply_switch：通过后自动回复消息
-        消息中若包含图片路径则以文件形式发送，否则以文字发送。
+        消息中若包含图片/视频路径则以文件形式发送，否则以文字发送。
         """
         NewFriends = self.wx.GetNewFriends(acceptable=True)
         time.sleep(1)
@@ -4647,9 +5188,9 @@ class WXBot:
                 log(message="已通过" + new_name + "的好友请求")
                 self.wx.SwitchToChat()       # 通过请求后切换回聊天页面
                 time.sleep(5)
-                if self.config.new_frien_reply_switch:
-                    for msg in self.config.new_frien_msg:
-                        if self.is_image_path(msg):
+                if self.config.new_friend_reply_switch:
+                    for msg in self.config.new_friend_msg:
+                        if self.is_media_path(msg):
                             self.wx.SendFiles(who=new_name, filepath=msg)
                         else:
                             self.wx.SendMsg(who=new_name, msg=msg)
@@ -4868,7 +5409,7 @@ class WXBot:
                         log(level="ERROR", message=f"Next_callback下载图片出错，请尝试将windows屏幕设置的缩放调整为100%后重试: {e}")
                 else:
                     log('INFO', '私聊全局监听收到群聊消息，跳过')
-            
+
             messages_new = self.wx.GetNextNewMessage(filter_mute=self.config.AllListen_filter_mute, callback=Next_callback)
             chat      = messages_new.get('chat_name')
             chat_type = messages_new.get('chat_type')
@@ -4892,20 +5433,12 @@ class WXBot:
                             msg.content = str(Next_callback_down_map[msg.id])
                     # 仅处理 friend 类型的私聊消息，排除群聊
                     if msg.attr == 'friend' and chat_type != 'group':
-                        # 全局模式首次消息：写入记忆（此处不经过 message_handle_callback）
-                        if self.config.memory_switch and self.memory_manager:
-                            try:
-                                self.memory_manager.save_message(
-                                    chat_name=chat,
-                                    sender=msg.sender,
-                                    content=msg.content,
-                                    msg_type=msg.type,
-                                    msg_attr=msg.attr,
-                                    max_count=self.config.memory_max_count,
-                                )
-                            except Exception as e:
-                                log(level="WARNING", message=f"写入记忆失败: {e}")
-                        
+                        # 接收计数与“最近消息”更新：与 message_handle_callback 的 friend 分支保持一致
+                        self.msg_received_count += 1
+                        self.last_msg_time   = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        self.last_msg_sender = msg.sender
+                        message_time = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+
                         # 自定义规则转发：必须在 add_chat_to_listen 之前执行
                         # msg.forward() 依赖主窗口上下文，加入监听后上下文切换到子窗口会失效
                         if self.config.custom_forward_switch:
@@ -4914,7 +5447,7 @@ class WXBot:
                                 self._handle_custom_forward(_types.SimpleNamespace(who=chat), msg)
                             except Exception as _fwd_e:
                                 log(level="ERROR", message=f"自定义转发处理出错: {_fwd_e}")
-                        
+
                         if not self.is_chat_listened(chat):
                             _sub_chat = self.add_chat_to_listen(chat)
                         else:
@@ -4922,10 +5455,45 @@ class WXBot:
                             _sub_chat = self._get_verified_subwindow(chat)
                             if not _sub_chat:
                                 self._remove_dynamic_listen_chat(chat)
+                        buffered = False
                         if _sub_chat:
-                            self.process_message(_sub_chat, msg)
+                            if self._should_buffer_message(_sub_chat, msg):
+                                # 全局监听的首条消息同样进合并缓冲：否则它会先回复，
+                                # 之后同一个人再发消息才走回调进缓冲，两条路径不一致。
+                                # 用子窗口对象入缓冲，flush 时才有窗口可发送。
+                                self._buffer_message(_sub_chat, msg)
+                                buffered = True
+                            else:
+                                result = self.process_message(_sub_chat, msg)
+                                if not result:
+                                    # 失败与部分失败（SendOutcome.partial 的布尔值是 False）都按现有规则告警；
+                                    # 被过滤、无需回复等正常分支返回 True，不会误报成发送失败
+                                    self.is_err(
+                                        self.wx.nickname + " wxbot全局监听处理新消息失败！",
+                                        f"{message_time} 类型：{msg.type} 属性：{msg.attr} 窗口：{chat} "
+                                        f"发送人：{msg.sender} - 消息：{msg.content}\n"
+                                        + ReplyCountStore.send_result_message(result),
+                                    )
                         else:
                             log(level="ERROR", message=f"{chat} 未获取到子窗口，跳过本次消息处理")
+
+                        # 写入记忆：与 message_handle_callback 一致，放在处理之后。
+                        # 放在处理之前会让当前消息先进入历史、又被当成本次输入传给 AI，
+                        # 同一条消息进 AI 两次（此处不经过 message_handle_callback）。
+                        # 合并缓冲的消息不在这里写：由 _flush_merged 在处理之后逐条补写。
+                        if not buffered and self.config.memory_switch and self.memory_manager:
+                            try:
+                                self.memory_manager.save_message(
+                                    chat_name=chat,
+                                    sender=msg.sender,
+                                    content=msg.content,
+                                    msg_type=msg.type,
+                                    msg_attr=msg.attr,
+                                    max_count=self.config.memory_max_count,
+                                    message_time=message_time,
+                                )
+                            except Exception as e:
+                                log(level="WARNING", message=f"写入记忆失败: {e}")
 
         # ---- 全局监听模式主流程 ----
         # 当前仅启用 get_next_new_message（混合模式中的新消息拉取）
@@ -5004,16 +5572,175 @@ class WXBot:
             "pause_group_reply":     self.config.group_listen_only,
         }
 
-    def stop_wxbot(self):
-        """安全停止机器人：停止 wxautox 监听并退出主循环"""
+    # ------------------------------------------------------------------
+    # 停止信号与统一收尾
+    # ------------------------------------------------------------------
+
+    def request_stop(self):
+        """置停止信号：幂等、可在任意线程调用、绝不碰 wxautox。
+
+        面板停止 / 定时停止 / BotLifecycle 停止都先走这里。实例还没构造出来、
+        监听还没注册时，"停止"唯一能做的就是留下这个信号 —— 由 `main()` 在初始化
+        结束处以及最后的收尾统一兑现。
+        """
+        self._stop_event.set()
+        self.run_flag = False
+
+    def stop_requested(self):
+        """是否已收到停止请求。
+
+        ⚠ 初始化结束后必须查它再决定要不要开跑：否则"初始化期间点了停止"会被
+          "初始化完成"整个抹掉（历史上 `self.run_flag = True` 就在这里无条件执行）。
+        """
+        return self._stop_event.is_set()
+
+    def _nickname(self):
+        """安全取微信昵称：wx 可能没初始化/已失效，取不到时用占位名，别让日志抛异常。"""
         try:
-            self.run_flag = False
+            if self.wx is not None:
+                return self.wx.nickname
+        except Exception:
+            pass
+        return '未初始化'
+
+    def shutdown(self, reason=''):
+        """统一收尾：无论从哪条路径退出，都走这里。
+
+        四条路径共用同一份收尾实现：
+          1. 初始化部分成功（init_wx_listeners 抛异常，可能已经启动了监听）；
+          2. 主动停止（面板 / 定时启停 / BotLifecycle）；
+          3. 主循环异常退出；
+          4. 主循环正常退出。
+
+        幂等且不丢先后：重复调用不会重复 StopListening；而"停止请求先到、初始化后完成"
+        这种顺序颠倒的情况，会在初始化真正把监听启动起来之后被收尾补停。
+
+        :return: True=没有残留监听（本来没启动 / 已成功停掉）；False=StopListening 抛异常。
+        """
+        self.run_flag = False
+        # 停止时丢弃未回复的合并缓冲：只清内存，不做延迟回复
+        if getattr(self, '_merge_buffers', None):
+            dropped = self._clear_merge_buffers()
+            log(level="WARNING", message=f"[合并回复] 机器人停止，丢弃 {dropped} 组未回复的缓冲")
+        try:
+            scheduler = getattr(self, 'scheduler', None)
+            if scheduler is not None:
+                scheduler.clear()
+        except Exception as e:
+            log(level="WARNING", message=f'清理定时任务失败: {e}')
+        return self._stop_listening(reason)
+
+    def _stop_listening(self, reason=''):
+        """停掉 wxautox 监听；监听从未启动/客户端还没造出来时不动 wxautox。
+
+        调用前先把标志清掉：即使 StopListening 抛异常也不会漏掉后续的补停
+        （异常时把标志放回去，留给下一次收尾重试）。
+        """
+        with self._wx_lock:
+            if self.wx is None or not self._listening_started:
+                return True
+            self._listening_started = False
+        try:
             self.wx.StopListening()
-            log(level="WARNING", message='siver_wxbot安全退出！！')
+            log(level="WARNING", message=f'siver_wxbot已停止监听（{reason or "退出"}）')
             return True
         except Exception as e:
-            self.is_err(self.wx.nickname + ' wxbot机器人关闭程序执行出错！！', e)
+            with self._wx_lock:
+                self._listening_started = True   # 没停成功，别丢掉这个事实
+            log(level="ERROR", message=f'StopListening 执行失败（{reason or "退出"}）: {e}')
             return False
+
+    def stop_wxbot(self):
+        """安全停止机器人（对外保持原有语义）：置停止信号 + 立即收尾。
+
+        停止监听、清掉本实例注册的定时任务，主循环随之退出；线程真正结束由
+        BotLifecycle 负责等待（它确认线程退出后才清空实例引用）。
+
+        :return: True=已无残留监听（成功停掉，或本来就没启动）；False=StopListening 抛异常。
+        """
+        self.request_stop()
+        return self.shutdown('主动停止')
+
+    # ------------------------------------------------------------------
+    # 配置应用：把磁盘新配置推给运行中的实例，并如实说明生效范围
+    # ------------------------------------------------------------------
+
+    def apply_config(self, changed_fields=None):
+        """把磁盘上的新配置应用到运行中的实例，并**如实说明生效范围**。
+
+        生效约定见 config_apply.py（面板、机器人与验收脚本共用同一份分类）：
+
+        · hot         —— refresh_config() 同步属性，立即生效；
+        · api_rebuild —— 额外重建默认 API 客户端（换 SDK 类型时只刷新属性不够）
+                         并清空群组专属接口缓存；
+        · restart     —— 监听注册 / 定时任务注册只在启动初始化阶段做，
+                         这里只如实上报"未生效"，绝不假装已全部应用。
+
+        :param changed_fields: 本次真正改动的配置键。面板已有"保存前/后"的磁盘差异，
+                               直接传进来最准；传 None 时用磁盘快照自行推断。
+        :return: dict(changed_fields, hot_fields, api_fields, restart_fields,
+                      restart_labels, api_rebuilt, errors)
+        """
+        result = {
+            'changed_fields': [],
+            'hot_fields': [],
+            'api_fields': [],
+            'restart_fields': [],
+            'restart_labels': '',
+            'api_rebuilt': False,
+            'errors': [],
+        }
+        before = copy.deepcopy(getattr(self.config, '_loaded_snapshot', {}) or {})
+
+        # 面板已经算好了改动字段：先分类，这样即使随后重载配置失败，
+        # "哪些改动必须重启才生效"这条信息也不会丢（否则面板会误报 needs_restart=False）。
+        plan = config_apply.summary(changed_fields) if changed_fields is not None else None
+
+        try:
+            self.config.refresh_config()
+        except Exception as e:
+            result['errors'].append(f'重载配置失败: {e}')
+            log(level="ERROR", message=f'应用新配置失败（重载配置出错）: {e}')
+            if plan is not None:
+                result['changed_fields'] = sorted(set(changed_fields))
+                result['hot_fields'] = plan['hot_fields']
+                result['api_fields'] = plan['api_fields']
+                result['restart_fields'] = plan['restart_fields']
+                result['restart_labels'] = plan['restart_labels']
+            return result
+
+        if changed_fields is None:
+            after = getattr(self.config, '_loaded_snapshot', {}) or {}
+            changed_fields = {
+                k for k in set(before) | set(after) if before.get(k) != after.get(k)
+            }
+
+        if plan is None:
+            plan = config_apply.summary(changed_fields)
+        result['changed_fields'] = sorted(set(changed_fields))
+        result['hot_fields'] = plan['hot_fields']
+        result['api_fields'] = plan['api_fields']
+        result['restart_fields'] = plan['restart_fields']
+        result['restart_labels'] = plan['restart_labels']
+
+        if plan['api_fields']:
+            # 默认接口客户端是启动时按 api_sdk 实例化的对象：SDK 类型 / Key / URL / 模型
+            # 变了都必须重建，否则"属性刷新了、调用还在用旧客户端"。
+            try:
+                self.api = self._init_api()
+                self.api_cache = {}     # 群组专属接口缓存同样按新配置重建
+                result['api_rebuilt'] = True
+                log(message=f"默认接口客户端已按新配置重建（{self.config.api_sdk or '未配置'}）")
+            except Exception as e:
+                result['errors'].append(f'重建默认接口客户端失败: {e}')
+                log(level="ERROR", message=f'重建默认接口客户端失败: {e}')
+
+        if plan['restart_fields']:
+            log(level="WARNING", message=(
+                "以下改动需重启才生效（监听注册 / 定时任务注册只在启动时做）："
+                f"{plan['restart_labels']}"
+            ))
+        return result
 
     def main(self):
         """
@@ -5038,17 +5765,19 @@ class WXBot:
             return False
 
         # 初始化微信监听器
+        init_ok = False
         try:
             self.init_wx_listeners()
             log(message=f"UI面板状态更新完成")
 
-            wait_time      = 3   # 主循环每 1 秒轮询一次
-            check_interval = 10  # 每 10 次循环执行一次离线检测
+            wait_time      = 1   # 主循环每 1 秒轮询一次（合并回复的窗口精度靠它）
+            check_interval = 30  # 每 30 次循环（= 30 秒）执行一次离线检测
             check_counter      = 0
             check_new_counter  = 0
+            alllisten_counter  = 0   # 全局监听仍保持原来的 3 秒节奏
             last_time          = time.time()
             log(message='siver_wxbot初始化完成，开始监听消息(作者:https://www.siver.top)')
-            self.run_flag = True
+            init_ok = True
         except Exception as e:
             print(traceback.format_exc())
             log(level="ERROR", message=str(e) + "\n 初始化微信监听器失败，请检查微信是否启动登录正确，微信主窗口是否开着")
@@ -5058,103 +5787,141 @@ class WXBot:
             log(level="ERROR", message=str(e) + "\n 若以上情况都检查完没有问题，那大概率为wx本身或者windows系统不稳定导致的，重启程序即可，若是一直这样，如果您是虚拟机就请分配更多性能，若是实体机可以联系作者询问")
             self.run_flag = False
 
+        # ⚠ 这里原先无条件 self.run_flag = True：初始化要好几秒，期间收到的停止请求
+        #   （面板点了停止 / 定时停止到点）会被这一行整个抹掉 —— 表现为"点了停止却继续跑"。
+        #   现在只有"初始化成功且期间没有停止请求"才真正开跑。
+        if self.stop_requested():
+            self.run_flag = False
+            if init_ok:
+                log(level="WARNING", message='初始化期间收到停止请求，不再进入主循环，立即收尾')
+        elif init_ok:
+            self.run_flag = True
+        else:
+            self.run_flag = False
+
         # 主循环
-        while self.run_flag:
+        #
+        # 整个循环包在 try/finally 里：初始化部分成功、主动停止、主循环异常、正常退出
+        # 四条路径最后都会走到同一个收尾（shutdown → StopListening），
+        # 不再出现"日志写着正在退出监听，实际监听还挂着"的情况。
+        try:
+            while self.run_flag and not self.stop_requested():
+                try:
+                    # ---- 离线检测模块（每 check_interval 次循环执行一次）----
+                    check_counter += 1
+                    if check_counter >= check_interval:
+                        try:
+                            if self.callback_is_die:
+                                # 回调函数已出错，停止所有监听并退出主循环
+                                self._stop_listening('回调函数出错')
+                                log(level="ERROR", message="检测到回调函数出错!!已停止所有监听并跳出主线程!!")
+                                break
+                            if not self.check_wechat_window():
+                                # 微信离线，阻塞等待人工处理；收尾统一交给最外层 finally
+                                self.is_err(f"{self._nickname()} wxbot监听出错！！微信可能已被弹出登录！！在线检查失败！！")
+                                self.request_stop()
+                                log(level="ERROR", message=f"微信 {self._nickname()} 已被弹出登录！！请检查微信是否登录！！")
+                                break
+                        except Exception as e:
+                            self.is_err(f"{self._nickname()} wxbot监听出错！！微信可能已被弹出登录！！在线检查失败！！", e)
+                            self.request_stop()
+                            log(level="ERROR", message=f"微信 {self._nickname()} 已被弹出登录！！请检查微信是否登录！！")
+                            break
+                        check_counter = 0
+
+                    # ---- 新好友检测模块（随机检查，间隔由配置决定）----
+                    if self.config.new_friend_switch:
+                        # 将秒数阈值除以循环周期得到循环次数（取整，最小1次）
+                        check_new_friend_time_MIN = max(1, int(self.config.new_friend_check_min / wait_time))
+                        check_new_friend_time_MAX = max(check_new_friend_time_MIN, int(self.config.new_friend_check_max / wait_time))
+                        check_new_counter += 1
+                        if check_new_counter >= random.randint(check_new_friend_time_MIN, check_new_friend_time_MAX):
+                            try:
+                                self.Pass_New_Friends()
+                                # log(message="检查新好友完成")
+                            except Exception as e:
+                                self.is_err(f"{self._nickname()}  智能客服bot监听新好友出错！！请检查程序！！", e)
+                            check_new_counter = 0
+
+                    # ---- 全局监听模式（黑名单模式下启用）----
+                    # 主循环从 3 秒改成 1 秒后，这里用计数器保持"每 3 秒一次"：
+                    # 否则 ALLListen_mode 的调用频率会翻三倍，CPU 白白上升。
+                    alllisten_counter += 1
+                    if alllisten_counter >= 3:
+                        alllisten_counter = 0
+                        if self.config.AllListen_switch:
+                            try:
+                                last_time = self.ALLListen_mode(last_time=last_time)
+                            except Exception as e:
+                                if not self.run_flag:
+                                    log(level="ERROR", message=str(e) + "\n全局模式出错！！请检查程序！！")
+
+                    # ---- 多条消息缓冲合并回复（到期/满条数才回复）----
+                    self._check_merge_buffers()
+
+                    # ---- 定时任务执行（定时消息 / 定时朋友圈）----
+                    # 只跑本实例调度器里的任务：模块级全局 schedule 是进程级的，
+                    # 旧实例残留的任务会被这里误执行（任务仍绑定已停掉的旧实例）。
+                    if self.config.scheduled_msg_switch or self.config.scheduled_moments_switch:
+                        self.scheduler.run_pending()
+
+                    # ---- 随机定时朋友圈模块 ----
+                    if self.config.random_moments_switch:
+                        try:
+                            self._check_random_moments()
+                        except Exception as e:
+                            log(level="ERROR", message=f"随机定时朋友圈模块出错：{e}")
+                    else:
+                        self._random_moments_state = {}  # 开关关闭时清空缓存
+
+                    # ---- 随机定时消息模块 ----
+                    if self.config.random_msg_switch:
+                        try:
+                            self._check_random_msg()
+                        except Exception as e:
+                            log(level="ERROR", message=f"随机定时消息模块出错：{e}")
+                    else:
+                        self._random_msg_state = {}  # 开关关闭时清空缓存
+
+                    # ---- 随机朋友圈点赞模块 ----
+                    if self.config.moments_like_switch:
+                        if self._moments_like_next_time is None:
+                            # 在 [min, max] 分钟范围内随机选取下次触发间隔
+                            lo = max(1, self.config.moments_like_min)
+                            hi = max(lo, self.config.moments_like_max)
+                            delay_min = random.randint(lo, hi)
+                            self._moments_like_next_time = datetime.now() + timedelta(minutes=delay_min)
+                            log(message=f"随机朋友圈点赞：下次触发 {self._moments_like_next_time.strftime('%H:%M:%S')}（{delay_min} 分钟后）")
+                        elif datetime.now() >= self._moments_like_next_time:
+                            try:
+                                self._do_moments_like()
+                            except Exception as e:
+                                log(level="ERROR", message=f"随机朋友圈点赞模块出错：{e}")
+                            self._moments_like_next_time = None  # 执行后重置，下次循环重新生成间隔
+                    else:
+                        self._moments_like_next_time = None  # 开关关闭时重置计时器
+
+                except Exception as e:
+                    self.is_err(
+                        self._nickname() + " wxbot消息处理出错！！微信可能已被弹出登录！！处理监听失败！！",
+                        e,
+                    )
+                    self.run_flag = False
+
+                time.sleep(wait_time)
+
+            log(level="WARNING", message='siver_wxbot主线程安全退出，正在退出监听...')
+        except Exception as e:
+            # 主循环外层异常：原先只置 run_flag=False、日志写"正在退出监听"，
+            # 实际没有调用 StopListening()，监听线程会一直残留到进程结束。
+            self.run_flag = False
             try:
-                # ---- 离线检测模块（每 check_interval 次循环执行一次）----
-                check_counter += 1
-                if check_counter >= check_interval:
-                    try:
-                        if self.callback_is_die:
-                            # 回调函数已出错，停止所有监听并退出主循环
-                            self.wx.StopListening()
-                            log(level="ERROR", message="检测到回调函数出错!!已停止所有监听并跳出主线程!!")
-                            break
-                        if not self.check_wechat_window():
-                            # 微信离线，阻塞等待人工处理
-                            self.is_err(self.wx.nickname + " wxbot监听出错！！微信可能已被弹出登录！！在线检查失败！！")
-                            self.stop_wxbot()
-                            log(level="ERROR", message=f"微信 {self.wx.nickname} 已被弹出登录！！请检查微信是否登录！！")
-                            break
-                    except Exception as e:
-                        self.is_err(self.wx.nickname + " wxbot监听出错！！微信可能已被弹出登录！！在线检查失败！！", e)
-                        self.stop_wxbot()
-                        log(level="ERROR", message=f"微信 {self.wx.nickname} 已被弹出登录！！请检查微信是否登录！！")
-                        break
-                    check_counter = 0
-
-                # ---- 新好友检测模块（随机检查，间隔由配置决定）----
-                if self.config.new_frined_switch:
-                    # 将秒数阈值除以循环周期得到循环次数（取整，最小1次）
-                    check_new_friend_time_MIN = max(1, int(self.config.new_friend_check_min / wait_time))
-                    check_new_friend_time_MAX = max(check_new_friend_time_MIN, int(self.config.new_friend_check_max / wait_time))
-                    check_new_counter += 1
-                    if check_new_counter >= random.randint(check_new_friend_time_MIN, check_new_friend_time_MAX):
-                        try:
-                            self.Pass_New_Friends()
-                            # log(message="检查新好友完成")
-                        except Exception as e:
-                            self.is_err(self.wx.nickname + "  智能客服bot监听新好友出错！！请检查程序！！", e)
-                        check_new_counter = 0
-
-                # ---- 全局监听模式（黑名单模式下启用）----
-                if self.config.AllListen_switch:
-                    try:
-                        last_time = self.ALLListen_mode(last_time=last_time)
-                    except Exception as e:
-                        if not self.run_flag:
-                            log(level="ERROR", message=str(e) + "\n全局模式出错！！请检查程序！！")
-
-                # ---- 定时任务执行（定时消息 / 定时朋友圈）----
-                if self.config.scheduled_msg_switch or self.config.scheduled_moments_switch:
-                    schedule.run_pending()
-
-                # ---- 随机定时朋友圈模块 ----
-                if self.config.random_moments_switch:
-                    try:
-                        self._check_random_moments()
-                    except Exception as e:
-                        log(level="ERROR", message=f"随机定时朋友圈模块出错：{e}")
-                else:
-                    self._random_moments_state = {}  # 开关关闭时清空缓存
-
-                # ---- 随机定时消息模块 ----
-                if self.config.random_msg_switch:
-                    try:
-                        self._check_random_msg()
-                    except Exception as e:
-                        log(level="ERROR", message=f"随机定时消息模块出错：{e}")
-                else:
-                    self._random_msg_state = {}  # 开关关闭时清空缓存
-
-                # ---- 随机朋友圈点赞模块 ----
-                if self.config.moments_like_switch:
-                    if self._moments_like_next_time is None:
-                        # 在 [min, max] 分钟范围内随机选取下次触发间隔
-                        lo = max(1, self.config.moments_like_min)
-                        hi = max(lo, self.config.moments_like_max)
-                        delay_min = random.randint(lo, hi)
-                        self._moments_like_next_time = datetime.now() + timedelta(minutes=delay_min)
-                        log(message=f"随机朋友圈点赞：下次触发 {self._moments_like_next_time.strftime('%H:%M:%S')}（{delay_min} 分钟后）")
-                    elif datetime.now() >= self._moments_like_next_time:
-                        try:
-                            self._do_moments_like()
-                        except Exception as e:
-                            log(level="ERROR", message=f"随机朋友圈点赞模块出错：{e}")
-                        self._moments_like_next_time = None  # 执行后重置，下次循环重新生成间隔
-                else:
-                    self._moments_like_next_time = None  # 开关关闭时重置计时器
-
-            except Exception as e:
-                self.is_err(
-                    self.wx.nickname + " wxbot消息处理出错！！微信可能已被弹出登录！！处理监听失败！！",
-                    e,
-                )
-                self.run_flag = False
-
-            time.sleep(wait_time)
-
-        log(level="WARNING", message='siver_wxbot主线程安全退出，正在退出监听...')
+                self.is_err(f"{self._nickname()} wxbot主循环异常退出！！", e)
+            except Exception:
+                pass
+        finally:
+            # 四条路径（初始化部分成功 / 主动停止 / 主循环异常 / 正常退出）统一收尾
+            self.shutdown('主循环退出')
 
     def run(self):
         """启动机器人（对外暴露的入口函数）"""

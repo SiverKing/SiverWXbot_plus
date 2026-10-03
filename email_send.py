@@ -26,6 +26,11 @@ def _base_dir():
 
 email_path = os.path.join(_base_dir(), 'config', 'email.txt')
 
+# SMTP 连接超时（秒）。注意：这是"单次 socket 操作"的超时上限，
+# 连接 / 登录 / 发信 / 退出 每个阻塞阶段都会各自受它约束，
+# 所以一封邮件的总耗时可能是它的若干倍 —— 不能理解成"整封邮件 10 秒内结束"。
+SMTP_TIMEOUT = 10
+
 def read_config(config_path=email_path):
     """从配置文件读取SMTP参数，如果不存在或内容不完整，则创建默认配置文件"""
     try:
@@ -88,9 +93,11 @@ def send_qq_email(receiver, subject, content):
     message['To'] = Header(receiver)             # 收件人
     message['Subject'] = Header(subject)         # 主题
 
+    smtpObj = None
     try:
-        # 使用SSL加密连接SMTP服务器
-        smtpObj = smtplib.SMTP_SSL(mail_host, mail_port)
+        # 使用SSL加密连接SMTP服务器。必须显式传 timeout：
+        # 不传就使用 smtplib 的全局默认（无超时），网络不通时会一直挂着。
+        smtpObj = smtplib.SMTP_SSL(mail_host, mail_port, timeout=SMTP_TIMEOUT)
         # 确保用户名和密码是纯 ASCII 字符串，去除可能的空白字符和 BOM
         user_clean = mail_user.strip().encode('ascii', errors='ignore').decode('ascii')
         pass_clean = mail_pass.strip().encode('ascii', errors='ignore').decode('ascii')
@@ -99,8 +106,14 @@ def send_qq_email(receiver, subject, content):
         print("邮件发送成功")
     except smtplib.SMTPException as e:
         print(f"邮件发送失败，错误：{str(e)}")
+    except OSError as e:
+        # 连接超时、无法连接等网络层错误（socket.timeout 在 py3.10+ 属于 OSError）
+        print(f"邮件发送失败（网络层），错误：{type(e).__name__}: {str(e)}")
     finally:
-        smtpObj.quit()
+        # 只有连接真正建立后才 quit。SMTP_SSL() 本身失败时 smtpObj 仍是 None，
+        # 不加判断就会在 finally 里抛 UnboundLocalError，把真实错误盖掉
+        if smtpObj is not None:
+            smtpObj.quit()
 
 def send_email(receiver=None, subject="默认邮件主题", content="这是来自Python程序的默认邮件内容"):
     '''

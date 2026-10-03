@@ -5,7 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WXBot 管理面板 - 登录</title>
 <link rel="icon" href="https://wxbot.siverking.online/favicon.ico" type="image/x-icon">
-<link href="https://s4.zstatic.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+{# ===== 第三方前端库（Bootstrap 5.3.0）=====
+   文件位置：templates/static/vendor/  （升级时需同时替换该目录下的文件）
+   本地直连读本地文件（断网也能登录），远程中继走 CDN；两个源互为兜底。
+   判断依据与 dashboard.html 一致：中继请求头带 X-Siver-Remote。 #}
+{% set _vf  = not request.headers.get('X-Siver-Remote') %}
+{% set _vq  = ('?v=' ~ bot_version) if bot_version else '' %}
+{% set _cdn = 'https://s4.zstatic.net/npm/' %}
+{% set bsCssP = (url_for('static', filename='vendor/bootstrap.min.css') ~ _vq) if _vf else (_cdn ~ 'bootstrap@5.3.0/dist/css/bootstrap.min.css') %}
+{% set bsCssA = (_cdn ~ 'bootstrap@5.3.0/dist/css/bootstrap.min.css') if _vf else (url_for('static', filename='vendor/bootstrap.min.css') ~ _vq) %}
+{% set bsJsP  = (url_for('static', filename='vendor/bootstrap.bundle.min.js') ~ _vq) if _vf else (_cdn ~ 'bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js') %}
+{% set bsJsA  = (_cdn ~ 'bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js') if _vf else (url_for('static', filename='vendor/bootstrap.bundle.min.js') ~ _vq) %}
+<link rel="stylesheet" href="{{ bsCssP }}" data-alt="{{ bsCssA }}" onerror="this.onerror=null;this.href=this.dataset.alt">
 <script>
 window.__BOOTSTRAP_ICONS_CDN_CSS__ = "https://wxbot.siverking.online/panel/static/bootstrap-icons.css";
 window.__BOOTSTRAP_ICONS_LOCAL_CSS__ = {{ url_for('static', filename='bootstrap-icons.css') | tojson }};
@@ -232,6 +243,7 @@ body {
     </div>
   </div>
 </div>
-<script src="https://s4.zstatic.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="{{ bsJsP }}"></script>
+<script>window.bootstrap||document.write('<script src='+{{ bsJsA|tojson }}+'><\/script>');</script>
 </body>
 </html>

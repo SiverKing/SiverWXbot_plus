@@ -1,0 +1,25 @@
+# 编辑器统一规矩（https://editorconfig.org）
+# 说明：VS Code 需要安装免费的 "EditorConfig for VS Code" 扩展才会读取本文件；
+#       PyCharm / IntelliJ / Visual Studio 自带支持。
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{html,css,js}]
+indent_size = 2
+
+[*.{json,yml,yaml}]
+indent_size = 2
+
+[*.{bat,cmd}]
+end_of_line = crlf
+
+# Markdown 行尾的两个空格表示"硬换行"，不能删
+[*.md]
+trim_trailing_whitespace = false

@@ -1,0 +1,25 @@
+# ============================================================
+# 统一行尾策略
+#   - 仓库内一律存 LF
+#   - 检出到工作区也一律 LF（不随操作系统变化）
+#   - 这样无论在哪台机器、哪个系统 clone，git 行为都一致
+# ============================================================
+* text=auto eol=lf
+
+# Windows 批处理必须 CRLF（cmd.exe 对 LF 结尾的 .bat 可能异常）
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 二进制文件：禁止 git 做任何文本转换，防止损坏
+# （* text=auto 本身能自动识别二进制，这里显式声明是额外保险）
+*.ico   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.woff  binary
+*.woff2 binary
+*.exe   binary
+*.zip   binary
+*.pyd   binary
+*.dll   binary

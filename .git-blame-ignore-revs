@@ -1,0 +1,8 @@
+# git blame 忽略清单（这些提交只做格式化/行尾统一，没有逻辑改动）
+#
+# 用法：
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# GitHub 网页端的 blame 视图会自动识别本文件，无需额外配置。
+#
+# 统一行尾为 LF，新增 .gitattributes 与 .editorconfig
+2b34064d5aed7684bc335cf6a62770337392353d
