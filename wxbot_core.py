@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "v4.8.0"
-version_log = "v4.8.0 - 重大更新！底层全面重构·全新架构·安全加固·全新功能，更安全、更稳定、更易维护 详见Github Release"
+version = "v4.8.1"
+version_log = "v4.8.1 - 修复自动备份在长路径下失败、备份改为单 zip 快照、消息类回复支持发送文档等常见文件"
 
 # ============================================================
 # 【新增配置字段检查清单】本文件内 2 步：④ 必改、⑥ 可选
@@ -221,6 +221,38 @@ API_ERROR_REPLY    = "API返回错误，请稍后再试"
 # （早期版本用的是 os.path.basename，用户反馈后改为固定文案）。
 # ============================================================
 MEDIA_CARRIER_TEXT = "1"
+
+# ============================================================
+# 消息类发送：可自动作为「文件」发送的扩展名
+# ------------------------------------------------------------
+# 关键词回复 / 定时消息 / 随机定时消息 / 新好友招呼语 里填写本地文件完整路径时，
+# 程序会走 SendFiles 直接发文件（图片、视频、文档、压缩包等都能发）。
+# ⚠ 朋友圈图片/视频不走这里：朋友圈只支持图片和视频（见 send_scheduled_moments）。
+# 扩展名只有这一个来源，下面的正则由它生成，避免两处清单漏改。
+# ============================================================
+SEND_FILE_EXTENSIONS = (
+    # 图片
+    '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.ico', '.tif', '.tiff', '.heic', '.heif',
+    # 视频
+    '.mp4', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.m4v', '.webm', '.3gp',
+    # 音频
+    '.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg', '.amr',
+    # 文档 / 表格 / 演示
+    '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.csv', '.ppt', '.pptx',
+    '.txt', '.md', '.rtf', '.odt', '.ods', '.odp', '.wps', '.et', '.dps', '.ofd',
+    # 压缩包
+    '.zip', '.rar', '.7z', '.tar', '.gz', '.bz2', '.xz',
+    # 其它常见可发送文件
+    '.json', '.xml', '.html', '.htm', '.log', '.py', '.js',
+    '.apk', '.exe', '.msi', '.iso', '.epub', '.mobi',
+)
+
+_SEND_FILE_PATH_RE = re.compile(
+    r'^([A-Za-z]:[\\/]|/[^/]+).+\.('
+    + '|'.join(ext.lstrip('.') for ext in SEND_FILE_EXTENSIONS)
+    + r')$',
+    re.IGNORECASE,
+)
 
 
 def _normalize_api_configs(api_configs):
@@ -3706,7 +3738,7 @@ class WXBot:
                             log(message=f"群组 {chat.who} 关键字消息：" + message.content)
                             self.config.human_delay()  # 模拟人工操作延迟（可在面板配置）
                             # 走 _send_keyword_reply(is_group=True)：文字回复行为不变，
-                            # 但关键词内容是图片/视频路径时会先发载体消息再发文件
+                            # 关键词内容是文件路径且开启引用时，先发载体消息再发文件
                             result = self._send_keyword_reply(
                                 chat,
                                 message,
@@ -3934,38 +3966,39 @@ class WXBot:
     def _send_keyword_reply(self, chat, message, content, is_group=False):
         """发送关键词回复；引用开关对私聊/群聊均生效，@仅对群聊生效。
 
-        关键词内容是图片/视频路径时：先发一条载体消息，再发送文件本身。
-        载体消息内容固定为 MEDIA_CARRIER_TEXT（"1"），不取文件名 —— 它只用来
-        承载 @ / 引用（群聊按配置带 @ / 引用，私聊按引用开关、引用失败降级普通发送）。
+        关键词内容是文件路径时：
+        - 开启「关键词回复时引用消息」→ 先发一条载体消息（内容固定为
+          MEDIA_CARRIER_TEXT "1"）承载引用/@ 语义，再发送文件本身；
+        - 未开启引用 → 直接发文件。文件消息本身带不了 @/引用，没有引用语义时
+          那条 "1" 只会让用户多收到一条无意义的消息。
         载体消息发送失败只记 WARNING，不阻断发文件。
         """
         if self.is_media_path(content):
-            carrier = MEDIA_CARRIER_TEXT
-            carrier_result = None
-            try:
-                if is_group:
-                    carrier_result = self._send_group_reply(
-                        chat,
-                        message,
-                        carrier,
-                        at_sender=self.config.group_keyword_reply_at_msg,
-                        quote=self.config.keyword_reply_quote,
-                    )
-                elif self.config.keyword_reply_quote:
-                    carrier_result = message.quote(carrier)
-                    if not ReplyCountStore.was_send_success(carrier_result):
-                        err_msg = ReplyCountStore.send_result_message(carrier_result)
-                        log(level="WARNING", message=f"私聊关键词载体引用失败，已降级为普通发送：{err_msg}")
-                        carrier_result = chat.SendMsg(carrier)
-                else:
-                    carrier_result = chat.SendMsg(carrier)
-            except Exception as e:
-                log(level="WARNING", message=f"关键词文件回复的载体消息发送异常，继续发送文件：{e}")
-            if carrier_result is not None and not ReplyCountStore.was_send_success(carrier_result):
-                log(level="WARNING", message=(
-                    "关键词文件回复的载体消息发送失败，继续发送文件："
-                    + ReplyCountStore.send_result_message(carrier_result)
-                ))
+            if self.config.keyword_reply_quote:
+                carrier = MEDIA_CARRIER_TEXT
+                carrier_result = None
+                try:
+                    if is_group:
+                        carrier_result = self._send_group_reply(
+                            chat,
+                            message,
+                            carrier,
+                            at_sender=self.config.group_keyword_reply_at_msg,
+                            quote=True,
+                        )
+                    else:
+                        carrier_result = message.quote(carrier)
+                        if not ReplyCountStore.was_send_success(carrier_result):
+                            err_msg = ReplyCountStore.send_result_message(carrier_result)
+                            log(level="WARNING", message=f"私聊关键词载体引用失败，已降级为普通发送：{err_msg}")
+                            carrier_result = chat.SendMsg(carrier)
+                except Exception as e:
+                    log(level="WARNING", message=f"关键词文件回复的载体消息发送异常，继续发送文件：{e}")
+                if carrier_result is not None and not ReplyCountStore.was_send_success(carrier_result):
+                    log(level="WARNING", message=(
+                        "关键词文件回复的载体消息发送失败，继续发送文件："
+                        + ReplyCountStore.send_result_message(carrier_result)
+                    ))
 
             result = chat.SendFiles(content)
             # SendFiles 成功也常常不返回任何值（None），这里显式当成功，避免误报发送失败
@@ -5091,29 +5124,20 @@ class WXBot:
 
     def is_media_path(self, s: str) -> bool:
         """
-        判断字符串是否为有效的图片/视频文件完整路径。
-        支持 Windows（C:\\...）和 Unix（/home/...）风格路径。
+        判断字符串是否为「可自动作为文件发送的本地文件」完整路径。
+        支持图片、视频、音频、文档、压缩包等常见后缀（见 SEND_FILE_EXTENSIONS），
+        支持 Windows（C:\\...）和 Unix（/home/...）风格绝对路径。
+
+        ⚠ 只用于消息类发送（关键词回复 / 定时消息 / 随机定时消息 / 新好友招呼语），
+          朋友圈图片/视频不走这里（朋友圈只支持图片和视频）。
 
         :param s: 待判断的字符串
-        :return:  True 表示是图片/视频路径，False 则不是
+        :return:  True 表示是文件路径，False 则不是
         """
-        media_extensions = (
-            '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp',
-            '.mp4', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.m4v', '.webm',
-        )
-        if not s.lower().endswith(media_extensions):
+        text = str(s or '').strip()
+        if not text.lower().endswith(SEND_FILE_EXTENSIONS):
             return False
-        pattern = re.compile(
-            r'^('
-            r'([A-Za-z]:[\\/])'     # Windows 盘符（C:\ 或 C:/）
-            r'|'
-            r'(/[^/]+)'             # Unix 绝对路径（/home/...）
-            r')'
-            r'.+'                   # 中间任意目录层级
-            r'\.(png|jpg|jpeg|gif|bmp|webp|mp4|mov|avi|mkv|wmv|flv|m4v|webm)$',
-            re.IGNORECASE,
-        )
-        return bool(pattern.match(s))
+        return bool(_SEND_FILE_PATH_RE.match(text))
 
     @staticmethod
     def _remark_unit_len(text):
@@ -5782,7 +5806,7 @@ class WXBot:
             print(traceback.format_exc())
             log(level="ERROR", message=str(e) + "\n 初始化微信监听器失败，请检查微信是否启动登录正确，微信主窗口是否开着")
             log(level="ERROR", message=str(e) + "\n 请尝试退出wx再重新登录后再启动")
-            log(level="ERROR", message=str(e) + "\n 若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配,4.1.9 ~ 4.1.15.13")
+            log(level="ERROR", message=str(e) + "\n 若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配,4.1.9 ~ 4.1.15.56")
             log(level="ERROR", message=str(e) + "\n 若是wx 4.1.9.35往后版本有初始化问题，请到wx群内@Siver")
             log(level="ERROR", message=str(e) + "\n 若以上情况都检查完没有问题，那大概率为wx本身或者windows系统不稳定导致的，重启程序即可，若是一直这样，如果您是虚拟机就请分配更多性能，若是实体机可以联系作者询问")
             self.run_flag = False

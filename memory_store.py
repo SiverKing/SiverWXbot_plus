@@ -135,6 +135,31 @@ def is_internal_dir_name(name):
 
 
 # ============================================================
+# Windows 长路径（MAX_PATH 260）支持
+# ============================================================
+
+def long_path(path):
+    """文件 API 边界用的长路径安全路径（Windows 下加 `\\\\?\\` 前缀）。
+
+    Windows 的 260 字符限制来自 Win32 的路径解析层；`\\\\?\\` 前缀会让 Win32
+    跳过路径解析和 260 检查，把路径直接交给内核（上限 32767 字符），因此
+    **不需要**开注册表 LongPathsEnabled、不需要管理员权限、也不需要重启。
+
+    ⚠ 只用于真正调文件 API 的地方；日志、面板展示、返回给前端的路径一律用
+      原始路径。加过前缀的路径不要再交给 os.path.abspath/normpath/relpath，
+      否则前缀会被破坏。
+    ⚠ 入参必须是绝对路径；已经是前缀路径时原样返回（幂等）。
+    """
+    text = str(os.fspath(path))
+    if os.name != 'nt' or text.startswith('\\\\?\\'):
+        return text
+    text = os.path.abspath(text)
+    if text.startswith('\\\\'):                  # UNC：\\server\share\...
+        return '\\\\?\\UNC\\' + text[2:]
+    return '\\\\?\\' + text
+
+
+# ============================================================
 # 原子写
 # ============================================================
 
@@ -144,7 +169,7 @@ _ATOMIC_WRITE_LOCKS_GUARD = threading.Lock()
 
 def _get_atomic_write_lock(path):
     """取某个目标文件的写锁（首次访问时创建，创建过程本身也加锁）。"""
-    key = os.path.abspath(path)
+    key = os.path.normcase(long_path(os.path.abspath(str(path))))
     with _ATOMIC_WRITE_LOCKS_GUARD:
         lock = _ATOMIC_WRITE_LOCKS.get(key)
         if lock is None:
@@ -168,6 +193,7 @@ def write_json_atomic(path, data, indent=4):
        因此做有限次快速重试。
     """
     with _get_atomic_write_lock(path):
+        path = long_path(path)
         directory = os.path.dirname(path) or '.'
         os.makedirs(directory, exist_ok=True)
         fd, tmp = tempfile.mkstemp(
@@ -195,6 +221,7 @@ def write_json_atomic(path, data, indent=4):
 
 def read_json_file(path, default=None):
     """安全读取 JSON 文件：文件不存在/内容损坏时返回 default。"""
+    path = long_path(path)
     if not os.path.exists(path):
         return default
     try:
@@ -400,7 +427,7 @@ def _file_lock(path, timeout=10.0, create_parent=True):
     with global_lock:
         if create_parent:
             try:
-                parent = os.path.dirname(path)
+                parent = os.path.dirname(long_path(path))
                 if parent:
                     os.makedirs(parent, exist_ok=True)
             except OSError:
@@ -410,7 +437,7 @@ def _file_lock(path, timeout=10.0, create_parent=True):
         handle = None
         locked = False
         try:
-            handle = open(path, 'a+b')
+            handle = open(long_path(path), 'a+b')
             try:
                 # msvcrt.locking 不能锁超过文件末尾的区域，先确保文件至少有 1 字节
                 handle.seek(0, os.SEEK_END)
@@ -520,11 +547,11 @@ def scan_wx_dir(wx_dir):
     （见 LegacyMigration）。
     """
     result = {'migrate': {}, 'quarantine': {}, 'keep': []}
-    if not os.path.isdir(wx_dir):
+    if not os.path.isdir(long_path(wx_dir)):
         return result
 
     try:
-        entries = sorted(os.listdir(wx_dir))
+        entries = sorted(os.listdir(long_path(wx_dir)))
     except OSError:
         return result
 
@@ -612,10 +639,7 @@ def _is_new_format_dir_name(name, owner_name=None):
 
 def _is_real_dir(path):
     """判断路径是不是目录（Windows 上末位 '.' 会被自动去掉，需要绕过规范化）。"""
-    if os.name == 'nt':
-        probe = '\\\\?\\' + os.path.abspath(path)
-    else:
-        probe = path
+    probe = long_path(path)
     try:
         import stat as _stat
         return _stat.S_ISDIR(os.stat(probe).st_mode)
@@ -626,7 +650,7 @@ def _is_real_dir(path):
 def _list_memory_files(chat_path):
     """列出目录里的所有 *_memory.json 文件。"""
     try:
-        return [f for f in os.listdir(chat_path) if f.endswith(MEMORY_FILE_SUFFIX)]
+        return [f for f in os.listdir(long_path(chat_path)) if f.endswith(MEMORY_FILE_SUFFIX)]
     except OSError:
         return []
 
@@ -771,7 +795,7 @@ class LegacyMigration:
     def _list_wx_ids(self):
         try:
             return sorted(
-                d for d in os.listdir(self.base_path)
+                d for d in os.listdir(long_path(self.base_path))
                 if not is_internal_dir_name(d) and _is_real_dir(os.path.join(self.base_path, d))
             )
         except OSError:
@@ -802,17 +826,17 @@ class LegacyMigration:
         if not _is_real_dir(target_path):
             staging = f'{target_path}.staging-{int(time.time() * 1000)}'
             try:
-                shutil.copytree(legacy_path, staging)
+                shutil.copytree(long_path(legacy_path), long_path(staging))
                 self._rename_inside_copy(staging, legacy_name, storage_key)
-                if os.path.exists(target_path):       # 并发下极小概率被别人抢先创建
+                if os.path.exists(long_path(target_path)):   # 并发下极小概率被别人抢先创建
                     # 竞态：复制期间新目录被建出来了（可能是并发访问，也可能是
                     # 上一次失败后产生的写入）→ 把旧历史并进去，绝不整目录覆盖
                     self._merge_legacy_history(staging, target_path, storage_key)
-                    shutil.rmtree(staging, ignore_errors=True)
+                    shutil.rmtree(long_path(staging), ignore_errors=True)
                 else:
-                    os.replace(staging, target_path)  # 目录级原子改名
+                    os.replace(long_path(staging), long_path(target_path))  # 目录级原子改名
             except Exception as e:
-                shutil.rmtree(staging, ignore_errors=True)
+                shutil.rmtree(long_path(staging), ignore_errors=True)
                 entry['status'] = 'failed'
                 entry['error'] = str(e)
                 self._save_ledger(ledger)
@@ -918,11 +942,11 @@ class LegacyMigration:
                 continue
             source = os.path.join(staging_dir, name)
             target = os.path.join(staging_dir, target_name)
-            if os.path.exists(target):
+            if os.path.exists(long_path(target)):
                 # 理论上不会出现（多个记忆文件已被判为归属不明、不进迁移流程），
                 # 真出现时保留原文件并改名，绝不删除用户数据
                 target = os.path.join(staging_dir, f'{storage_key}.{name}')
-            os.replace(source, target)
+            os.replace(long_path(source), long_path(target))
 
         recorded = _read_recorded_name(staging_dir)
         if recorded is None:
@@ -965,15 +989,15 @@ class LegacyMigration:
         不删除原数据，只是改个位置：用户随时可以按台账改回来（见回滚脚本）。
         """
         quarantine_wx_dir = os.path.join(self.quarantine_root, wx_id)
-        os.makedirs(quarantine_wx_dir, exist_ok=True)
+        os.makedirs(long_path(quarantine_wx_dir), exist_ok=True)
         suffix = '__migrated' if status == 'migrated' else '__ambiguous'
         dest_name = f'{legacy_name}{suffix}'
         dest_path = os.path.join(quarantine_wx_dir, dest_name)
-        if os.path.exists(dest_path):
+        if os.path.exists(long_path(dest_path)):
             dest_name = f'{dest_name}.{int(time.time() * 1000)}'
             dest_path = os.path.join(quarantine_wx_dir, dest_name)
 
-        os.replace(legacy_path, dest_path)
+        os.replace(long_path(legacy_path), long_path(dest_path))
         try:
             write_json_atomic(os.path.join(dest_path, QUARANTINE_META_NAME), {
                 'original_dir_name': legacy_name,
@@ -1008,10 +1032,10 @@ class LegacyMigration:
                 continue
             target = entry.get('target_dir') or ''
             wx_dir = os.path.dirname(target) if target else ''
-            if wx_dir and os.path.isdir(wx_dir):
-                for name in os.listdir(wx_dir):
+            if wx_dir and os.path.isdir(long_path(wx_dir)):
+                for name in os.listdir(long_path(wx_dir)):
                     if name.startswith(os.path.basename(target) + '.staging-'):
-                        shutil.rmtree(os.path.join(wx_dir, name), ignore_errors=True)
+                        shutil.rmtree(long_path(os.path.join(wx_dir, name)), ignore_errors=True)
             entry['status'] = 'interrupted_needs_review'
             entry['note'] = '上次迁移未完成，下次访问该窗口时会自动重试（幂等）'
             changed = True
@@ -1170,14 +1194,14 @@ class MemoryManager:
         with self._get_lock(storage_key):
             with self._session_file_lock(storage_key):
                 try:
-                    os.makedirs(os.path.dirname(tombstone), exist_ok=True)
+                    os.makedirs(long_path(os.path.dirname(tombstone)), exist_ok=True)
                 except OSError as e:
                     _warn(f"删除会话失败（无法创建墓碑目录） {self.wx_id}/{storage_key}: {e}")
                     return False
-                if os.path.exists(tombstone):       # 上次中断留下的墓碑
+                if os.path.exists(long_path(tombstone)):       # 上次中断留下的墓碑
                     self._remove_path(tombstone)
                 try:
-                    os.replace(chat_dir, tombstone)
+                    os.replace(long_path(chat_dir), long_path(tombstone))
                 except OSError as e:
                     # 改名失败（例如目录内有文件被别人打开）：放弃删除，
                     # 语义等同"没删掉"，绝不退回"无保护 rmtree"
@@ -1383,7 +1407,7 @@ class MemoryManager:
             return
         self._emitted_scanned = True
         try:
-            names = os.listdir(self.base_dir)
+            names = os.listdir(long_path(self.base_dir))
         except OSError:
             return
         for name in names:
@@ -1461,9 +1485,9 @@ class MemoryManager:
         """
         storage_key = self.resolve_storage_key(chat_name)
         dir_path = os.path.join(self.base_dir, storage_key)
-        os.makedirs(dir_path, exist_ok=True)
+        os.makedirs(long_path(dir_path), exist_ok=True)
         name_path = os.path.join(dir_path, ORIGINAL_NAME_FILE)
-        if not os.path.exists(name_path):
+        if not os.path.exists(long_path(name_path)):
             self._write_original_name(dir_path, chat_name)
         # 登记归属：之后有"窗口名恰好等于这个存储标识"的窗口出现时能被识别出来
         self._register_emitted_key(storage_key, chat_name)
@@ -1714,7 +1738,7 @@ class MemoryManager:
           留在磁盘上是最安全的选择。
         """
         try:
-            entries = os.listdir(self.base_dir)
+            entries = os.listdir(long_path(self.base_dir))
         except OSError:
             return
 
@@ -1728,14 +1752,14 @@ class MemoryManager:
             if not _is_real_dir(path):
                 continue
             try:
-                os.rmdir(path)          # 只删空目录，非空/被占用则跳过
+                os.rmdir(long_path(path))   # 只删空目录，非空/被占用则跳过
             except OSError:
                 pass
 
     def _prune_tombstones(self, deleting_dir):
         """清理孤儿墓碑：加会话锁后整目录删除。"""
         try:
-            names = os.listdir(deleting_dir)
+            names = os.listdir(long_path(deleting_dir))
         except OSError:
             return
         for name in names:
@@ -1744,27 +1768,26 @@ class MemoryManager:
                 with self._session_file_lock(name):
                     self._remove_path(path)
         try:
-            os.rmdir(deleting_dir)
+            os.rmdir(long_path(deleting_dir))
         except OSError:
             pass
 
     @staticmethod
     def _list_all_memory_files(chat_dir):
         try:
-            return [f for f in os.listdir(chat_dir) if f.endswith(MEMORY_FILE_SUFFIX)]
+            return [f for f in os.listdir(long_path(chat_dir)) if f.endswith(MEMORY_FILE_SUFFIX)]
         except OSError:
             return []
 
     @staticmethod
     def _remove_path(path):
         """递归删除一个路径；失败只告警、不虚报成功。返回是否已不存在。"""
-        if not path or not os.path.exists(path):
+        if not path:
             return True
-        if os.name == 'nt':
-            # 目录名末尾可能是 '.' 等被 Windows 规范化的字符，用长路径前缀绕过
-            probe = '\\\\?\\' + os.path.abspath(path)
-        else:
-            probe = path
+        # 目录名末尾可能是 '.' 等被 Windows 规范化的字符，用长路径前缀绕过
+        probe = long_path(path)
+        if not os.path.exists(probe):
+            return True
         shutil.rmtree(probe, ignore_errors=True)
         return not os.path.exists(probe)
 
@@ -1774,7 +1797,7 @@ class MemoryManager:
         """列出当前微信号下所有记忆目录的存储标识（不含内部目录/隔离区）。"""
         keys = []
         try:
-            entries = sorted(os.listdir(self.base_dir))
+            entries = sorted(os.listdir(long_path(self.base_dir)))
         except OSError:
             return keys
         for name in entries:
@@ -1811,7 +1834,7 @@ class MemoryManager:
         storage_key = self.resolve_storage_key(chat_name)
         chat_dir = os.path.join(self.base_dir, storage_key)
         direct = os.path.join(chat_dir, memory_file_name(storage_key))
-        if os.path.exists(direct):
+        if os.path.exists(long_path(direct)):
             return direct
 
         if _is_new_format_dir_name(storage_key):
@@ -1824,7 +1847,7 @@ class MemoryManager:
             return ''
         try:
             candidates = sorted(
-                f for f in os.listdir(chat_dir) if f.endswith(MEMORY_FILE_SUFFIX)
+                f for f in os.listdir(long_path(chat_dir)) if f.endswith(MEMORY_FILE_SUFFIX)
             )
         except OSError:
             return ''

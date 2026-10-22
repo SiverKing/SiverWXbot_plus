@@ -1044,12 +1044,12 @@ html.icons-pref-local [class*=" bi-"]::before {
         <input class="form-check-input" type="checkbox" id="new_friend_reply_switch" name="new_friend_reply_switch" {% if config.new_friend_reply_switch %}checked{% endif %}>
         <label for="new_friend_reply_switch">新好友自动回复</label>
       </div>
-      <div class="cfg-hint" style="margin-bottom:8px;"><i class="bi bi-image" style="color:var(--primary);"></i> 填写文字内容将发送文字，填写图片/视频完整路径（如 <code>C:\图片\welcome.png</code>）将自动发送图片</div>
+      <div class="cfg-hint" style="margin-bottom:8px;"><i class="bi bi-image" style="color:var(--primary);"></i> 填写文字内容将发送文字；填写文件完整路径（图片/视频/文档/压缩包等，如 <code>C:\文件\报告.pdf</code>）将自动作为文件发送</div>
       <div id="new_friend_msg_container">
         {% for msg in config.new_friend_msg %}
         <div class="list-item">
-          <textarea class="form-control" name="new_friend_msg" rows="2" placeholder="文字内容 或 图片/视频完整路径">{{ msg }}</textarea>
-          <button type="button" class="btn-pick-img" title="点击选择本地图片/视频，自动填入路径"><i class="bi bi-folder2-open"></i></button>
+          <textarea class="form-control" name="new_friend_msg" rows="2" placeholder="文字内容 或 文件完整路径（图片/视频/文档等）">{{ msg }}</textarea>
+          <button type="button" class="btn-pick-img" data-pick-kind="file" title="点击选择本地文件（图片/视频/文档等），自动填入路径"><i class="bi bi-folder2-open"></i></button>
           <button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>
         </div>
         {% endfor %}
@@ -1092,8 +1092,8 @@ html.icons-pref-local [class*=" bi-"]::before {
         {% for key, value in config.keyword_dict.items() %}
         <div class="keyword-item">
           <input type="text" class="form-control" name="keyword_key" value="{{ key }}" placeholder="关键词">
-          <textarea class="form-control" name="keyword_value" placeholder="回复内容">{{ value }}</textarea>
-          <button type="button" class="btn-pick-img" data-pick-target="textarea[name=keyword_value]" title="点击选择本地图片/视频，自动填入路径"><i class="bi bi-folder2-open"></i></button>
+          <textarea class="form-control" name="keyword_value" placeholder="回复内容，或文件完整路径（图片/视频/文档等）">{{ value }}</textarea>
+          <button type="button" class="btn-pick-img" data-pick-target="textarea[name=keyword_value]" data-pick-kind="file" title="点击选择本地文件（图片/视频/文档等），自动填入路径"><i class="bi bi-folder2-open"></i></button>
           <button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>
         </div>
         {% endfor %}
@@ -1262,12 +1262,12 @@ html.icons-pref-local [class*=" bi-"]::before {
             <input type="{% if item.repeat_type == 'once' %}date{% else %}text{% endif %}" class="form-control date-input" value="{{ item.dates | join(',') }}" placeholder="2026-03-20">
           </div>
           <label class="cfg-label">消息内容</label>
-          <div class="cfg-hint" style="margin-bottom:8px;"><i class="bi bi-image" style="color:var(--primary);"></i> 填写文字内容将发送文字，填写图片/视频完整路径（如 <code>C:\图片\hello.png</code>）将自动发送图片</div>
+          <div class="cfg-hint" style="margin-bottom:8px;"><i class="bi bi-image" style="color:var(--primary);"></i> 填写文字内容将发送文字；填写文件完整路径（图片/视频/文档/压缩包等，如 <code>C:\文件\报告.pdf</code>）将自动作为文件发送</div>
           <div class="scheduled-msg-list">
             {% for msg in item.msgs %}
             <div class="list-item">
-              <textarea class="form-control" name="scheduled_msg" rows="2" placeholder="文字内容 或 图片/视频完整路径">{{ msg }}</textarea>
-              <button type="button" class="btn-pick-img" title="点击选择本地图片/视频，自动填入路径"><i class="bi bi-folder2-open"></i></button>
+              <textarea class="form-control" name="scheduled_msg" rows="2" placeholder="文字内容 或 文件完整路径（图片/视频/文档等）">{{ msg }}</textarea>
+              <button type="button" class="btn-pick-img" data-pick-kind="file" title="点击选择本地文件（图片/视频/文档等），自动填入路径"><i class="bi bi-folder2-open"></i></button>
               <button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>
             </div>
             {% endfor %}
@@ -1340,12 +1340,12 @@ html.icons-pref-local [class*=" bi-"]::before {
             <input type="number" class="form-control rmsg-days-count" min="1" max="{% if item.repeat_type == 'monthly' %}31{% else %}7{% endif %}" value="{{ item.random_days_count or 1 }}">
           </div>
           <label class="cfg-label">消息内容</label>
-          <div class="cfg-hint" style="margin-bottom:8px;"><i class="bi bi-image" style="color:var(--primary);"></i> 填写文字内容将发送文字，填写图片/视频完整路径（如 <code>C:\图片\hello.png</code>）将自动发送图片</div>
+          <div class="cfg-hint" style="margin-bottom:8px;"><i class="bi bi-image" style="color:var(--primary);"></i> 填写文字内容将发送文字；填写文件完整路径（图片/视频/文档/压缩包等，如 <code>C:\文件\报告.pdf</code>）将自动作为文件发送</div>
           <div class="rmsg-msg-list">
             {% for msg in item.msgs %}
             <div class="list-item">
-              <textarea class="form-control" name="rmsg_msg" rows="2" placeholder="文字内容 或 图片/视频完整路径">{{ msg }}</textarea>
-              <button type="button" class="btn-pick-img" title="点击选择本地图片/视频，自动填入路径"><i class="bi bi-folder2-open"></i></button>
+              <textarea class="form-control" name="rmsg_msg" rows="2" placeholder="文字内容 或 文件完整路径（图片/视频/文档等）">{{ msg }}</textarea>
+              <button type="button" class="btn-pick-img" data-pick-kind="file" title="点击选择本地文件（图片/视频/文档等），自动填入路径"><i class="bi bi-folder2-open"></i></button>
               <button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>
             </div>
             {% endfor %}
@@ -1877,12 +1877,12 @@ html.icons-pref-local [class*=" bi-"]::before {
       <div class="cfg-card-header">
         <i class="bi bi-shield-check"></i>
         <h5>数据备份</h5>
-        <span class="desc">将 config/ 和 memory/ 完整备份到 old_wxbot_config/ 目录</span>
+        <span class="desc">将 config/ 和 memory/ 打包成 old_wxbot_config/时间戳.zip</span>
       </div>
       <div style="display:flex;gap:10px;align-items:flex-start;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:6px;padding:12px 14px;margin-bottom:20px;">
         <i class="bi bi-info-circle-fill" style="color:#3B82F6;font-size:16px;flex-shrink:0;margin-top:1px;"></i>
         <div style="font-size:12.5px;color:#1E3A5F;line-height:1.8;">
-          每次备份将把 <code>config/</code> 和 <code>memory/</code> 文件夹完整复制到 <code>old_wxbot_config/时间戳/</code> 目录中，并在其中创建以当前版本号命名的空标记文件。<br>
+          每次备份会把 <code>config/</code>、<code>memory/</code> 和版本标记文件打包成一个 <code>old_wxbot_config/时间戳.zip</code>。<br>
           <strong>自动备份规则：</strong>首次运行自动备份；距上次备份超过 3 天自动备份；检测到版本更新时自动备份。
         </div>
       </div>

@@ -14,7 +14,7 @@ LOG_PATH = os.path.join(_base_dir(), "panel_logs")
 os.makedirs(LOG_PATH, exist_ok=True)
 
 # 日志文件保留天数：启动时清理更早的 log_YYMMDD.txt（当天文件永不删除）
-LOG_RETENTION_DAYS = 30
+LOG_RETENTION_DAYS = 365
 _LOG_FILE_RE = re.compile(r'log_(\d{6})\.txt')
 
 # 日志颜色映射

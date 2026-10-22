@@ -48,6 +48,7 @@ import json
 import os
 import sys
 import shutil
+import zipfile
 import base64
 import tempfile
 import hashlib
@@ -72,6 +73,7 @@ from bot_lifecycle import BotLifecycle
 from memory_store import (
     get_memory_manager,
     is_internal_dir_name,
+    long_path,
     read_original_name,
 )
 from logger import log
@@ -625,34 +627,62 @@ def _migrate_prompt_from_config(config):
 # ============================================================
 
 
+def _add_tree_to_zip(zf, src_dir, prefix):
+    """把 src_dir 整个目录写进已打开的 zip（条目名前缀 prefix/）。
+
+    走 long_path()：深安装路径下的长目录也能遍历；zip 内部条目名用 '/'
+    分隔、不带长路径前缀，因此不受 Windows MAX_PATH 260 限制。
+    """
+    src = long_path(src_dir)
+    for root, _dirs, files in os.walk(src):
+        rel = root[len(src):].lstrip('\\').replace('\\', '/')
+        for name in files:
+            full = os.path.join(root, name)
+            zf.write(full, f'{prefix}/{rel}/{name}' if rel else f'{prefix}/{name}')
+
+
+def _backup_zip_top_names(zip_path):
+    """备份 zip 里的顶层条目名（判断版本标记用）；打不开时返回 []。"""
+    try:
+        with zipfile.ZipFile(long_path(zip_path)) as zf:
+            return [n for n in zf.namelist() if '/' not in n]
+    except Exception:
+        return []
+
+
 def _do_backup():
     """
-    执行一次完整数据备份：
-      - 将 config/ 和 memory/ 复制到 old_wxbot_config/<时间戳>/
-      - 在时间戳目录内创建以当前版本号命名的空标记文件（如 V4.6.10）
-    返回备份目录的绝对路径。
+    执行一次完整数据备份（整个快照打成一个 zip）：
+      - old_wxbot_config/<时间戳>.zip 内含：
+          config/        配置
+          memory/        记忆（条目名不受 MAX_PATH 限制）
+          <版本号>       版本标记空文件（如 V4.6.10）
+    返回备份 zip 的绝对路径。
     """
     ts = datetime.now().strftime('%Y%m%d%H%M%S')
-    backup_dir = os.path.join(BACKUP_BASE, ts)
-    os.makedirs(backup_dir, exist_ok=True)
+    zip_path = os.path.join(BACKUP_BASE, f'{ts}.zip')
+    os.makedirs(long_path(BACKUP_BASE), exist_ok=True)
+    tmp = long_path(zip_path) + '.tmp'
 
-    config_src = os.path.join(base_dir(), 'config')
-    memory_src = os.path.join(base_dir(), 'memory')
-
-    if os.path.exists(config_src):
-        shutil.copytree(config_src, os.path.join(backup_dir, 'config'))
-    if os.path.exists(memory_src):
-        shutil.copytree(memory_src, os.path.join(backup_dir, 'memory'))
-
-    # 创建版本号标记文件（空文件，文件名即版本号）
-    version_marker = os.path.join(backup_dir, BOT_VERSION)
+    # 先写 .tmp 再原子改名：失败不会留下"打不开的半成品 zip"
     try:
-        open(version_marker, 'w').close()
+        with zipfile.ZipFile(tmp, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for folder in ('config', 'memory'):
+                src = os.path.join(base_dir(), folder)
+                if os.path.exists(long_path(src)):
+                    _add_tree_to_zip(zf, src, folder)
+            zf.writestr(BOT_VERSION, b'')       # 版本标记空文件
+        os.replace(tmp, long_path(zip_path))
     except Exception:
-        pass
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except OSError:
+            pass
+        raise
 
-    log('SUCCESS', f'数据已备份至: {backup_dir}')
-    return backup_dir
+    log('SUCCESS', f'数据已备份至: {zip_path}')
+    return zip_path
 
 
 def _check_and_auto_backup():
@@ -664,31 +694,39 @@ def _check_and_auto_backup():
     """
     config_src = os.path.join(base_dir(), 'config')
     memory_src = os.path.join(base_dir(), 'memory')
-    has_data = os.path.exists(config_src) or os.path.exists(memory_src)
+    has_data = os.path.exists(long_path(config_src)) or os.path.exists(long_path(memory_src))
     if not has_data:
         return  # 没有任何数据，无需备份
 
-    if not os.path.exists(BACKUP_BASE):
+    if not os.path.exists(long_path(BACKUP_BASE)):
         log('INFO', '首次检测到数据目录，自动备份中...')
         _do_backup()
         return
 
-    # 找所有格式为 14 位纯数字的备份目录（YYYYMMDDHHmmss）
+    # 备份快照：新格式是 14 位时间戳的 <时间戳>.zip，旧版是 <时间戳>/ 目录
+    #（兼容升级前的历史备份；同一个时间戳两者都有时以 zip 为准）
+    snaps = {}
     try:
-        backups = [
-            d for d in os.listdir(BACKUP_BASE)
-            if os.path.isdir(os.path.join(BACKUP_BASE, d))
-            and len(d) == 14 and d.isdigit()
-        ]
+        for name in os.listdir(long_path(BACKUP_BASE)):
+            ts = name[:-4] if name.endswith('.zip') else name
+            if len(ts) != 14 or not ts.isdigit():
+                continue
+            path = os.path.join(BACKUP_BASE, name)
+            if name.endswith('.zip'):
+                if os.path.isfile(long_path(path)):
+                    snaps[ts] = 'zip'
+            elif os.path.isdir(long_path(path)):
+                snaps.setdefault(ts, 'dir')
     except Exception:
-        backups = []
+        snaps = {}
 
-    if not backups:
+    if not snaps:
         log('INFO', '备份目录为空，执行首次自动备份...')
         _do_backup()
         return
 
-    latest = max(backups)  # 字典序最大即最新时间戳
+    latest = max(snaps)  # 字典序最大即最新时间戳
+    latest_kind = snaps[latest]
 
     # 判断距上次备份天数
     try:
@@ -697,22 +735,22 @@ def _check_and_auto_backup():
     except Exception:
         days_diff = 999  # 解析失败时强制备份
 
-    # 判断最新备份是否包含当前版本号标记文件
-    latest_path = os.path.join(BACKUP_BASE, latest)
-    version_match = os.path.exists(os.path.join(latest_path, BOT_VERSION))
+    # 判断最新备份是否包含当前版本号标记
+    if latest_kind == 'zip':
+        latest_top = _backup_zip_top_names(os.path.join(BACKUP_BASE, f'{latest}.zip'))
+    else:
+        latest_path = os.path.join(BACKUP_BASE, latest)
+        latest_top = [n for n in os.listdir(long_path(latest_path))
+                      if os.path.isfile(long_path(os.path.join(latest_path, n)))]
+    version_match = BOT_VERSION in latest_top
 
     if days_diff > 3:
         log('INFO', f'距上次备份已 {days_diff} 天（超过3天），自动备份中...')
         _do_backup()
     elif not version_match:
-        # 找出实际存储的旧版本号（遍历目录内不含 / 的文件）
-        try:
-            old_ver_files = [f for f in os.listdir(latest_path)
-                             if os.path.isfile(os.path.join(latest_path, f))
-                             and f.startswith('V')]
-            old_ver = old_ver_files[0] if old_ver_files else '未知版本'
-        except Exception:
-            old_ver = '未知版本'
+        # 找出实际存储的旧版本号（顶层不含 / 的文件里找 V 开头的）
+        old_ver_files = [n for n in latest_top if n.startswith('V')]
+        old_ver = old_ver_files[0] if old_ver_files else '未知版本'
         log('INFO', f'检测到版本变更（{old_ver} → {BOT_VERSION}），自动备份中...')
         _do_backup()
 
@@ -1789,31 +1827,48 @@ def test_webhook():
 @login_required
 def pick_image_file():
     """
-    打开 Windows 原生文件选择对话框，让用户选择一张本地图片或一个视频文件，
-    返回其绝对路径。前端直接将路径填入输入框，无需上传文件。
+    打开 Windows 原生文件选择对话框，返回选中文件的绝对路径。
+    前端直接将路径填入输入框，无需上传文件。
+
+    kind=file：消息类回复（关键词/定时消息/新好友招呼语）用，可选文档、压缩包等
+               任意要发送的文件；
+    缺省/kind=media：朋友圈图片用，只列图片和视频（朋友圈只支持图片/视频）。
 
     远程访问时**直接拒绝**：对话框弹在运行面板这台电脑的桌面上，远程用户
     看不到也点不到；而 tkinter 的主循环会一直阻塞在那里，请求也就一直挂着
     （代理侧超时后远程恢复，本机这个对话框仍在等）。远程用户请手动填路径。
     """
+    want_file = request.args.get('kind') == 'file'
     if is_remote_panel_request():
-        log('WARNING', '远程访问请求「选择本地图片」已被拒绝：'
+        log('WARNING', '远程访问请求「选择本地文件」已被拒绝：'
                        '文件选择框只会弹在运行面板那台电脑的桌面上')
         return jsonify({
             'status': 'error',
             'code': 'remote_not_supported',
             'message': (
-                '远程访问时用不了「选择本地图片」：文件选择框会弹在'
+                '远程访问时用不了「选择本地文件」：文件选择框会弹在'
                 '<b>运行面板那台电脑</b>的桌面上，你这边看不到也点不到。<br><br>'
-                '请直接手动填写图片路径 —— 路径要写<b>运行面板那台电脑</b>上的位置，'
-                '例如 <code>C:\\图片\\hello.png</code>。<br>'
-                '如果图片现在在你自己电脑上，需要先把它传到运行面板那台电脑。'
+                '请直接手动填写完整路径 —— 路径要写<b>运行面板那台电脑</b>上的位置，'
+                '例如 <code>C:\\文件\\报告.pdf</code> 或 <code>C:\\图片\\hello.png</code>。<br>'
+                '如果文件现在在你自己电脑上，需要先把它传到运行面板那台电脑。'
             ),
         })
     try:
         import tkinter as tk
         from tkinter import filedialog
         path = ''
+        media_filetypes = [
+            ('图片/视频', '*.png *.jpg *.jpeg *.gif *.bmp *.webp *.mp4 *.mov *.avi *.mkv *.wmv *.flv'),
+            ('图片文件', '*.png *.jpg *.jpeg *.gif *.bmp *.webp'),
+            ('视频文件', '*.mp4 *.mov *.avi *.mkv *.wmv *.flv'),
+            ('所有文件', '*.*'),
+        ]
+        all_filetypes = [
+            ('常用文件', '*.pdf *.doc *.docx *.xls *.xlsx *.csv *.ppt *.pptx *.txt *.md '
+                         '*.zip *.rar *.7z *.wps *.et *.ofd *.apk'),
+            ('图片/视频', '*.png *.jpg *.jpeg *.gif *.bmp *.webp *.mp4 *.mov *.avi *.mkv *.wmv *.flv'),
+            ('所有文件', '*.*'),
+        ]
         with _tk_lock:
             root = tk.Tk()
             root.withdraw()                  # 隐藏 tk 主窗口
@@ -1821,13 +1876,8 @@ def pick_image_file():
             root.lift()
             path = filedialog.askopenfilename(
                 parent=root,
-                title='选择图片/视频文件',
-                filetypes=[
-                    ('图片/视频', '*.png *.jpg *.jpeg *.gif *.bmp *.webp *.mp4 *.mov *.avi *.mkv *.wmv *.flv'),
-                    ('图片文件', '*.png *.jpg *.jpeg *.gif *.bmp *.webp'),
-                    ('视频文件', '*.mp4 *.mov *.avi *.mkv *.wmv *.flv'),
-                    ('所有文件', '*.*'),
-                ]
+                title='选择要发送的文件' if want_file else '选择图片/视频文件',
+                filetypes=all_filetypes if want_file else media_filetypes,
             )
             root.destroy()
         if path:
@@ -1861,9 +1911,9 @@ def _memory_manager(wx_id):
 
 def _memory_wx_ids():
     """列出记忆根目录下的微信号目录（跳过 _quarantine 等内部目录）。"""
-    if not os.path.exists(MEMORY_BASE):
+    if not os.path.exists(long_path(MEMORY_BASE)):
         return []
-    return [d for d in sorted(os.listdir(MEMORY_BASE))
+    return [d for d in sorted(os.listdir(long_path(MEMORY_BASE)))
             if not is_internal_dir_name(d)
             and _safe_is_dir(os.path.abspath(MEMORY_BASE), d)]
 
@@ -1889,7 +1939,9 @@ def _safe_is_dir(parent_abs, name):
     """os.path.isdir 在 Windows 上对末尾含 '.' 的名称会自动去掉 '.' 导致误判。
     用 UNC 长路径前缀绕过 Windows 路径规范化，其他系统走普通逻辑。"""
     if os.name == 'nt':
-        p = '\\\\?\\' + parent_abs + '\\' + name
+        # 只给父目录加前缀，name 原样拼接：不能先 join 再 abspath，
+        # 否则末尾的 '.' 会被规范化掉，误判又回来了。
+        p = long_path(parent_abs) + '\\' + name
     else:
         p = os.path.join(parent_abs, name)
     try:

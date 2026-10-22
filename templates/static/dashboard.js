@@ -666,7 +666,7 @@ $(function(){
     $(this).closest('.list-item, .keyword-item, .scheduled-msg-item, .scheduled-moments-item, .random-moments-item, .random-msg-item, .custom-forward-item').remove();
   });
 
-  // ===== 选择本地图片（调后端弹系统文件选择框）=====
+  // ===== 选择本地文件（调后端弹系统文件选择框）=====
   // 远程访问时后端会拒绝（对话框只会弹在本机桌面上，远程用户点不到），
   // 所以这里必须把后端返回的提示如实弹出来；否则用户只看到按钮转一下就没了。
   // status==='cancel' 是用户自己取消了对话框，属正常操作，保持静默。
@@ -674,17 +674,20 @@ $(function(){
   // 一行里有多个输入框时（关键词行是"关键词" + "回复内容"），必须用 data-pick-target
   // 显式指明填哪个 —— 否则会落到"关键词"栏。选择器写相对本行的形式，
   // 因为这类行可以重复添加，不能用全局 id。
+  // data-pick-kind="file"：消息类回复可选文档等任意文件；缺省 media 只列图片/视频
+  // （朋友圈图片走 media，朋友圈不支持文档）。
   $(document).on('click','.btn-pick-img',function(){
     var $btn=$(this);
     var pickTarget=$btn.attr('data-pick-target');
+    var pickKind=$btn.attr('data-pick-kind') || 'media';
     var $row=$btn.closest('.list-item, .keyword-item');
     var $input=pickTarget ? $row.find(pickTarget).first() : $row.find('input, textarea').first();
     $btn.prop('disabled',true).html('<i class="bi bi-hourglass-split"></i>');
-    $.get('/pick_image_file', function(res){
+    $.get('/pick_image_file', {kind: pickKind}, function(res){
       if(res && res.status==='success' && res.path){
         $input.val(res.path);
       } else if(res && res.status==='error'){
-        svModal.alert(res.message || '无法打开文件选择框，请手动填写图片路径。', '选择本地图片失败');
+        svModal.alert(res.message || '无法打开文件选择框，请手动填写完整路径。', '选择本地文件失败');
       }
     }).fail(function(xhr){
       svModal.error('请求文件选择框失败：' + ((xhr && xhr.responseText) || (xhr && xhr.status) || '未知错误'));
@@ -697,7 +700,7 @@ $(function(){
   $(document).on('click','.btn-add[data-target]',function(){
     var target=$(this).data('target'), name=$(this).data('name');
     var placeholder=$(this).data('placeholder')||'';
-    var pickBtn=$(this).data('imgpick')?'<button type="button" class="btn-pick-img" title="点击选择本地图片/视频，自动填入路径"><i class="bi bi-folder2-open"></i></button>':'';
+    var pickBtn=$(this).data('imgpick')?'<button type="button" class="btn-pick-img" data-pick-kind="file" title="点击选择本地文件（图片/视频/文档等），自动填入路径"><i class="bi bi-folder2-open"></i></button>':'';
     var fieldHtml=$(this).data('multiline')
       ? '<textarea class="form-control" name="'+name+'" rows="2"></textarea>'
       : '<input type="text" class="form-control" name="'+name+'" placeholder="'+placeholder+'">';
@@ -900,8 +903,8 @@ $(function(){
     $('#keyword_container').append(
       '<div class="keyword-item">'+
       '<input type="text" class="form-control" name="keyword_key" placeholder="关键词">'+
-      '<textarea class="form-control" name="keyword_value" placeholder="回复内容"></textarea>'+
-      '<button type="button" class="btn-pick-img" data-pick-target="textarea[name=keyword_value]" title="点击选择本地图片/视频，自动填入路径"><i class="bi bi-folder2-open"></i></button>'+
+      '<textarea class="form-control" name="keyword_value" placeholder="回复内容，或文件完整路径（图片/视频/文档等）"></textarea>'+
+      '<button type="button" class="btn-pick-img" data-pick-target="textarea[name=keyword_value]" data-pick-kind="file" title="点击选择本地文件（图片/视频/文档等），自动填入路径"><i class="bi bi-folder2-open"></i></button>'+
       '<button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>'+
       '</div>'
     );
@@ -1010,8 +1013,8 @@ $(function(){
   $(document).on('click','.btn-add-scheduled-msg',function(){
     $(this).prev('.scheduled-msg-list').append(
       '<div class="list-item">'+
-      '<textarea class="form-control" name="scheduled_msg" rows="2" placeholder="文字内容 或 图片/视频完整路径"></textarea>'+
-      '<button type="button" class="btn-pick-img" title="点击选择本地图片/视频，自动填入路径"><i class="bi bi-folder2-open"></i></button>'+
+      '<textarea class="form-control" name="scheduled_msg" rows="2" placeholder="文字内容 或 文件完整路径（图片/视频/文档等）"></textarea>'+
+      '<button type="button" class="btn-pick-img" data-pick-kind="file" title="点击选择本地文件（图片/视频/文档等），自动填入路径"><i class="bi bi-folder2-open"></i></button>'+
       '<button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>'+
       '</div>'
     );
@@ -1278,11 +1281,11 @@ $(function(){
       '<div class="mb-2 scheduled-date" style="display:none">'+
         '<input type="date" class="form-control date-input"></div>'+
       '<label class="cfg-label">消息内容</label>'+
-      '<div class="cfg-hint" style="margin-bottom:8px;"><i class="bi bi-image" style="color:var(--primary);"></i> 填写文字内容将发送文字，填写图片/视频完整路径（如 <code>C:\\图片\\hello.png</code>）将自动发送图片</div>'+
+      '<div class="cfg-hint" style="margin-bottom:8px;"><i class="bi bi-image" style="color:var(--primary);"></i> 填写文字内容将发送文字；填写文件完整路径（图片/视频/文档/压缩包等，如 <code>C:\\文件\\报告.pdf</code>）将自动作为文件发送</div>'+
       '<div class="scheduled-msg-list">'+
         '<div class="list-item">'+
-          '<textarea class="form-control" name="scheduled_msg" rows="2" placeholder="文字内容 或 图片/视频完整路径"></textarea>'+
-          '<button type="button" class="btn-pick-img" title="点击选择本地图片/视频，自动填入路径"><i class="bi bi-folder2-open"></i></button>'+
+          '<textarea class="form-control" name="scheduled_msg" rows="2" placeholder="文字内容 或 文件完整路径（图片/视频/文档等）"></textarea>'+
+          '<button type="button" class="btn-pick-img" data-pick-kind="file" title="点击选择本地文件（图片/视频/文档等），自动填入路径"><i class="bi bi-folder2-open"></i></button>'+
           '<button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>'+
         '</div>'+
       '</div>'+
@@ -1319,8 +1322,8 @@ $(function(){
   $(document).on('click','.btn-add-rmsg-msg',function(){
     $(this).prev('.rmsg-msg-list').append(
       '<div class="list-item">'+
-        '<textarea class="form-control" name="rmsg_msg" rows="2" placeholder="文字内容 或 图片/视频完整路径"></textarea>'+
-        '<button type="button" class="btn-pick-img" title="点击选择本地图片/视频，自动填入路径"><i class="bi bi-folder2-open"></i></button>'+
+        '<textarea class="form-control" name="rmsg_msg" rows="2" placeholder="文字内容 或 文件完整路径（图片/视频/文档等）"></textarea>'+
+        '<button type="button" class="btn-pick-img" data-pick-kind="file" title="点击选择本地文件（图片/视频/文档等），自动填入路径"><i class="bi bi-folder2-open"></i></button>'+
         '<button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>'+
       '</div>'
     );
@@ -1363,11 +1366,11 @@ $(function(){
         '<label class="cfg-label rmsg-days-label">每周随机抽几天发送 <span class="cfg-hint" style="display:inline;margin-left:6px;">（不超过7）</span></label>'+
         '<input type="number" class="form-control rmsg-days-count" min="1" max="7" value="1"></div>'+
       '<label class="cfg-label">消息内容</label>'+
-      '<div class="cfg-hint" style="margin-bottom:8px;"><i class="bi bi-image" style="color:var(--primary);"></i> 填写文字内容将发送文字，填写图片/视频完整路径（如 <code>C:\\图片\\hello.png</code>）将自动发送图片</div>'+
+      '<div class="cfg-hint" style="margin-bottom:8px;"><i class="bi bi-image" style="color:var(--primary);"></i> 填写文字内容将发送文字；填写文件完整路径（图片/视频/文档/压缩包等，如 <code>C:\\文件\\报告.pdf</code>）将自动作为文件发送</div>'+
       '<div class="rmsg-msg-list">'+
         '<div class="list-item">'+
-          '<textarea class="form-control" name="rmsg_msg" rows="2" placeholder="文字内容 或 图片/视频完整路径"></textarea>'+
-          '<button type="button" class="btn-pick-img" title="点击选择本地图片/视频，自动填入路径"><i class="bi bi-folder2-open"></i></button>'+
+          '<textarea class="form-control" name="rmsg_msg" rows="2" placeholder="文字内容 或 文件完整路径（图片/视频/文档等）"></textarea>'+
+          '<button type="button" class="btn-pick-img" data-pick-kind="file" title="点击选择本地文件（图片/视频/文档等），自动填入路径"><i class="bi bi-folder2-open"></i></button>'+
           '<button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>'+
         '</div>'+
       '</div>'+
