@@ -18,7 +18,7 @@
 
 本项目为`wxautox4`官方出品的基于`wxautox4`py库为内核，搭建并封装了实体功能的[开源](https://github.com/SiverKing/SiverWXbot_plus/)项目。可直接使用源码或exe快速部署，也可二次修改使用。本项目为开源项目，全部源代码免费开放不收取任何费用，仅供交流学习使用。wxautox4收费为wxautox4 py库设备授权需要收费。若您拥有wxautox4 py库授权，不仅可免费使用本项目，还可以自行开发或者使用其他基于内核库的项目。获取授权前往[交流页面](https://wxbot.siverking.online/docs.html?c=%E4%BA%A4%E6%B5%81)。
 
-> **获取激活码:** 联系此处[交流页面](https://wxbot.siverking.online/docs.html?c=%E4%BA%A4%E6%B5%81)
+> **获取激活码:** 联系此处[交流页面](https://wxbot.siverking.online/docs.html?c=%E4%BA%A4%E6%B5%81)，也可在[获取授权页面](https://wxauto.siver.top)自助获取。
 
 ### SiverWXbot_plus与wxauto
 
@@ -39,6 +39,7 @@ SiverWXbot_plus与wxauto 是独立第三方项目，并非腾讯或微信官方�
 **环境要求：**
 - Windows 操作系统
 - Windows wx PC 版（`4.1.9` ~ `4.2.0.9` 版本）
+- wxautox4内核库 设备授权（激活码见[获取授权页面](https://wxauto.siver.top)）
 
 **下载地址（二选一）：**
 
@@ -56,7 +57,7 @@ SiverWXbot_plus与wxauto 是独立第三方项目，并非腾讯或微信官方�
 - Python `3.10` - `3.13`
 - Windows 操作系统
 - Windows wx PC 版（`4.1.9` ~ `4.2.0.9` 版本）
-- wxautox4内核库 设备授权（需购买，购买地址：https://www.siverking.online/static/img/siver_wx.jpg ）
+- wxautox4内核库 设备授权（可在[获取授权页面](https://wxauto.siver.top)获取，也可[联系作者](https://www.siverking.online/static/img/siver_wx.jpg)）
 
 **安装步骤：**
 
@@ -1084,7 +1085,7 @@ wxauto 不提供、也不承诺任何规避安全机制、风险控制、账号�
 
 ### Q: 如何获取授权、激活？
 
-**A:** [联系作者](https://www.siverking.online/static/img/siver_wx.jpg)
+**A:** 可通过[获取页面](https://wxauto.siver.top)自助获取，也可[联系作者](https://www.siverking.online/static/img/siver_wx.jpg)。
 
 ### Q: 运行提示防火墙？
 
@@ -1112,7 +1113,7 @@ wxauto 不提供、也不承诺任何规避安全机制、风险控制、账号�
 
 ### Q: wxautox4激活码相关？
 
-**A:** 获取请到[交流页面](https://wxbot.siverking.online/docs.html?c=%E4%BA%A4%E6%B5%81)联系作者。一机一码，不可解换绑，特殊情况可[联系作者](https://wxbot.siverking.online/docs.html?c=%E4%BA%A4%E6%B5%81)特殊处理。激活后永久可以使用没有时间限制。一年内可以获取更新的版本，更新过期后，你已经获取的版本仍可继续永久使用。
+**A:** 获取请到[交流页面](https://wxbot.siverking.online/docs.html?c=%E4%BA%A4%E6%B5%81)联系作者，也可在[获取页面](https://wxauto.siver.top)自助获取激活码。一机一码，不可解换绑，特殊情况可[联系作者](https://wxbot.siverking.online/docs.html?c=%E4%BA%A4%E6%B5%81)特殊处理。激活后永久可以使用没有时间限制。一年内可以获取更新的版本，更新过期后，你已经获取的版本仍可继续永久使用。
 
 ### Q: 微信历史版本下载？
 
@@ -1142,7 +1143,7 @@ SiverWXbot_plus 开源组件主要用于 Windows UI Automation 的学习、研�
 
 #### 3. Plus 商业工具
 
-授权为本地桌面自动化开发者提供商业开发工具和技术支持。购买商业授权不代表获得任何第三方软件厂商的授权、许可或认可。授权设备、期限、更新、分发、集成及技术支持范围以[商业授权条款](https://wxbot.siverking.online/docs.html?c=%E7%94%A8%E6%88%B7%E5%8D%8F%E8%AE%AE#%E5%95%86%E4%B8%9A%E6%8E%88%E6%9D%83%E6%9D%A1%E6%AC%BE)和购买页面展示的信息为准。
+授权为本地桌面自动化开发者提供商业开发工具和技术支持。购买商业授权不代表获得任何第三方软件厂商的授权、许可或认可。授权设备、期限、更新、分发、集成及技术支持范围以[商业授权条款](https://wxbot.siverking.online/docs.html?c=%E7%94%A8%E6%88%B7%E5%8D%8F%E8%AE%AE#%E5%95%86%E4%B8%9A%E6%8E%88%E6%9D%83%E6%9D%A1%E6%AC%BE)和[购买页面](https://wxauto.siver.top)展示的信息为准。
 
 #### 4. 用户义务
 
@@ -1226,7 +1227,7 @@ SiverWXbot_plus 是独立第三方项目，与深圳市腾讯计算机系统有�
 
 #### 1. 适用产品
 
-本条款适用于 wxautox Plus 商业开发工具。购买页面另有明确约定的，以购买时展示并经用户确认的条款为准。
+本条款适用于 wxautox Plus 商业开发工具。如[购买页面](https://wxauto.siver.top)另有明确约定的，以购买时展示并经用户确认的条款为准。
 
 #### 2. 授权范围
 
@@ -1285,7 +1286,7 @@ Plus 激活时可能处理设备硬件标识、授权码、激活时间、软件
 
 **项目地址**：[https://github.com/SiverKing/SiverWXbot_plus](https://github.com/SiverKing/SiverWXbot_plus)
 
-**wxautox4内核库授权激活**: [wxautox4内核库授权激活](https://www.siverking.online/static/img/siver_wx.jpg)
+**wxautox4内核库授权激活**: [获取授权激活页面](https://wxauto.siver.top) ｜ [联系作者](https://www.siverking.online/static/img/siver_wx.jpg)
 
 **联系作者**: [联系作者](https://www.siverking.online/static/img/siver_wx.jpg)
 
