@@ -1,6 +1,6 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-v4.8.2-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
+[![Version](https://img.shields.io/badge/version-v4.8.3-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
 [![Python](https://img.shields.io/badge/python-3.10+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
@@ -38,7 +38,7 @@ SiverWXbot_plus与wxauto 是独立第三方项目，并非腾讯或微信官方�
 
 **环境要求：**
 - Windows 操作系统
-- Windows wx PC 版（`4.1.9` ~ `4.2.0.9` 版本）
+- Windows wx PC 版（`4.1.9` ~ `4.2.0.12` 版本）
 - wxautox4内核库 设备授权（激活码见[获取授权页面](https://wxauto.siver.top)）
 
 **下载地址（二选一）：**
@@ -56,7 +56,7 @@ SiverWXbot_plus与wxauto 是独立第三方项目，并非腾讯或微信官方�
 **环境要求：**
 - Python `3.10` - `3.13`
 - Windows 操作系统
-- Windows wx PC 版（`4.1.9` ~ `4.2.0.9` 版本）
+- Windows wx PC 版（`4.1.9` ~ `4.2.0.12` 版本）
 - wxautox4内核库 设备授权（可在[获取授权页面](https://wxauto.siver.top)获取，也可[联系作者](https://www.siverking.online/static/img/siver_wx.jpg)）
 
 **安装步骤：**
@@ -805,7 +805,16 @@ AI 面板管家本身依赖一个大模型来工作，首次使用前需要给�
 | 分析群聊活跃度 | "分析『XXX群』近 7 天谁最活跃、主要讨论什么、哪些时间段最活跃" |
 | 统计消息与新增好友 | "统计今天各监听会话的收发消息量，并统计最近新增或已通过的好友数量，按备注或标签整理" |
 | 优化 Prompt | "帮我优化默认 Prompt，让回复语气更活泼" |
+| 启动 / 停止机器人 | "帮我启动机器人" / "先把机器人停一下" |
 | 排查故障 | "机器人不回复消息了，帮我看看怎么回事" |
+
+#### 让管家直接启动 / 停止机器人
+
+内置管家可以直接控制机器人启停，效果与点击面板上的「启动机器人」「停止机器人」按钮一致：不用自己点按钮，也不用让管家执行终端命令。
+
+- 直接说“启动机器人”或“停止机器人”即可；管家会先确认当前状态，机器人已在运行时不会重复启动，已停止时不会重复停止。
+- 网页面板、管理员微信 `/agent` 指令、微信 ClawBot 三种对话入口都可以使用。
+- 停止需要等机器人真正退出（默认最多约 20 秒）；启动失败或停止超时，管家会如实告诉你原因，可稍后在面板查看状态。
 
 #### 在管理员微信中直通内置 Agent
 
@@ -1000,7 +1009,7 @@ AI 面板管家在 **exe 版**和**源码版**中都可以使用，但能力边�
 2. 电脑自动休眠 黑屏都设为**从不**（一般情况程序会自动阻止不用手动调整）。
 3. 如需离线邮件提醒，请在配置面板修改设置邮件。
 4. 关闭wx自动更新。
-5. 适配 Windows wx `4.1.9` - `4.2.0.9`。
+5. 适配 Windows wx `4.1.9` - `4.2.0.12`。
 6. 程序接管wx运行时，请勿手动干预，避免影响自动化操作。
 7. **各 SDK 接口填写说明：**
    - **DusAPI**：填写 Key、URL、模型 ID

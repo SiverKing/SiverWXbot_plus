@@ -1,7 +1,7 @@
 {
-    "version": "v4.8.2",
-    "version_log": "v4.8.2 - 内核库更新适配新wx(源码版用户请执行更新wxautox4库更新命令以更新内核库)",
-    "agent_version": "v4.8.2+agent.5",
-    "agent_version_log": "v4.8.2+agent.5 - 同步主项目 v4.8.2",
-    "infrom": "内置AI agent面板管家版本现已上线 欢迎体验：https://wxbot.siverking.online/docs.html?c=ai面板管理\n当前支持4.1.9 ~ 4.2.0.9\n有使用问题均可及时联系作者，右上角文档可找到联系方式。\n更新后4.1.9.35往后版本适配有问题可联系作者或在群内提问"
+    "version": "v4.8.3",
+    "version_log": "v4.8.3 - 修复图片消息识别为other、内核库更新适配新wx(源码版用户请执行更新wxautox4库更新命令以更新内核库)",
+    "agent_version": "v4.8.3+agent.6",
+    "agent_version_log": "v4.8.3+agent.6 - 同步主项目 v4.8.3、优化agent页面显示以及模型配置、agent直通暂停启动机器人能力",
+    "infrom": "自助获取激活：https://wxauto.siver.top\n内置AI agent面板管家版本现已上线 欢迎体验：https://wxbot.siverking.online/docs.html?c=ai面板管理\n当前支持4.1.9 ~ 4.2.0.12\n有使用问题均可及时联系作者，右上角文档可找到联系方式。\n更新后4.1.9.35往后版本适配有问题可联系作者或在群内提问"
 }
